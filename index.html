@@ -210,6 +210,7 @@ let mirrorFlash = 0;      // 複製した瞬間の光り（1→0へ減衰）
 let fxParticles = [];     // 複製したときの紙吹雪
 let mirrorRing  = 0;      // 複製した瞬間に広がる光の輪（0→1）
 let mirrorAfter = 0;      // 指を離したあとの見せ場。指が無いのでよく見える
+let mirrorHandoff = 0;    // 鏡の中の像 → 実体へのバトンタッチ（すぐ消える）
 let homeAfter   = 0;      // おうちも同じ
 let mirrorReflect = 0;    // 鏡に映るキャラの出かた（0→1）
 let mirrorReflectNum = 0; // 今どのキャラが映っているか
@@ -422,6 +423,10 @@ function drawMirror(ctx, t){
   // すぐ縮めずにしばらく大きいまま見せる。
   if(mirrorAfter>0) mirrorAfter = Math.max(0, mirrorAfter-0.018);
   const show = Math.max(mirrorReflect, mirrorAfter);
+  // 鏡の中の像は、複製が飛び出したらすぐ消す。残したままだと
+  // 「実体2体＋鏡の中の1体」で3体いるように見えてしまう。
+  if(mirrorHandoff>0) mirrorHandoff = Math.max(0, mirrorHandoff-0.16);
+  const refl = Math.max(mirrorReflect, mirrorHandoff);
   const pulse = Math.sin(t*0.004)*0.5+0.5;
   const glow  = Math.max(mirrorFlash, show);
 
@@ -475,8 +480,8 @@ function drawMirror(ctx, t){
 
   // ここで離せばコピーされる、というときは鏡にそのキャラを映す。
   // 「鏡の中にもう一人いる」が見えるので、何が起きるか説明なしで伝わる。
-  if(show > 0.02 && mirrorReflectNum > 0){
-    drawMirrorReflection(ctx, m, mirrorReflectNum, show, t);
+  if(refl > 0.02 && mirrorReflectNum > 0){
+    drawMirrorReflection(ctx, m, mirrorReflectNum, refl, t);
   }
 
   // 虹色のふち
@@ -1254,7 +1259,7 @@ function duplicateAtMirror(b){
     copy.launch = 48;        // このあいだは整列に引っぱられず自由に飛ぶ
     copy.birth = 0;          // 鏡から「ぽんっ」と出てくる
     blocks.push(copy);
-    mirrorFlash = 1; mirrorRing = 1; mirrorAfter = 1;
+    mirrorFlash = 1; mirrorRing = 1; mirrorAfter = 1; mirrorHandoff = 1;
     const px=m.x+m.w/2, py=m.y+m.h;
     for(let i=0;i<22;i++) fxParticles.push(new Particle(px,py));
   }
@@ -1297,7 +1302,7 @@ function setMode(newMode){
   if(!isCalc(mode) || !isCalc(newMode)) blocks=[];
   mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={}; clrHold=null;
   fxParticles=[]; mirrorFlash=0; mirrorRing=0; mirrorReflect=0; mirrorReflectNum=0;
-  homeFlash=0; homeOpen=0; homeNum=0; homeAfter=0; mirrorAfter=0;
+  homeFlash=0; homeOpen=0; homeNum=0; homeAfter=0; mirrorAfter=0; mirrorHandoff=0;
   factorUI.classList.toggle('visible',newMode==='factor');
   quizUI.classList.toggle('visible',newMode==='quiz');
   if(newMode==='factor'){ buildFactorRows(factorVal); updateFactorTargets(); factorReveal={}; }
