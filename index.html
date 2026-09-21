@@ -164,6 +164,10 @@ const SCR_MIN = Math.min(
 );
 const IS_PHONE = SCR_MIN < 500;
 const BS_MAP = IS_PHONE ? { S:10, M:17, L:26 } : { S:20, M:40, L:60 };
+// S/M/L は1マスの大きさを固定する。A（オート）は「全員を横に並べたときに
+// 画面へ収まる大きさ」を自動で決める。カメラを引くイメージで、全員が同じ
+// 1マスの大きさのままなので、大きい数ほど大きく見える関係が保たれる。
+const SIZE_KEYS = ['S','M','L','A'];
 let bsKey = 'M';
 let BS = BS_MAP[bsKey];
 const GRAVITY  = 0.4;
@@ -173,12 +177,12 @@ const GH       = 50;
 const TAB_ROW_H = 36;                        // モードタブ1行ぶんの高さ
 const TOP_ROW_H = 44;                        // S/M/L とマジックミラーの行
 const TAB_H     = TOP_ROW_H + TAB_ROW_H;     // 上部バー全体の高さ
-const BAR_LEFT_RESERVE  = 92;                // 左に空ける幅（S/M/Lボタン）
+const BAR_LEFT_RESERVE  = 116;               // 左に空ける幅（S/M/L/A ボタン）
 const BAR_RIGHT_RESERVE = 116;               // 右に空ける幅（ずかん・全画面ボタン）
 const FACTOR_H = 115;
 const QUIZ_H   = 115;
 const MAX_NUM = 1000;    // 出せる数の上限。101以上は板・棒・粒で組み立てる
-const BIG_MAX_H = 400;   // 101以上のキャラの、画面上の高さの上限
+const BIG_MAX_H = 400;   // 101以上のキャラの、画面上の高さの上限（S/M/L のとき）
 const MAX_BLOCKS = 30;   // 同時に置けるキャラの数
 const EDGE_MARGIN = 12;  // 画面の左右に空けておく幅（ブラウザのスワイプ対策）
 
@@ -226,9 +230,9 @@ function drawTabsAndUI(ctx){
 
 // 上段左：キャラの大きさ S/M/L
 function drawSizeButtons(ctx){
-  const szW=28, szH=30, szY=Math.round((TOP_ROW_H-szH)/2);
+  const szW=26, szH=30, szY=Math.round((TOP_ROW_H-szH)/2);
   sizeBtns = [];
-  ['S','M','L'].forEach((k,i)=>{
+  SIZE_KEYS.forEach((k,i)=>{
     const bx=4+i*(szW+2), by=szY, active=bsKey===k;
     ctx.save();
     ctx.fillStyle=active?'rgba(255,180,0,0.95)':'rgba(82,92,110,0.95)';
@@ -733,7 +737,7 @@ class NumberBlock {
     // ただし101以上を同じマスで描くと画面から完全にはみ出すので、
     // 大きい数のときだけ、そのキャラが収まるところまでマスを小さくする。
     this.bs = BS;
-    if(this.num > 100){
+    if(this.num > 100 && bsKey !== 'A'){
       const maxW = sw - EDGE_MARGIN*2;
       // 上は「おうち・÷2・×2・ミラー」のアイコン列より下から。重ならないように。
       // さらに 400px で頭打ちにする。遊び場いっぱいに伸びると圧迫感があるため。
@@ -1092,7 +1096,34 @@ function applyPhysics(){
   }
 }
 
+// 全員を横に並べて画面に収まる「1マスの大きさ」を求める。
+// 横は全員の幅の合計、縦はいちばん背の高いキャラで決まる。
+function computeAutoBS(){
+  if(!blocks.length) return BS_MAP.L;
+  let totalCols = 0, maxRows = 1;
+  for(const b of blocks){
+    const spec = blockSpec(b.num);
+    totalCols += spec.cols;
+    if(spec.rows > maxRows) maxRows = spec.rows;
+  }
+  const margin = 14 + EDGE_MARGIN;                 // updateTargets と同じ余白
+  const gaps   = Math.max(0, blocks.length-1) * 4; // キャラ同士の最低すき間
+  const availW = Math.max(20, sw - margin*2 - gaps);
+  const availH = Math.min(BIG_MAX_H, Math.max(40, calcFloor() - (TAB_H + 74)));
+  return Math.max(1.5, Math.min(BS_MAP.L, availW/totalCols, availH/maxRows));
+}
+
+// オートのときだけ、全員の1マスの大きさを決め直す
+function applyAutoScale(){
+  if(bsKey !== 'A') return;
+  const want = computeAutoBS();
+  if(Math.abs(want - BS) < 0.05) return;
+  BS = want;
+  for(const b of blocks) b._computeShape();
+}
+
 function updateTargets(){
+  applyAutoScale();
   const sorted=[...blocks].sort((a,b)=>a.num-b.num);
   if(!sorted.length) return;
   // 数が増えると1列に収まらなくなるので、間隔を詰めて画面内に入れる。
@@ -1125,7 +1156,9 @@ function spawnBlock(num){
 }
 
 function setBlockSize(k){
-  if(bsKey===k) return; bsKey=k; BS=BS_MAP[k];
+  if(bsKey===k) return;
+  bsKey=k;
+  if(k!=='A') BS=BS_MAP[k]; else BS=computeAutoBS();
   for(const b of blocks) b._computeShape();
   updateTargets();
 }
