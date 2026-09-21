@@ -821,8 +821,10 @@ function blockGap(a,b){
   const dy = Math.max(b.y-(a.y+a.height), a.y-(b.y+b.height), 0);
   return Math.hypot(dx,dy);
 }
-const MERGE_REACH = 70;   // ここまで近づけたら合体できる
-const NEAR_REACH  = 100;  // 合図（光る／通行止め）を出しはじめる距離
+// 体どうしが触れるくらいまで近づけたときだけ合体させる。広くしすぎると
+// 離れて立っているキャラに勝手に反応してしまう。
+const MERGE_REACH = 28;   // ここまで近づけたら合体できる（体の隙間）
+const NEAR_REACH  = 60;   // 通行止めの合図を出しはじめる距離
 
 function canCalc(a,b,m){
   if(m==='+')   return a.num+b.num<=MAX_NUM;
