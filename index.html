@@ -226,28 +226,42 @@ let homeAfter   = 0;      // おうちも同じ
 let mirrorReflect = 0;    // 鏡に映るキャラの出かた（0→1）
 let mirrorReflectNum = 0; // 今どのキャラが映っているか
 
-function getMirrorRect(){
+// ドロップ先は上部バーのすぐ下に4つ並べる。
+// 左から「おうち（帰る）」「÷2」「×2」「ミラー（ふえる）」。
+// 減る側を左、増える側を右にまとめてあるので、押し間違えても大事にならない。
+const DROP_TARGETS = ['home','half','double','mirror'];
+function getTargetRect(id){
   if(mode==='factor'||mode==='quiz') return null;
-  const w=51, h=60;                       // 以前の1.5倍
-  // 「ドリル」タブの真下に置く。画面の右端ぴったりだと
-  // ブラウザの端スワイプに取られるので、少し内側で止める。
-  const lastTab = tabBtns.length ? tabBtns[tabBtns.length-1] : null;
-  const cx = lastTab ? lastTab.x + lastTab.w/2 : sw - EDGE_MARGIN - w/2;
-  const x  = Math.min(cx - w/2, sw - EDGE_MARGIN - w);
-  return { x:Math.round(Math.max(EDGE_MARGIN, x)), y:TAB_H + 6, w:w, h:h };
+  const w=51, h=60, n=DROP_TARGETS.length;
+  const gap = Math.min(40, Math.max(8, (sw - EDGE_MARGIN*2 - n*w)/(n-1)));
+  const total = n*w + (n-1)*gap;
+  const x0 = (sw - total)/2;
+  const i = DROP_TARGETS.indexOf(id);
+  return { id:id, i:i, gap:gap, w:w, h:h, x:Math.round(x0 + i*(w+gap)), y:TAB_H + 6 };
 }
+function getMirrorRect(){ return getTargetRect('mirror'); }
+function getHomeRect(){   return getTargetRect('home'); }
 
-// ドラッグ中の指／マウスがミラーの上にあるか。小さいので判定は広めにとる。
 // 指と手のひらは「触れた点より下」を覆う。判定を下へ大きく伸ばしておくと、
-// 本体を直接押さえなくても手前で反応するので、演出が手に隠れなくなる。
-// （反応したあとはさらに広げる。端で「入った・出た」を繰り返さないため）
-function inDropZone(m,x,y,grow){
-  return ptInRect(x, y, m.x-58-grow, m.y-12, m.w+116+grow*2, m.h+200+grow);
+// 本体を直接押さえなくても手前で反応するので、演出が手に隠れない。
+// 4つぶんの縦長の帯が隙間なく並ぶので、必ずどれか1つだけが反応する。
+function targetZone(id){
+  const m=getTargetRect(id); if(!m) return null;
+  const half=(m.w+m.gap)/2, cx=m.x+m.w/2;
+  return { x:cx-half, y:m.y-12, w:half*2, h:m.h+200 };
 }
-function isOverMirror(x,y){
-  const m=getMirrorRect(); if(!m) return false;
-  return inDropZone(m, x, y, mirrorReflect>0.5 ? 26 : 0);
+function isOverTarget(id,x,y){
+  const z=targetZone(id);
+  return !!z && ptInRect(x,y,z.x,z.y,z.w,z.h);
 }
+function isOverMirror(x,y){ return isOverTarget('mirror',x,y); }
+function isOverHome(x,y){   return isOverTarget('home',x,y); }
+
+// ×2 と ÷2 が使えるか（100を超える／割り切れないときは受け付けない）
+function canScale(id,n){
+  return id==='double' ? (n*2<=100) : (n%2===0 && n/2>=1);
+}
+function scaledNum(id,n){ return id==='double' ? n*2 : n/2; }
 
 // 上がアーチ型の鏡のかたち
 function mirrorPath(ctx,x,y,w,h){
@@ -269,21 +283,6 @@ function mirrorPath(ctx,x,y,w,h){
 let homeFlash = 0;     // 帰った瞬間の光り
 let homeOpen  = 0;     // 扉の開きぐあい（0→1）
 let homeNum   = 0;     // 今どのキャラが入ろうとしているか
-
-function getHomeRect(){
-  if(mode==='factor'||mode==='quiz') return null;
-  const w=51, h=60;
-  const firstTab = tabBtns.length ? tabBtns[0] : null;
-  const cx = firstTab ? firstTab.x + firstTab.w/2 : EDGE_MARGIN + w/2;
-  const x  = Math.max(EDGE_MARGIN, cx - w/2);
-  return { x:Math.round(Math.min(x, sw-EDGE_MARGIN-w)), y:TAB_H + 6, w:w, h:h };
-}
-
-function isOverHome(x,y){
-  const m=getHomeRect(); if(!m) return false;
-  return inDropZone(m, x, y, homeOpen>0.5 ? 26 : 0);
-}
-
 // キャラをおうちへ帰す（＝画面から消す）
 function sendHome(b){
   const m=getHomeRect(); if(!m) return;
@@ -371,6 +370,115 @@ function drawHomeSilhouette(ctx, dX, dY, dW, dH, num, ease, t){
   ctx.restore();
 }
 
+// ─── ×2 と ÷2 ─────────────────────────────────────────────────────────────
+// キャラをドロップすると、そのまま2倍／半分のキャラに変わる。
+// ミラー・おうちと同じ操作（近づけて離す）なので、覚え直すことがない。
+let tgtFx = {
+  double:{ open:0, after:0, flash:0, num:0 },
+  half:  { open:0, after:0, flash:0, num:0 }
+};
+const SCALE_STYLE = {
+  double:{ label:'×2', top:'#ffcf6b', bottom:'#f59331', edge:'#d9782a', glow:'255,200,120' },
+  half:  { label:'÷2', top:'#a8e6ff', bottom:'#4aa8dd', edge:'#2f86ba', glow:'150,220,255' }
+};
+
+// 近づけているキャラを変えたらいくつになるか。NaN は「できない」。
+function scalePreview(id){
+  if(!(dragBlock && dragPtr && isOverTarget(id, dragPtr.x, dragPtr.y))) return null;
+  return canScale(id, dragBlock.num) ? scaledNum(id, dragBlock.num) : NaN;
+}
+
+function drawScaleTarget(ctx, t, id){
+  const m=getTargetRect(id); if(!m) return;
+  const st=tgtFx[id], sty=SCALE_STYLE[id];
+  const prev = scalePreview(id);
+  const hover = prev!==null;
+  const ok = hover && !Number.isNaN(prev);
+  if(ok) st.num = prev;
+  st.open += ((hover?1:0) - st.open) * 0.25;
+  if(st.open < 0.02) st.open = 0;
+  if(st.after>0) st.after = Math.max(0, st.after-0.018);
+  if(st.flash>0) st.flash = Math.max(0, st.flash-0.04);
+  const show = Math.max(st.open, st.after);
+  const beat  = 0.5+0.5*Math.sin(t*0.013);
+  const swell = 1 + show*(0.92 + 0.10*beat) + 0.13*st.flash;
+  const ease  = show*show*(3-2*show);
+
+  ctx.save();
+  if(swell !== 1){
+    const cx0=m.x+m.w/2, cy0=m.y+m.h/2;
+    const hw=m.w*swell/2, hh=m.h*swell/2;
+    const cx=Math.min(Math.max(cx0, EDGE_MARGIN+hw), sw-EDGE_MARGIN-hw);
+    const cy=Math.max(cy0, TAB_H+6+hh);
+    ctx.translate(cx, cy); ctx.scale(swell, swell); ctx.translate(-cx0, -cy0);
+  }
+  if(show>0){
+    ctx.shadowColor='rgba('+sty.glow+','+(0.55+show*0.45)+')';
+    ctx.shadowBlur=14+show*(16+14*beat);
+  }
+  const g=ctx.createLinearGradient(m.x, m.y, m.x, m.y+m.h);
+  g.addColorStop(0, sty.top); g.addColorStop(1, sty.bottom);
+  ctx.fillStyle=g;
+  ctx.beginPath(); ctx.roundRect(m.x, m.y, m.w, m.h, 12); ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.strokeStyle=sty.edge; ctx.lineWidth=2.5;
+  ctx.beginPath(); ctx.roundRect(m.x, m.y, m.w, m.h, 12); ctx.stroke();
+
+  // 近づけているあいだは「いくつになるか」を大きく出す
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  if(ease>0.05 && ok){
+    ctx.fillStyle='rgba(255,255,255,0.92)'; ctx.font='bold 13px sans-serif';
+    ctx.fillText(sty.label, m.x+m.w/2, m.y+m.h*0.24);
+    ctx.fillStyle='#fff'; ctx.font='bold '+Math.round(m.h*0.40)+'px sans-serif';
+    ctx.strokeStyle='rgba(0,0,0,0.25)'; ctx.lineWidth=3;
+    ctx.strokeText(String(st.num), m.x+m.w/2, m.y+m.h*0.63);
+    ctx.fillText(String(st.num),  m.x+m.w/2, m.y+m.h*0.63);
+  } else {
+    ctx.fillStyle='#fff'; ctx.font='bold '+Math.round(m.h*0.42)+'px sans-serif';
+    ctx.strokeStyle='rgba(0,0,0,0.22)'; ctx.lineWidth=3;
+    ctx.strokeText(sty.label, m.x+m.w/2, m.y+m.h/2);
+    ctx.fillText(sty.label,  m.x+m.w/2, m.y+m.h/2);
+  }
+  // できないとき（奇数の÷2、100を超える×2）は斜線で知らせる
+  if(hover && !ok){
+    ctx.strokeStyle='rgba(210,30,30,0.9)'; ctx.lineWidth=5; ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(m.x+m.w*0.18, m.y+m.h*0.80);
+    ctx.lineTo(m.x+m.w*0.82, m.y+m.h*0.20);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ドロップされたキャラを2倍／半分に置き換える
+function scaleBlock(b, id){
+  const m=getTargetRect(id); if(!m) return;
+  const n = scaledNum(id, b.num);
+  blocks = blocks.filter(x=>x!==b);
+  const res = new NumberBlock(n, 0, 0);
+  res.x = Math.min(Math.max(EDGE_MARGIN, m.x+m.w/2-res.width/2), sw-EDGE_MARGIN-res.width);
+  res.y = m.y + m.h + 4;
+  res.targetX = res.x; res.birth = 0; res.vx = 0; res.vy = 1;
+  blocks.push(res);
+  const st=tgtFx[id];
+  st.flash=1; st.after=1; st.num=n;
+  for(let i=0;i<18;i++) fxParticles.push(new Particle(m.x+m.w/2, m.y+m.h));
+  updateTargets();
+}
+
+// 4つのドロップ先をまとめて描く。反応しているものは大きくなるので最後に描く。
+function drawDropTargets(ctx, t){
+  const active = DROP_TARGETS.find(id =>
+    dragBlock && dragPtr && isOverTarget(id, dragPtr.x, dragPtr.y));
+  const draw = id => {
+    if(id==='mirror') drawMirror(ctx,t);
+    else if(id==='home') drawHome(ctx,t);
+    else drawScaleTarget(ctx,t,id);
+  };
+  for(const id of DROP_TARGETS) if(id!==active) draw(id);
+  if(active) draw(active);
+}
+
 // 鏡の中に映るキャラ。実物と同じ描画エンジンを縮めて使い、左右を反転させる。
 // prog は 0→1 で、小さく暗いところから、すっと浮かび上がってくる。
 function drawMirrorReflection(ctx, m, num, prog, t){
@@ -397,7 +505,12 @@ function drawMirrorReflection(ctx, m, num, prog, t){
   ctx.translate(-cx, -(by + h/2));
 
   ctx.globalAlpha = 0.30 + 0.62*ease;
-  drawNumberblock(ctx, num, bx, by, cell, { t:t, animate:true, numberling:false });
+  // 小さいマス目をそのまま指定すると、エンジンの線幅が最低1pxで止まってしまい、
+  // 10のまとまりのフチだけが不釣り合いに太く見える。いったん普通の大きさで
+  // 描いてから全体を縮めることで、本物をそのまま小さくした見た目になる。
+  const RB = 24, k = cell/RB;
+  ctx.translate(bx, by); ctx.scale(k, k);
+  drawNumberblock(ctx, num, 0, 0, RB, { t:t, animate:true, numberling:false });
   ctx.restore();
 
   // 鏡らしく、上から薄い光の膜をかける
@@ -951,7 +1064,7 @@ function updateTargets(){
 
 function spawnBlock(num){
   if(blocks.length>=MAX_BLOCKS) return;
-  blocks.push(new NumberBlock(num,sw/2+(Math.random()-0.5)*100,TAB_H+20));
+  blocks.push(new NumberBlock(num,sw/2+(Math.random()-0.5)*100,TAB_H+76));
   updateTargets();
 }
 
@@ -977,7 +1090,7 @@ function drawFormula(ctx){
   const maxW = sw - 24;
   const lines = wrapText(ctx, formula, maxW);
   const lh = 20;
-  let ty = TAB_H + 16;
+  let ty = TAB_H + 132;   // ドロップ先のアイコン列（拡大時を含む）の下
   for(const line of lines){
     ctx.strokeStyle='white'; ctx.lineWidth=4; ctx.strokeText(line, sw/2, ty);
     ctx.fillStyle='#111'; ctx.fillText(line, sw/2, ty);
@@ -1411,6 +1524,11 @@ function handleEnd(x,y,pid){
   if(isOverMirror(x,y)){ duplicateAtMirror(b); return; }
   // おうちの上で離した → そのキャラは帰る（画面から消える）
   if(isOverHome(x,y)){ sendHome(b); return; }
+  // ×2 / ÷2 の上で離した → そのキャラが2倍・半分になる。
+  // できない組み合わせ（奇数の÷2など）は何も起きず、そのまま落ちる。
+  for(const id of ['double','half']){
+    if(isOverTarget(id,x,y)){ if(canScale(id,b.num)) scaleBlock(b,id); updateTargets(); return; }
+  }
   let best=null,bestD=Infinity;
   for(const other of blocks){
     if(other===b) continue;
@@ -1432,6 +1550,7 @@ function setMode(newMode){
   mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={}; clrHold=null; opChips=null;
   fxParticles=[]; mirrorFlash=0; mirrorRing=0; mirrorReflect=0; mirrorReflectNum=0;
   homeFlash=0; homeOpen=0; homeNum=0; homeAfter=0; mirrorAfter=0; mirrorHandoff=0;
+  for(const k in tgtFx) tgtFx[k]={open:0,after:0,flash:0,num:0};
   factorUI.classList.toggle('visible',newMode==='factor');
   quizUI.classList.toggle('visible',newMode==='quiz');
   if(newMode==='factor'){ buildFactorRows(factorVal); updateFactorTargets(); factorReveal={}; }
@@ -1528,7 +1647,7 @@ function loop(ts){
         }
         // ミラーに入りかけているときは、持っているキャラを薄くする。
         // 「実体が鏡に吸い込まれ、代わりに鏡の中に映っている」という見え方にする。
-        const fade = Math.max(mirrorReflect, homeOpen);
+        const fade = Math.max(mirrorReflect, homeOpen, tgtFx.double.open, tgtFx.half.open);
         if(fade > 0.02){
           ctx.save();
           ctx.globalAlpha = 1 - 0.55*fade;
@@ -1540,8 +1659,7 @@ function loop(ts){
       }
       // ミラーとおうちは最後に描く。持っているキャラで隠れると、
       // 鏡の中の映り込みや扉のあかりが見えなくなってしまうため。
-      drawMirror(ctx, walkTime);
-      drawHome(ctx, walkTime);
+      drawDropTargets(ctx, walkTime);
       drawOpChips(ctx);
       // マジックミラーの紙吹雪
       for(const fp of fxParticles) fp.update();
