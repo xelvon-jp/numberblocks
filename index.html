@@ -144,8 +144,17 @@
      あちらでデザインを直せばこのゲームにも自動的に反映される。
      ※ roundRect のポリフィルもこの中にある -->
 <!-- 陽太さんの確定ぶん（自動生成）。エンジンより先に読ませる -->
-<script src="overrides.js"></script>
-<script src="engine.js"></script>
+<script>
+// engine.js と overrides.js は index.html とは別ファイルなので、片方だけ古い
+// キャッシュが残ると「新しい index.html が古い engine.js を呼ぶ」ことになり、
+// 存在しない関数を呼んで画面が固まる。index.html の更新時刻を付けておけば、
+// index.html が新しくなったときに必ず一緒に取り直される。
+(function(){
+  var v = encodeURIComponent(document.lastModified);
+  document.write('<script src="overrides.js?v=' + v + '"><\/script>');
+  document.write('<script src="engine.js?v=' + v + '"><\/script>');
+})();
+</script>
 <script>
 // ─── Canvas setup ─────────────────────────────────────────────────────────────
 const canvas = document.getElementById('c');
@@ -1980,7 +1989,25 @@ canvas.addEventListener('mouseup',  e=>{ if(!mouseDown) return; mouseDown=false;
 
 // ─── Main loop ────────────────────────────────────────────────────────────────
 let lastTime=0;
+let loopErr = '';
 function loop(ts){
+  try{ drawFrame(ts); }
+  catch(e){ if(!loopErr) loopErr = String((e && e.message) || e); }
+  if(loopErr) drawLoopError(ctx);
+  requestAnimationFrame(loop);
+}
+
+// 一度でもエラーが出たら、画面のすみに小さく出す。
+// 手元で確認できないので、これが唯一の手がかりになる。
+function drawLoopError(ctx){
+  ctx.save();
+  ctx.font='9px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='bottom';
+  ctx.fillStyle='rgba(180,0,0,0.85)';
+  ctx.fillText('!' + loopErr.slice(0,70), 78, sh-4);
+  ctx.restore();
+}
+
+function drawFrame(ts){
   const dt=Math.min(ts-lastTime,100); lastTime=ts; walkTime+=dt;
   ctx.clearRect(0,0,sw,sh); drawBG(ctx); drawTabsAndUI(ctx);
   if(mode==='clock'){
@@ -2054,7 +2081,6 @@ function loop(ts){
       drawKeyInput(ctx, dt);
     }
   }
-  requestAnimationFrame(loop);
 }
 
 // ─── キーボード召喚（デバッグ・確認用）────────────────────────────────────────

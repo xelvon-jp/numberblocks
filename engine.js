@@ -2080,11 +2080,12 @@ function drawZero(ctx, cx, top, bs, t, animate){
 
   ctx.save();
   setStroke(bs);
-  ctx.fillStyle = '#0d0d0d';
+  // 輪は「太い線でなぞる」やり方にする。塗り分け(even-odd)は環境によって
+  // 効かないことがあるが、この描き方ならどこでも同じ結果になる。
+  ctx.strokeStyle = '#0d0d0d'; ctx.lineWidth = thick; ctx.lineJoin='round';
   ctx.beginPath();
-  ctx.roundRect(rx, ry, ringW, ringH, ringW/2);
-  ctx.roundRect(rx+thick, ry+thick, ringW-thick*2, ringH-thick*2, (ringW-thick*2)/2);
-  ctx.fill('evenodd');
+  ctx.roundRect(rx+thick/2, ry+thick/2, ringW-thick, ringH-thick, (ringW-thick)/2);
+  ctx.stroke();
 
   const mw = bs*ZERO_MOUTH_W, mh = bs*ZERO_MOUTH_H;
   const mcx = cx - mw*0.05;                       // 少し左寄り（One と同じ考え方）
