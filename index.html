@@ -246,6 +246,113 @@ function mirrorPath(ctx,x,y,w,h){
   ctx.closePath();
 }
 
+// ─── おうち ───────────────────────────────────────────────────────────────
+// ミラーと対になる場所。ここへキャラをドラッグすると、手を振って帰っていく。
+// 「消す」ではなく「おうちに帰る」なので、子どもにとって嫌な操作にならない。
+let homeFlash = 0;     // 帰った瞬間の光り
+let homeOpen  = 0;     // 扉の開きぐあい（0→1）
+let homeNum   = 0;     // 今どのキャラが入ろうとしているか
+
+function getHomeRect(){
+  if(mode==='factor'||mode==='quiz') return null;
+  const w=51, h=60;
+  const firstTab = tabBtns.length ? tabBtns[0] : null;
+  const cx = firstTab ? firstTab.x + firstTab.w/2 : EDGE_MARGIN + w/2;
+  const x  = Math.max(EDGE_MARGIN, cx - w/2);
+  return { x:Math.round(Math.min(x, sw-EDGE_MARGIN-w)), y:TAB_H + 6, w:w, h:h };
+}
+
+function isOverHome(x,y){
+  const m=getHomeRect(); if(!m) return false;
+  const grow = homeOpen>0.5 ? 26 : 0;
+  return ptInRect(x, y, m.x-24-grow, m.y-12-grow, m.w+48+grow*2, m.h+34+grow*2);
+}
+
+// キャラをおうちへ帰す（＝画面から消す）
+function sendHome(b){
+  const m=getHomeRect(); if(!m) return;
+  blocks = blocks.filter(x=>x!==b);
+  homeFlash = 1;
+  const px=m.x+m.w/2, py=m.y+m.h*0.7;
+  for(let i=0;i<16;i++) fxParticles.push(new Particle(px,py));
+  updateTargets();
+}
+
+function drawHome(ctx, t){
+  const m=getHomeRect(); if(!m) return;
+  if(homeFlash>0) homeFlash=Math.max(0, homeFlash-0.04);
+  const hover = !!(dragBlock && dragPtr && isOverHome(dragPtr.x, dragPtr.y));
+  if(hover) homeNum = dragBlock.num;
+  homeOpen += ((hover?1:0) - homeOpen) * 0.25;
+  if(homeOpen < 0.02) homeOpen = 0;
+
+  const beat  = 0.5+0.5*Math.sin(t*0.013);
+  const swell = 1 + homeOpen*(0.92 + 0.10*beat) + 0.13*homeFlash;
+  const ease  = homeOpen*homeOpen*(3-2*homeOpen);
+
+  ctx.save();
+  if(swell !== 1){
+    const cx0=m.x+m.w/2, cy0=m.y+m.h/2;
+    const hw=m.w*swell/2, hh=m.h*swell/2;
+    const cx=Math.min(Math.max(cx0, EDGE_MARGIN+hw), sw-EDGE_MARGIN-hw);
+    const cy=Math.max(cy0, TAB_H+6+hh);
+    ctx.translate(cx, cy); ctx.scale(swell, swell); ctx.translate(-cx0, -cy0);
+  }
+  const glow = Math.max(homeFlash, homeOpen);
+  if(glow>0){
+    ctx.shadowColor='rgba(255,215,140,'+(0.55+glow*0.45)+')';
+    ctx.shadowBlur=14+glow*(16+14*beat);
+  }
+
+  const wallY = m.y + m.h*0.38, wallH = m.h - (wallY-m.y);
+  // 屋根
+  ctx.fillStyle='#e0685f';
+  ctx.beginPath();
+  ctx.moveTo(m.x+m.w/2, m.y+2);
+  ctx.lineTo(m.x+m.w-1, wallY+3);
+  ctx.lineTo(m.x+1,     wallY+3);
+  ctx.closePath(); ctx.fill();
+  ctx.shadowBlur=0;
+  // 壁
+  ctx.fillStyle='#f6ead6';
+  ctx.beginPath(); ctx.roundRect(m.x+m.w*0.10, wallY, m.w*0.80, wallH-2, 4); ctx.fill();
+  ctx.strokeStyle='#c9ab85'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.roundRect(m.x+m.w*0.10, wallY, m.w*0.80, wallH-2, 4); ctx.stroke();
+
+  // 扉。近づけると開いて、中のあかりが見える
+  const dW=m.w*0.42, dH=wallH*0.72;
+  const dX=m.x+m.w/2-dW/2, dY=m.y+m.h-2-dH;
+  ctx.fillStyle='#4a3b2c';
+  ctx.beginPath(); ctx.roundRect(dX,dY,dW,dH,3); ctx.fill();
+  if(ease>0.02){
+    const gl=ctx.createLinearGradient(dX,dY+dH,dX,dY);
+    gl.addColorStop(0,'rgba(255,214,120,'+(0.95*ease)+')');
+    gl.addColorStop(1,'rgba(255,240,200,'+(0.55*ease)+')');
+    ctx.fillStyle=gl;
+    ctx.beginPath(); ctx.roundRect(dX+1.5,dY+1.5,dW-3,dH-1.5,2); ctx.fill();
+    // 中へ入っていくキャラの影
+    if(homeNum>0) drawHomeSilhouette(ctx, dX, dY, dW, dH, homeNum, ease, t);
+  } else {
+    ctx.fillStyle='#e8c76a';   // ドアノブ
+    ctx.beginPath(); ctx.arc(dX+dW*0.78, dY+dH*0.55, 1.8, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+// 扉の中に見える、帰っていくキャラの影
+function drawHomeSilhouette(ctx, dX, dY, dW, dH, num, ease, t){
+  const spec = blockSpec(num);
+  const cell = Math.max(1.2, Math.min((dW-6)/spec.cols, (dH-6)/spec.rows));
+  const w=spec.cols*cell, h=spec.rows*cell;
+  const bx=dX+dW/2-w/2, by=dY+dH-3-h;
+  ctx.save();
+  ctx.beginPath(); ctx.roundRect(dX+1.5,dY+1.5,dW-3,dH-1.5,2); ctx.clip();
+  ctx.globalAlpha=0.55*ease;
+  ctx.fillStyle='#4a3b2c';
+  ctx.fillRect(bx, by + Math.sin(t*0.006)*0.8, w, h);
+  ctx.restore();
+}
+
 // 鏡の中に映るキャラ。実物と同じ描画エンジンを縮めて使い、左右を反転させる。
 // prog は 0→1 で、小さく暗いところから、すっと浮かび上がってくる。
 function drawMirrorReflection(ctx, m, num, prog, t){
@@ -729,7 +836,11 @@ class Puzzle {
 // ─── Game state ───────────────────────────────────────────────────────────────
 let blocks=[], puzzle=null, dragBlock=null, dragPointers={};
 let dragPtr=null;   // ドラッグ中の指／マウスの位置（マジックミラーの判定用）
-let lastTapBlock=null, lastTapTime=0, walkTime=0;
+let walkTime=0;
+// CLR（ぜんぶ消す）は取り返しがつかないので、押し続けないと実行しない。
+// 押しているあいだリングが溜まっていき、一周したら実行する。
+const CLR_HOLD_MS = 650;
+let clrHold = null;   // {pid, t0}
 
 function applyPhysics(){
   for(const b of blocks){
@@ -853,9 +964,27 @@ function getNumpadLayout(){
 function drawNumpad(ctx){
   const padH=getPadH(),padY=sh-padH;
   ctx.fillStyle='rgba(0,0,0,0.15)'; ctx.fillRect(0,padY,sw,padH);
+  // CLR を押し続けている進み具合（0〜1）。一周したら実行する。
+  let clrProg = 0;
+  if(clrHold){
+    clrProg = Math.min(1, (Date.now()-clrHold.t0)/CLR_HOLD_MS);
+    if(clrProg>=1){ blocks=[]; updateTargets(); clrHold=null; clrProg=0; }
+  }
   for(const b of getNumpadLayout()){
-    ctx.save(); ctx.fillStyle=b.color||'rgba(80,80,180,0.9)';
+    const holding = (b.val==='CLR' && clrProg>0);
+    ctx.save();
+    ctx.fillStyle=b.color||'rgba(80,80,180,0.9)';
     ctx.beginPath(); ctx.roundRect(b.x,b.y,b.w,b.h,8); ctx.fill();
+    if(holding){
+      // 下から溜まっていくゲージ。どこまで進んだかが一目で分かる
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(b.x,b.y,b.w,b.h,8); ctx.clip();
+      ctx.fillStyle='rgba(255,255,255,0.55)';
+      ctx.fillRect(b.x, b.y+b.h*(1-clrProg), b.w, b.h*clrProg);
+      ctx.restore();
+      ctx.strokeStyle='white'; ctx.lineWidth=2.5;
+      ctx.beginPath(); ctx.roundRect(b.x-2,b.y-2,b.w+4,b.h+4,10); ctx.stroke();
+    }
     ctx.fillStyle='white'; ctx.font='bold 15px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(b.label,b.x+b.w/2,b.y+b.h/2);
     ctx.restore();
@@ -1084,7 +1213,7 @@ function handleStart(x,y,pid){
   for(const b of getNumpadLayout()){
     if(ptInRect(x,y,b.x,b.y,b.w,b.h)){
       if(b.val==='R') spawnBlock(Math.floor(Math.random()*100)+1);
-      else if(b.val==='CLR'){ blocks=[]; updateTargets(); }
+      else if(b.val==='CLR'){ clrHold={pid:pid, t0:Date.now()}; }   // 長押しで実行
       else spawnBlock(Number(b.val));
       return;
     }
@@ -1092,9 +1221,8 @@ function handleStart(x,y,pid){
   for(let i=blocks.length-1;i>=0;i--){
     const b=blocks[i];
     if(blockHit(b,x,y)){
-      const now=Date.now();
-      if(b===lastTapBlock&&now-lastTapTime<400){ blocks.splice(i,1); lastTapBlock=null; updateTargets(); return; }
-      lastTapBlock=b; lastTapTime=now;
+      // ダブルタップでの削除は誤爆が多いので廃止した。
+      // 消したいときは「おうち」へドラッグする（ミラーと対の操作）。
       dragPointers[pid]={x,y,offX:x-b.x,offY:y-b.y,block:b};
       dragBlock=b; dragPtr={x:x,y:y}; blocks.splice(i,1); blocks.push(b); return;
     }
@@ -1124,16 +1252,24 @@ function duplicateAtMirror(b){
 }
 
 function handleMove(x,y,pid){
+  if(clrHold && clrHold.pid===pid){
+    const btn=getNumpadLayout().find(n=>n.val==='CLR');
+    if(!btn || !ptInRect(x,y,btn.x-10,btn.y-10,btn.w+20,btn.h+20)) clrHold=null;
+    return;
+  }
   const ptr=dragPointers[pid]; if(!ptr) return;
   const b=ptr.block; b.vx=x-ptr.x; b.vy=y-ptr.y; b.x=x-ptr.offX; b.y=y-ptr.offY; ptr.x=x; ptr.y=y;
   if(b===dragBlock) dragPtr={x:x,y:y};
 }
 
 function handleEnd(x,y,pid){
+  if(clrHold && clrHold.pid===pid){ clrHold=null; return; }   // 途中で離した＝中止
   const ptr=dragPointers[pid]; if(!ptr){ dragBlock=null; dragPtr=null; return; }
   const b=ptr.block; delete dragPointers[pid]; dragBlock=null; dragPtr=null;
   // マジックミラーの上で離した → そのキャラを複製する（合体はしない）
   if(isOverMirror(x,y)){ duplicateAtMirror(b); return; }
+  // おうちの上で離した → そのキャラは帰る（画面から消える）
+  if(isOverHome(x,y)){ sendHome(b); return; }
   let best=null,bestD=Infinity;
   for(const other of blocks){
     if(other===b) continue;
@@ -1149,8 +1285,9 @@ function setMode(newMode){
   // 計算モード（＋−×÷）どうしの行き来ならキャラを残す。因数・ドリルを跨ぐときは片付ける
   const isCalc = m => m!=='factor' && m!=='quiz';
   if(!isCalc(mode) || !isCalc(newMode)) blocks=[];
-  mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={};
+  mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={}; clrHold=null;
   fxParticles=[]; mirrorFlash=0; mirrorRing=0; mirrorReflect=0; mirrorReflectNum=0;
+  homeFlash=0; homeOpen=0; homeNum=0;
   factorUI.classList.toggle('visible',newMode==='factor');
   quizUI.classList.toggle('visible',newMode==='quiz');
   if(newMode==='factor'){ buildFactorRows(factorVal); updateFactorTargets(); factorReveal={}; }
@@ -1184,7 +1321,7 @@ function cancelDrag(pid){
 }
 function cancelAllDrags(){
   for(const pid in dragPointers) cancelDrag(pid);
-  dragBlock=null; dragPtr=null; mouseDown=false;
+  dragBlock=null; dragPtr=null; mouseDown=false; clrHold=null;
 }
 document.addEventListener('visibilitychange', ()=>{ if(document.hidden) cancelAllDrags(); });
 window.addEventListener('blur', cancelAllDrags);
@@ -1247,18 +1384,20 @@ function loop(ts){
         }
         // ミラーに入りかけているときは、持っているキャラを薄くする。
         // 「実体が鏡に吸い込まれ、代わりに鏡の中に映っている」という見え方にする。
-        if(mirrorReflect > 0.02){
+        const fade = Math.max(mirrorReflect, homeOpen);
+        if(fade > 0.02){
           ctx.save();
-          ctx.globalAlpha = 1 - 0.55*mirrorReflect;
+          ctx.globalAlpha = 1 - 0.55*fade;
           dragBlock.draw(ctx,walkTime,0);
           ctx.restore();
         } else {
           dragBlock.draw(ctx,walkTime,0);
         }
       }
-      // ミラーは最後に描く。持っているキャラで隠れると、
-      // 鏡の中の映り込みが見えなくなってしまうため。
+      // ミラーとおうちは最後に描く。持っているキャラで隠れると、
+      // 鏡の中の映り込みや扉のあかりが見えなくなってしまうため。
       drawMirror(ctx, walkTime);
+      drawHome(ctx, walkTime);
       // マジックミラーの紙吹雪
       for(const fp of fxParticles) fp.update();
       fxParticles = fxParticles.filter(fp=>fp.life>0);
