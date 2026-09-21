@@ -665,8 +665,126 @@ const _specCache = {};
 const _maskClipCache = {};   // マスクのクリップ範囲（かたちが変われば作り直す）
 /** かたち編集で SHAPE_OVERRIDE_USER を書き換えたときに呼ぶ（キャッシュを捨てて再計算させる） */
 function invalidateSpec(n){ delete _specCache[n]; delete _maskClipCache[n]; }
+/* ===================== 100より大きい数 =====================
+   1マス＝1 で描けるのは100まで。それ以上は「まとまりを1つの部品」として扱う。
+     板 = 100（10×10）／棒 = 10（1×10）／粒 = 1
+   そろった段から下に積み上がり、余りが上に乗る。幅は10マスが基本で、
+   縦に伸びすぎる大きい数だけ20マスにする（20は超えない）。
+   百の位はパステル、十の位と一の位はこれまでの色のまま。上の位ほど淡くなる。 */
+const BIG_MAX = 1000;
+
+function bigLayoutFor(n, W){
+  const T = Math.floor(n/10), o = n%10;
+  const full = Math.floor(T/W), left = T%W;
+  const rowsTen = full + (left>0?1:0);
+  const extra = (left===0 && o>0) ? o : 0;
+  const H = rowsTen*10 + extra;
+  const parts = [];
+  const hd = Math.floor(n/100), td = Math.floor((n%100)/10);
+  for(let r=0; r<rowsTen; r++){
+    const count = (r<full) ? W : left;
+    const plates = Math.floor(count/10);
+    const yTop = H - (r+1)*10;                 // r=0 が一番下
+    // そろった10本ぶんは「板1枚」。残りは棒のまま。
+    for(let g=0; g<plates; g++){
+      parts.push({ kind:'plate', gx:g*10, gy:yTop,
+                   digit:(hd>9?1:hd), idx:g + r*Math.floor(W/10) });
+    }
+    for(let c=plates*10; c<count; c++){
+      parts.push({ kind:'rod', gx:c, gy:yTop, digit:td, idx:c-plates*10 });
+    }
+  }
+  if(o){
+    if(left>0){
+      const rowBottom = H - full*10;
+      for(let i=0;i<o;i++) parts.push({ kind:'one', gx:left, gy:rowBottom-1-i, digit:o, idx:i });
+    } else {
+      for(let i=0;i<o;i++) parts.push({ kind:'one', gx:0, gy:extra-1-i, digit:o, idx:i });
+    }
+  }
+  const cols = Math.max.apply(null, parts.map(p=>p.gx + (p.kind==='plate'?10:1)));
+  const rows = H;
+  return { parts, cols, rows, W };
+}
+
+/** 幅は10マスを基本に。縦に40マスを超えるときだけ20マスにする */
+function bigLayout(n){
+  const a = bigLayoutFor(n, 10);
+  return (a.rows <= 40) ? a : bigLayoutFor(n, 20);
+}
+
+/** 板1枚ぶんの淡い色。棒と同じ特例（7=にじいろ 9=3階調 10=白+赤フチ）を通す */
+function plateStyle(digit, idx){
+  const base = tensStyle(digit, idx).border;
+  return { light: mixWhite(base, 0.82), dark: mixWhite(base, 0.62),
+           border: mixWhite(base, 0.15) };
+}
+
+/** 1000：10×10×10 のキューブ。前面だけを cells に持ち、立体は描画側で足す */
+const CUBE_DEPTH = 4, CUBE_LIFT = 3;    // 奥行き（マス）と上面の持ち上がり（マス）
+
+function bigSpec(n){
+  const cells = [], groups = [];
+  if(n === 1000){
+    const st = plateStyle(1, 0);
+    const g = { kind:'hundred', cellIndexes:[], fillRGB:st.light, borderRGB:st.border };
+    for(let r=0;r<10;r++) for(let c=0;c<10;c++){
+      g.cellIndexes.push(cells.length);
+      cells.push({ gx:c, gy:CUBE_LIFT+r, group:0,
+                   colorRGB: ((c+r)%2===0) ? st.dark : st.light,
+                   borderRGB: st.border, isTen:false, isHundred:true });
+    }
+    groups.push(g);
+    const p = numProps(n);
+    // 外形は前面の10×10ぶんだけ。上面と右面は手足と同じように外へはみ出す。
+    // こうすると腕が前面の左右から出て、脚も前面の真下に付く。
+    return { n:n, cols:10, rows:10+CUBE_LIFT, cells:cells, groups:groups,
+             face:faceSpec(n,p), props:p, cube:true, faceBox:{gx:0,gy:CUBE_LIFT,w:10,h:10} };
+  }
+
+  const L = bigLayout(n);
+  let faceBox = null;
+  for(const part of L.parts){
+    if(part.kind === 'plate'){
+      const st = plateStyle(part.digit, part.idx);
+      const grp = { kind:'hundred', cellIndexes:[], fillRGB:st.light, borderRGB:st.border };
+      for(let r=0;r<10;r++) for(let c=0;c<10;c++){
+        grp.cellIndexes.push(cells.length);
+        cells.push({ gx:part.gx+c, gy:part.gy+r, group:groups.length,
+                     colorRGB: ((part.gx+c+r)%2===0) ? st.dark : st.light,
+                     borderRGB: st.border, isTen:false, isHundred:true });
+      }
+      groups.push(grp);
+      // 顔は「一番上の板」に乗せる。余りの棒は頭の上に立って飾りになる。
+      if(!faceBox || part.gy < faceBox.gy) faceBox = { gx:part.gx, gy:part.gy, w:10, h:10 };
+    } else if(part.kind === 'rod'){
+      const st = tensStyle(part.digit, part.idx);
+      const grp = { kind:'ten', cellIndexes:[], fillRGB:st.fill, borderRGB:st.border };
+      for(let k=0;k<10;k++){
+        grp.cellIndexes.push(cells.length);
+        cells.push({ gx:part.gx, gy:part.gy+k, group:groups.length,
+                     colorRGB:st.fill, borderRGB:st.border, isTen:true, isHundred:false });
+      }
+      groups.push(grp);
+    } else {
+      const col = oneCellColor(part.digit, part.idx);
+      const bor = darken(col, 0.34);
+      groups.push({ kind:'one', cellIndexes:[cells.length], fillRGB:col, borderRGB:bor });
+      cells.push({ gx:part.gx, gy:part.gy, group:groups.length-1,
+                   colorRGB:col, borderRGB:bor, isTen:false, isHundred:false });
+    }
+  }
+  const p = numProps(n);
+  return { n:n, cols:L.cols, rows:L.rows, cells:cells, groups:groups,
+           face:faceSpec(n,p), props:p, faceBox:faceBox };
+}
+
 function blockSpec(n){
-  n = Math.max(1, Math.min(100, Math.round(n)));
+  n = Math.max(1, Math.min(BIG_MAX, Math.round(n)));
+  if(n > 100){
+    if(_specCache[n]) return _specCache[n];
+    return (_specCache[n] = bigSpec(n));
+  }
   if(_specCache[n]) return _specCache[n];   // ずかんで100回描くのでキャッシュする
   const p = numProps(n);
   const L = layoutCells(n);
@@ -1652,17 +1770,22 @@ function drawEyebrows(ctx, cx, cy, half, rx, ry, shape, tilt, rgbCol, gap){
 /** 顔一式 */
 function drawFace(ctx, spec, x, y, bs, geo){
   const f = spec.face;
-  const G = getFaceGeom(spec.n);
+  // 100より大きい数の頭は10×10の板。顔の寸法は 100 の設定をそのまま借りる。
+  const G = getFaceGeom(spec.n > 100 ? 100 : spec.n);
   const w = spec.cols*bs, h = spec.rows*bs;
 
   // 顔は「その行（既定は一番上の2段）が実際に存在する範囲」の中央に置く。
   // 15 のような階段状でも顔が空中に浮かないようにするため。
   // faceRow を指定すると、その行から2段を顔の基準にする（17のように一の位が
   // 上に来る配置で、顔を十のかたまり側の行へ動かしたいときに使う）。
-  const faceRow = pick(G.faceRow, 0);
+  // 100より大きい数は faceBox（一番上の板）が顔の場所になる。
+  // 余りの棒はその上に立つので、頭の飾りのように見える。
+  const fb = spec.faceBox;
+  const faceRow = fb ? fb.gy : pick(G.faceRow, 0);
   const bandTop = faceRow, bandBot = faceRow + Math.min(2, spec.rows);
   let minGx = Infinity, maxGx = -Infinity;
   for(const c of spec.cells){
+    if(fb && (c.gx < fb.gx || c.gx >= fb.gx + fb.w)) continue;
     if(c.gy >= bandTop && c.gy < bandBot){ if(c.gx<minGx) minGx=c.gx; if(c.gx>maxGx) maxGx=c.gx; }
   }
   if(minGx===Infinity){ minGx=0; maxGx=spec.cols-1; }
@@ -1908,6 +2031,38 @@ function drawNumberling(ctx, spec, x, y, bs){
   ctx.restore();
 }
 
+/** 1000 の立方体のうち、奥に見える上面と右面。前面は通常のセル描画が担当する。 */
+function drawCubeBack(ctx, spec, x, y, bs){
+  const g = spec.groups[0];
+  const d = CUBE_DEPTH*bs, lift = CUBE_LIFT*bs, S = 10*bs;
+  const fx = x, fy = y + lift;
+  const face = (pts, fill) => {
+    ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+    for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+    ctx.closePath();
+    ctx.fillStyle = rgb(fill); ctx.fill();
+    ctx.save(); ctx.clip();
+    ctx.strokeStyle = 'rgba(0,0,0,0.13)'; ctx.lineWidth = STROKE*0.45;
+    for(let i=1;i<10;i++){
+      const t=i/10;
+      const a=[pts[0][0]+(pts[1][0]-pts[0][0])*t, pts[0][1]+(pts[1][1]-pts[0][1])*t];
+      const b=[pts[3][0]+(pts[2][0]-pts[3][0])*t, pts[3][1]+(pts[2][1]-pts[3][1])*t];
+      ctx.beginPath(); ctx.moveTo(a[0],a[1]); ctx.lineTo(b[0],b[1]); ctx.stroke();
+      const e=[pts[0][0]+(pts[3][0]-pts[0][0])*t, pts[0][1]+(pts[3][1]-pts[0][1])*t];
+      const f=[pts[1][0]+(pts[2][0]-pts[1][0])*t, pts[1][1]+(pts[2][1]-pts[1][1])*t];
+      ctx.beginPath(); ctx.moveTo(e[0],e[1]); ctx.lineTo(f[0],f[1]); ctx.stroke();
+    }
+    ctx.restore();
+    ctx.strokeStyle = rgb(g.borderRGB); ctx.lineWidth = STROKE*2.3; ctx.lineJoin='round';
+    ctx.beginPath(); ctx.moveTo(pts[0][0],pts[0][1]);
+    for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0],pts[i][1]);
+    ctx.closePath(); ctx.stroke();
+  };
+  // 右面（奥）→ 上面 の順。前面はこのあと通常描画で上から重なる
+  face([[fx+S,fy],[fx+S+d,fy-lift],[fx+S+d,fy-lift+S],[fx+S,fy+S]], darken(g.fillRGB,0.14));
+  face([[fx,fy],[fx+d,fy-lift],[fx+S+d,fy-lift],[fx+S,fy]], mixWhite(g.fillRGB,0.45));
+}
+
 /**
  * ナンバーブロックを描く。
  * (x,y) はブロック本体の左上。blockSize は1マスの一辺。
@@ -1922,6 +2077,9 @@ function drawNumberblock(ctx, n, x, y, blockSize, opts){
 
   ctx.save();
   ctx.lineCap='round'; ctx.lineJoin='round';
+
+  // 1000：立方体の奥2面。手足より先に描いて、腕が面に隠れないようにする
+  if(spec.cube) drawCubeBack(ctx, spec, x, y, bs);
 
   // 手足（体の後ろ）
   const geo = limbGeometry(spec, x, y, bs, t, !!opts.animate);

@@ -150,6 +150,7 @@ const BAR_LEFT_RESERVE  = 92;                // 左に空ける幅（S/M/Lボタ
 const BAR_RIGHT_RESERVE = 116;               // 右に空ける幅（ずかん・全画面ボタン）
 const FACTOR_H = 115;
 const QUIZ_H   = 115;
+const MAX_NUM = 1000;    // 出せる数の上限。101以上は板・棒・粒で組み立てる
 const MAX_BLOCKS = 30;   // 同時に置けるキャラの数
 const EDGE_MARGIN = 12;  // 画面の左右に空けておく幅（ブラウザのスワイプ対策）
 
@@ -259,7 +260,7 @@ function isOverHome(x,y){   return isOverTarget('home',x,y); }
 
 // ×2 と ÷2 が使えるか（100を超える／割り切れないときは受け付けない）
 function canScale(id,n){
-  return id==='double' ? (n*2<=100) : (n%2===0 && n/2>=1);
+  return id==='double' ? (n*2<=MAX_NUM) : (n%2===0 && n/2>=1);
 }
 function scaledNum(id,n){ return id==='double' ? n*2 : n/2; }
 
@@ -686,7 +687,7 @@ function drawModeTabs(ctx){
 let blockIdCounter = 0;
 class NumberBlock {
   constructor(num,x,y){
-    this.id=blockIdCounter++; this.num=Math.max(1,Math.min(100,num));
+    this.id=blockIdCounter++; this.num=Math.max(1,Math.min(MAX_NUM,num));
     this.x=x; this.y=y; this.vx=0; this.vy=0; this.onGround=false; this.targetX=x;
     this.birth=1;   // 1 なら通常。0 から始めるとミラーから生まれる演出が付く
     this.launch=0;  // >0 のあいだは整列を無視して飛ぶ（ミラーからの射出）
@@ -696,7 +697,17 @@ class NumberBlock {
     // かたちはエンジンの blockSpec が正。ここはその外形サイズを写すだけ
     const spec = blockSpec(this.num);
     this.cols = spec.cols; this.rows = spec.rows;
-    this.width=this.cols*BS; this.height=this.rows*BS;
+    // 1〜100は全員同じマスの大きさ（100の面積は1の100倍、という原則）。
+    // ただし101以上を同じマスで描くと画面から完全にはみ出すので、
+    // 大きい数のときだけ、そのキャラが収まるところまでマスを小さくする。
+    this.bs = BS;
+    if(this.num > 100){
+      const maxW = sw - EDGE_MARGIN*2;
+      // 上は「おうち・÷2・×2・ミラー」のアイコン列より下から。重ならないように。
+      const maxH = Math.max(60, calcFloor() - (TAB_H + 74));
+      this.bs = Math.max(1.2, Math.min(BS, maxW/this.cols, maxH/this.rows));
+    }
+    this.width=this.cols*this.bs; this.height=this.rows*this.bs;
   }
   get cx(){ return this.x+this.width/2; }
   get cy(){ return this.y+this.height/2; }
@@ -720,7 +731,7 @@ class NumberBlock {
   _drawBody(ctx,t=0,bounceY=0){
     const n=this.num,x=this.x,y=this.y+bounceY;
     const isMoving=Math.abs(this.vx)>0.5||Math.abs(this.vy)>1.0;
-    drawNumberblock(ctx, n, x, y, BS, { t:t, animate:isMoving, numberling:false });
+    drawNumberblock(ctx, n, x, y, this.bs, { t:t, animate:isMoving, numberling:false });
     // 数字ラベルはゲーム側の見せ方（白フチ黒文字）を維持する
     ctx.save(); ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.font='bold '+Math.max(9,Math.round(BS*0.6))+'px sans-serif';
     ctx.strokeStyle='white'; ctx.lineWidth=3; ctx.strokeText(String(n),x+this.width/2,y-3);
@@ -773,9 +784,9 @@ function opsAvailableFor(a,b){
 }
 
 function canCalc(a,b,m){
-  if(m==='+')   return a.num+b.num<=100;
+  if(m==='+')   return a.num+b.num<=MAX_NUM;
   if(m==='-')   return Math.abs(a.num-b.num)>=1;
-  if(m==='x')   return a.num*b.num<=100;
+  if(m==='x')   return a.num*b.num<=MAX_NUM;
   if(m==='div'){ const lg=Math.max(a.num,b.num),sm=Math.min(a.num,b.num); return sm>=1&&lg%sm===0; }
   return false;
 }
@@ -815,7 +826,7 @@ class Puzzle {
     const candidates = new Set();
 
     function addIfValid(v){
-      if(v >= 1 && v <= 100 && v !== ans){
+      if(v >= 1 && v <= MAX_NUM && v !== ans){
         candidates.add(v);
       }
     }
