@@ -169,16 +169,27 @@ function calcFloor(){ return sh - GH - bottomPanelH() - 12; }
 // ここで再定義すると同名の const がぶつかって動かなくなるので置かない。
 
 // ─── Tabs & Size buttons ──────────────────────────────────────────────────────
+// 合体したときにクイズを出すかどうか。OFF なら答えがすぐ出る（じゆうに積む遊び）。
+// ドリルモードはクイズそのものなので、この設定の影響を受けない。
+const QUIZ_ON_KEY = 'nbg.quizOn.v1';
+let quizOn = true;
+try{ const v=localStorage.getItem(QUIZ_ON_KEY); if(v!==null) quizOn = (v==='1'); }catch(e){}
+function setQuizOn(v){
+  quizOn = v;
+  try{ localStorage.setItem(QUIZ_ON_KEY, v?'1':'0'); }catch(e){}
+}
+
 let mode = '+';
 const TAB_DEFS = [
   {label:'+', val:'+'}, {label:'−', val:'-'},
   {label:'×', val:'x'}, {label:'÷', val:'div'},
   {label:'因数', val:'factor'}, {label:'ドリル', val:'quiz'}
 ];
-let tabBtns = [], sizeBtns = [];
+let tabBtns = [], sizeBtns = [], toggleBtns = [];
 
 function drawTabsAndUI(ctx){
   drawSizeButtons(ctx);
+  drawQuizToggle(ctx);
   drawModeTabs(ctx);
   // ミラーはタブの位置を使って置くので、タブを並べたあとに描く。
   // 床のキャラに隠れないよう、実際の描画はメインループ側から呼ぶ。
@@ -511,6 +522,25 @@ function drawMirror(ctx, t){
   ctx.restore();
 }
 
+// 上段中央：合体したときにクイズを出すかどうかの切り替え。
+// ドリルモードはクイズそのものなので、そこでは出さない。
+function drawQuizToggle(ctx){
+  toggleBtns = [];
+  if(mode==='factor'||mode==='quiz') return;
+  const w=90, h=30, y=Math.round((TOP_ROW_H-h)/2);
+  const x=Math.round((BAR_LEFT_RESERVE + (sw - BAR_RIGHT_RESERVE))/2 - w/2);
+  ctx.save();
+  ctx.fillStyle = quizOn ? 'rgba(100,160,255,0.95)' : 'rgba(82,92,110,0.95)';
+  ctx.beginPath(); ctx.roundRect(x,y,w,h,8); ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,'+(quizOn?0.75:0.35)+')'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.roundRect(x,y,w,h,8); ctx.stroke();
+  ctx.fillStyle='white'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='bold 12px sans-serif';
+  ctx.fillText('クイズ '+(quizOn?'ON':'OFF'), x+w/2, y+h/2);
+  ctx.restore();
+  toggleBtns.push({x:x,y:y,w:w,h:h,val:'quiz'});
+}
+
 // 下段：モードタブ（＋ − × ÷ 因数 ドリル）。画面幅いっぱいに等分する
 function drawModeTabs(ctx){
   const n = TAB_DEFS.length;
@@ -638,17 +668,40 @@ class Puzzle {
       n1=Math.max(draggedBlock.num,targetBlock.num); n2=Math.min(draggedBlock.num,targetBlock.num); ans=n1/n2;
     }
     this.n1=n1; this.n2=n2; this.ans=ans;
+    this.a=draggedBlock.num; this.b=targetBlock.num;   // 演算子の切り替え用
     this.mergeX=(draggedBlock.x+targetBlock.x)/2;
     this.char1=new NumberBlock(n1,0,0); this.char2=new NumberBlock(n2,0,0);
     this.charRes=new NumberBlock(Math.max(1,Math.round(ans)),0,0);
     this.choices=this._genChoices(ans);
     this.eliminated=new Set();
     this.wrongFlash=0; this.wrongChoiceIdx=null; // 誤答演出
-    this.phase='countdown'; // 'countdown'|'correct'|'timeout'|'done'
+    // 'countdown'（クイズ）｜'answer'（こたえをすぐ見せる）｜'correct'|'timeout'|'done'
+    this.phase = (mode==='quiz' || quizOn) ? 'countdown' : 'answer';
+    this.ANSWER_MS = 2200;   // 演算子ボタンに気づける程度の長さ。タップすればすぐ閉じる
     // 正解演出は続けて何問も解くので、長いとテンポが悪くなる。
     // さらに、待たされないよう画面をタップすれば途中でも先へ進める。
     this.elapsed=0; this.COUNTDOWN=5000; this.CORRECT_ANIM=700;
     this.particles=[];
+  }
+
+  // 同じ2体のまま、演算子だけ切り替える。モードを変えずに
+  // ひきざん・かけざん・わりざんに触れられるようにするため。
+  _opsAvailable(){
+    const a={num:this.a}, b={num:this.b};
+    return ['+','-','x','div'].filter(m=>canCalc(a,b,m));
+  }
+  setOp(op){
+    if(op===this.calcMode) return;
+    const a=this.a, b=this.b;
+    let n1,n2,ans;
+    if(op==='+'){ n1=a; n2=b; ans=a+b; }
+    else if(op==='x'){ n1=a; n2=b; ans=a*b; }
+    else if(op==='-'){ n1=Math.max(a,b); n2=Math.min(a,b); ans=n1-n2; }
+    else { n1=Math.max(a,b); n2=Math.min(a,b); ans=n1/n2; }
+    this.calcMode=op; this.n1=n1; this.n2=n2; this.ans=ans;
+    this.char1=new NumberBlock(n1,0,0); this.char2=new NumberBlock(n2,0,0);
+    this.charRes=new NumberBlock(Math.max(1,Math.round(ans)),0,0);
+    this.elapsed=0;   // 見比べられるように表示時間を延ばす
   }
 
   _genChoices(ans){
@@ -727,7 +780,8 @@ class Puzzle {
 
   update(dt){
     this.elapsed+=dt; this.wrongFlash=Math.max(0,this.wrongFlash-dt);
-    if(this.phase==='countdown'&&this.elapsed>=this.COUNTDOWN) this.phase='timeout';
+    if(this.phase==='answer'&&this.elapsed>=this.ANSWER_MS) this.phase='done';
+    else if(this.phase==='countdown'&&this.elapsed>=this.COUNTDOWN) this.phase='timeout';
     else if(this.phase==='correct'&&this.elapsed>=this.CORRECT_ANIM) this.phase='done';
     for(const p of this.particles) p.update();
     this.particles=this.particles.filter(p=>p.life>0);
@@ -762,6 +816,8 @@ class Puzzle {
 
     if(this.phase==='correct'){
       this._drawCorrectAnim(ctx,t,px,py,pw,ph);
+    } else if(this.phase==='answer'){
+      this._drawAnswerPanel(ctx,t,px,py,pw,ph);
     } else {
       this._drawQuestion(ctx,t,px,py,pw,ph);
       this._drawCountdownBar(ctx,px,py,pw,ph);
@@ -836,6 +892,44 @@ class Puzzle {
       ctx.fillStyle='white'; ctx.font='bold 24px sans-serif';
       ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(String(this.choices[r.idx]),r.x+r.w/2,r.y+r.h/2);
+      ctx.restore();
+    }
+  }
+
+  // 演算子ボタンの位置。選択肢ボタンと同じ場所に4つ並べる。
+  _getOpRects(){
+    const {px,py,pw,ph}=this._panelRect();
+    const ops=this._opsAvailable();
+    if(!ops.length) return [];
+    const btnH=48,gap=8,totalW=pw-40,btnW=(totalW-(ops.length-1)*gap)/ops.length;
+    const y=py+ph-btnH-14;
+    return ops.map((op,i)=>({op, x:px+20+i*(btnW+gap), y:y, w:btnW, h:btnH}));
+  }
+
+  // クイズOFFのときの画面。答えをすぐ見せ、演算子を押せば別の計算になる。
+  _drawAnswerPanel(ctx,t,px,py,pw,ph){
+    ctx.save();
+    ctx.font='bold 26px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle='#222';
+    ctx.fillText(`${this.n1} ${this._opStr()} ${this.n2} = ${this.ans}`, px+pw/2, py+12);
+    ctx.restore();
+
+    const cr=this.charRes, bounce=Math.sin(this.elapsed*0.008)*7;
+    const top=py+52, bottom=py+ph-78;
+    cr.x=px+(pw-cr.width)/2;
+    cr.y=Math.max(top, (top+bottom)/2 - cr.height/2);
+    cr.draw(ctx,t,bounce);
+
+    // 演算子ボタン
+    for(const r of this._getOpRects()){
+      const cur = r.op===this.calcMode;
+      ctx.save();
+      ctx.fillStyle = cur ? 'rgba(50,100,240,0.95)' : 'rgba(150,160,180,0.9)';
+      ctx.beginPath(); ctx.roundRect(r.x,r.y,r.w,r.h,10); ctx.fill();
+      if(cur){ ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=2;
+               ctx.beginPath(); ctx.roundRect(r.x,r.y,r.w,r.h,10); ctx.stroke(); }
+      ctx.fillStyle='white'; ctx.font='bold 26px sans-serif';
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText({'+':'＋','-':'−','x':'×','div':'÷'}[r.op], r.x+r.w/2, r.y+r.h/2);
       ctx.restore();
     }
   }
@@ -1213,8 +1307,16 @@ function getPos(e,t){
 function handleStart(x,y,pid){
   for(const sb of sizeBtns){ if(ptInRect(x,y,sb.x,sb.y,sb.w,sb.h)){ setBlockSize(sb.val); return; } }
   for(const tb of tabBtns){ if(ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)){ setMode(tb.val); return; } }
+  for(const gb of toggleBtns){ if(ptInRect(x,y,gb.x,gb.y,gb.w,gb.h)){ setQuizOn(!quizOn); return; } }
   // 正解演出の途中なら、どこをタップしても次へ進む。見終わった子を待たせない。
   if(puzzle && puzzle.phase==='correct'){ puzzle.phase='done'; return; }
+  // こたえ表示中：演算子を押せば同じ2体で別の計算に。それ以外を押せば閉じる。
+  if(puzzle && puzzle.phase==='answer'){
+    for(const r of puzzle._getOpRects()){
+      if(ptInRect(x,y,r.x,r.y,r.w,r.h)){ puzzle.setOp(r.op); return; }
+    }
+    puzzle.phase='done'; return;
+  }
   if(mode==='factor'){ handleFactorTap(x,y); return; }
   if(mode==='quiz'){
     // ドリル中は選択肢のタップだけ受け付ける（キャラの操作や数字パッドは無い）
