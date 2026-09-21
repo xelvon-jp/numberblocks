@@ -1490,15 +1490,23 @@ function drawClockMode(ctx, t){
     // 6〜10分が「2」の色…と対応するので、3を指せば3かたまりぶんが光る。
     const num = (i===0) ? 12 : Math.ceil(i/5);
     const col = mainColorOf(num);
-    const lit = i < min;                               // ここまでが経過した分
+    // 12の位置(i=0)が出発点。そこから数えて min 個ぶんが光る。
+    // 針の真下のブロックがちょうど最後の1個になる。
+    const lit = (i > 0 && i <= min);
+    // 5の位置（数字の真上）のブロックは大きめ・フチ強め。
+    // かたまりの切れ目が見えるので「5ずつ」の並びが読みやすくなる。
+    const isMark = (i % 5 === 0);
+    const sz = cube * (isMark ? 1.42 : 1);
     const a = (i/60)*Math.PI*2 - Math.PI/2;
     const x = g.cx + Math.cos(a)*cubeR, y = g.cy + Math.sin(a)*cubeR;
     ctx.save(); ctx.translate(x,y); ctx.rotate(a+Math.PI/2);
-    ctx.fillStyle = lit ? rgb(col) : rgb(mixWhite(col,0.80));
-    ctx.beginPath(); ctx.roundRect(-cube/2,-cube/2,cube,cube,cube*0.22); ctx.fill();
-    ctx.strokeStyle = lit ? rgb(darken(col,0.3)) : rgb(mixWhite(col,0.45));
-    ctx.lineWidth = Math.max(0.8, cube*0.13);
-    ctx.beginPath(); ctx.roundRect(-cube/2,-cube/2,cube,cube,cube*0.22); ctx.stroke();
+    ctx.fillStyle = lit ? rgb(isMark ? col : mixWhite(col,0.22))
+                        : rgb(mixWhite(col, isMark ? 0.68 : 0.82));
+    ctx.beginPath(); ctx.roundRect(-sz/2,-sz/2,sz,sz,sz*0.22); ctx.fill();
+    ctx.strokeStyle = lit ? rgb(darken(col, isMark ? 0.45 : 0.28))
+                          : rgb(mixWhite(col, isMark ? 0.28 : 0.5));
+    ctx.lineWidth = Math.max(0.9, sz*(isMark ? 0.19 : 0.12));
+    ctx.beginPath(); ctx.roundRect(-sz/2,-sz/2,sz,sz,sz*0.22); ctx.stroke();
     ctx.restore();
   }
 
