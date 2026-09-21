@@ -179,8 +179,9 @@ let tabBtns = [], sizeBtns = [];
 
 function drawTabsAndUI(ctx){
   drawSizeButtons(ctx);
-  drawMirror(ctx, walkTime);
   drawModeTabs(ctx);
+  // ミラーはタブの位置を使って置くので、タブを並べたあとに描く。
+  // 床のキャラに隠れないよう、実際の描画はメインループ側から呼ぶ。
 }
 
 // 上段左：キャラの大きさ S/M/L
@@ -208,9 +209,13 @@ let fxParticles = [];     // 複製したときの紙吹雪
 
 function getMirrorRect(){
   if(mode==='factor'||mode==='quiz') return null;
-  const w=34, h=40;
-  const cx=(BAR_LEFT_RESERVE + (sw - BAR_RIGHT_RESERVE))/2;
-  return { x:Math.round(cx-w/2), y:2, w:w, h:h };
+  const w=51, h=60;                       // 以前の1.5倍
+  // 「ドリル」タブの真下に置く。画面の右端ぴったりだと
+  // ブラウザの端スワイプに取られるので、少し内側で止める。
+  const lastTab = tabBtns.length ? tabBtns[tabBtns.length-1] : null;
+  const cx = lastTab ? lastTab.x + lastTab.w/2 : sw - EDGE_MARGIN - w/2;
+  const x  = Math.min(cx - w/2, sw - EDGE_MARGIN - w);
+  return { x:Math.round(Math.max(EDGE_MARGIN, x)), y:TAB_H + 6, w:w, h:h };
 }
 
 // ドラッグ中の指／マウスがミラーの上にあるか。小さいので判定は広めにとる。
@@ -1083,6 +1088,7 @@ function loop(ts){
     } else {
       applyPhysics();
       for(const b of blocks){ if(b===dragBlock) continue; b.draw(ctx,walkTime,0); }
+      drawMirror(ctx, walkTime);
       if(dragBlock){
         let bestMerge=null,bestMergeD=Infinity;
         for(const o of blocks){
