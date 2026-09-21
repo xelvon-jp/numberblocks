@@ -646,6 +646,19 @@ function drawOKGlow(ctx,block,t){
   ctx.strokeStyle=`rgba(0,200,50,${0.7+pulse*0.3})`; ctx.lineWidth=3;
   ctx.beginPath(); ctx.roundRect(block.x-3,block.y-3,block.width+6,block.height+6,6); ctx.stroke(); ctx.restore();
 }
+// 2つの数と演算子から、式と答えを出す。
+function calcPair(a,b,op){
+  if(op==='+')  return { n1:a, n2:b, ans:a+b };
+  if(op==='x')  return { n1:a, n2:b, ans:a*b };
+  const lg=Math.max(a,b), sm=Math.min(a,b);
+  if(op==='-')  return { n1:lg, n2:sm, ans:lg-sm };
+  return { n1:lg, n2:sm, ans:lg/sm };
+}
+function opsAvailableFor(a,b){
+  const A={num:a}, B={num:b};
+  return ['+','-','x','div'].filter(m=>canCalc(A,B,m));
+}
+
 function canCalc(a,b,m){
   if(m==='+')   return a.num+b.num<=100;
   if(m==='-')   return Math.abs(a.num-b.num)>=1;
@@ -675,33 +688,11 @@ class Puzzle {
     this.choices=this._genChoices(ans);
     this.eliminated=new Set();
     this.wrongFlash=0; this.wrongChoiceIdx=null; // 誤答演出
-    // 'countdown'（クイズ）｜'answer'（こたえをすぐ見せる）｜'correct'|'timeout'|'done'
-    this.phase = (mode==='quiz' || quizOn) ? 'countdown' : 'answer';
-    this.ANSWER_MS = 2200;   // 演算子ボタンに気づける程度の長さ。タップすればすぐ閉じる
+    this.phase='countdown'; // 'countdown'|'correct'|'timeout'|'done'
     // 正解演出は続けて何問も解くので、長いとテンポが悪くなる。
     // さらに、待たされないよう画面をタップすれば途中でも先へ進める。
     this.elapsed=0; this.COUNTDOWN=5000; this.CORRECT_ANIM=700;
     this.particles=[];
-  }
-
-  // 同じ2体のまま、演算子だけ切り替える。モードを変えずに
-  // ひきざん・かけざん・わりざんに触れられるようにするため。
-  _opsAvailable(){
-    const a={num:this.a}, b={num:this.b};
-    return ['+','-','x','div'].filter(m=>canCalc(a,b,m));
-  }
-  setOp(op){
-    if(op===this.calcMode) return;
-    const a=this.a, b=this.b;
-    let n1,n2,ans;
-    if(op==='+'){ n1=a; n2=b; ans=a+b; }
-    else if(op==='x'){ n1=a; n2=b; ans=a*b; }
-    else if(op==='-'){ n1=Math.max(a,b); n2=Math.min(a,b); ans=n1-n2; }
-    else { n1=Math.max(a,b); n2=Math.min(a,b); ans=n1/n2; }
-    this.calcMode=op; this.n1=n1; this.n2=n2; this.ans=ans;
-    this.char1=new NumberBlock(n1,0,0); this.char2=new NumberBlock(n2,0,0);
-    this.charRes=new NumberBlock(Math.max(1,Math.round(ans)),0,0);
-    this.elapsed=0;   // 見比べられるように表示時間を延ばす
   }
 
   _genChoices(ans){
@@ -780,8 +771,7 @@ class Puzzle {
 
   update(dt){
     this.elapsed+=dt; this.wrongFlash=Math.max(0,this.wrongFlash-dt);
-    if(this.phase==='answer'&&this.elapsed>=this.ANSWER_MS) this.phase='done';
-    else if(this.phase==='countdown'&&this.elapsed>=this.COUNTDOWN) this.phase='timeout';
+    if(this.phase==='countdown'&&this.elapsed>=this.COUNTDOWN) this.phase='timeout';
     else if(this.phase==='correct'&&this.elapsed>=this.CORRECT_ANIM) this.phase='done';
     for(const p of this.particles) p.update();
     this.particles=this.particles.filter(p=>p.life>0);
@@ -816,8 +806,6 @@ class Puzzle {
 
     if(this.phase==='correct'){
       this._drawCorrectAnim(ctx,t,px,py,pw,ph);
-    } else if(this.phase==='answer'){
-      this._drawAnswerPanel(ctx,t,px,py,pw,ph);
     } else {
       this._drawQuestion(ctx,t,px,py,pw,ph);
       this._drawCountdownBar(ctx,px,py,pw,ph);
@@ -892,44 +880,6 @@ class Puzzle {
       ctx.fillStyle='white'; ctx.font='bold 24px sans-serif';
       ctx.textAlign='center'; ctx.textBaseline='middle';
       ctx.fillText(String(this.choices[r.idx]),r.x+r.w/2,r.y+r.h/2);
-      ctx.restore();
-    }
-  }
-
-  // 演算子ボタンの位置。選択肢ボタンと同じ場所に4つ並べる。
-  _getOpRects(){
-    const {px,py,pw,ph}=this._panelRect();
-    const ops=this._opsAvailable();
-    if(!ops.length) return [];
-    const btnH=48,gap=8,totalW=pw-40,btnW=(totalW-(ops.length-1)*gap)/ops.length;
-    const y=py+ph-btnH-14;
-    return ops.map((op,i)=>({op, x:px+20+i*(btnW+gap), y:y, w:btnW, h:btnH}));
-  }
-
-  // クイズOFFのときの画面。答えをすぐ見せ、演算子を押せば別の計算になる。
-  _drawAnswerPanel(ctx,t,px,py,pw,ph){
-    ctx.save();
-    ctx.font='bold 26px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top'; ctx.fillStyle='#222';
-    ctx.fillText(`${this.n1} ${this._opStr()} ${this.n2} = ${this.ans}`, px+pw/2, py+12);
-    ctx.restore();
-
-    const cr=this.charRes, bounce=Math.sin(this.elapsed*0.008)*7;
-    const top=py+52, bottom=py+ph-78;
-    cr.x=px+(pw-cr.width)/2;
-    cr.y=Math.max(top, (top+bottom)/2 - cr.height/2);
-    cr.draw(ctx,t,bounce);
-
-    // 演算子ボタン
-    for(const r of this._getOpRects()){
-      const cur = r.op===this.calcMode;
-      ctx.save();
-      ctx.fillStyle = cur ? 'rgba(50,100,240,0.95)' : 'rgba(150,160,180,0.9)';
-      ctx.beginPath(); ctx.roundRect(r.x,r.y,r.w,r.h,10); ctx.fill();
-      if(cur){ ctx.strokeStyle='rgba(255,255,255,0.85)'; ctx.lineWidth=2;
-               ctx.beginPath(); ctx.roundRect(r.x,r.y,r.w,r.h,10); ctx.stroke(); }
-      ctx.fillStyle='white'; ctx.font='bold 26px sans-serif';
-      ctx.textAlign='center'; ctx.textBaseline='middle';
-      ctx.fillText({'+':'＋','-':'−','x':'×','div':'÷'}[r.op], r.x+r.w/2, r.y+r.h/2);
       ctx.restore();
     }
   }
@@ -1079,7 +1029,7 @@ function drawNumpad(ctx){
   let clrProg = 0;
   if(clrHold){
     clrProg = Math.min(1, (Date.now()-clrHold.t0)/CLR_HOLD_MS);
-    if(clrProg>=1){ blocks=[]; updateTargets(); clrHold=null; clrProg=0; }
+    if(clrProg>=1){ blocks=[]; opChips=null; updateTargets(); clrHold=null; clrProg=0; }
   }
   for(const b of getNumpadLayout()){
     const holding = (b.val==='CLR' && clrProg>0);
@@ -1310,13 +1260,6 @@ function handleStart(x,y,pid){
   for(const gb of toggleBtns){ if(ptInRect(x,y,gb.x,gb.y,gb.w,gb.h)){ setQuizOn(!quizOn); return; } }
   // 正解演出の途中なら、どこをタップしても次へ進む。見終わった子を待たせない。
   if(puzzle && puzzle.phase==='correct'){ puzzle.phase='done'; return; }
-  // こたえ表示中：演算子を押せば同じ2体で別の計算に。それ以外を押せば閉じる。
-  if(puzzle && puzzle.phase==='answer'){
-    for(const r of puzzle._getOpRects()){
-      if(ptInRect(x,y,r.x,r.y,r.w,r.h)){ puzzle.setOp(r.op); return; }
-    }
-    puzzle.phase='done'; return;
-  }
   if(mode==='factor'){ handleFactorTap(x,y); return; }
   if(mode==='quiz'){
     // ドリル中は選択肢のタップだけ受け付ける（キャラの操作や数字パッドは無い）
@@ -1339,6 +1282,9 @@ function handleStart(x,y,pid){
       return;
     }
   }
+  for(const r of getOpChipRects()){
+    if(ptInRect(x,y,r.x-4,r.y-4,r.w+8,r.h+8)){ applyOpChip(r.op); return; }
+  }
   for(let i=blocks.length-1;i>=0;i--){
     const b=blocks[i];
     if(blockHit(b,x,y)){
@@ -1348,6 +1294,80 @@ function handleStart(x,y,pid){
       dragBlock=b; dragPtr={x:x,y:y}; blocks.splice(i,1); blocks.push(b); return;
     }
   }
+}
+
+// クイズOFFのときの合体。本物のナンバーブロックスのように、枠も選択肢も出さず
+// その場で1体のキャラになる。演出は「生まれる」動きと光の粒だけ。
+// 直後にだけ小さな演算子ボタンを出し、押せば同じ2体で別の計算に切り替わる。
+let opChips = null;   // {a, b, op, block, until}
+const OP_CHIP_MS = 2600;
+
+function fuseBlocks(a, c){
+  const na=a.num, nc=c.num;
+  const cx=(a.cx + c.cx)/2, cy=(a.cy + c.cy)/2;
+  const { ans } = calcPair(na, nc, mode);
+  blocks = blocks.filter(bl => bl!==a && bl!==c);
+  const res = makeFused(na, nc, mode, ans, cx, cy);
+  for(let i=0;i<20;i++) fxParticles.push(new Particle(cx, cy));
+  opChips = { a:na, b:nc, op:mode, block:res, until:Date.now()+OP_CHIP_MS };
+}
+
+// 合体後のキャラを、2体がいた場所に置く
+function makeFused(na, nc, op, ans, cx, cy){
+  const res = new NumberBlock(Math.max(1,Math.round(ans)), 0, 0);
+  res.x = Math.min(Math.max(EDGE_MARGIN, cx - res.width/2), sw-EDGE_MARGIN-res.width);
+  res.y = Math.min(Math.max(TAB_H+8, cy - res.height/2), calcFloor()-res.height);
+  res.targetX = res.x; res.birth = 0;
+  blocks.push(res);
+  updateTargets();
+  return res;
+}
+
+// 合体直後に出る小さな演算子ボタン。モードを変えずに他の計算へ行けるようにする。
+function getOpChipRects(){
+  if(!opChips || Date.now()>opChips.until) return [];
+  if(!blocks.includes(opChips.block)){ opChips=null; return []; }
+  const ops = opsAvailableFor(opChips.a, opChips.b);
+  if(ops.length<2) return [];
+  const w=34, h=30, gap=5;
+  const total = ops.length*w + (ops.length-1)*gap;
+  const b = opChips.block;
+  let x = Math.min(Math.max(EDGE_MARGIN, b.x + b.width/2 - total/2), sw-EDGE_MARGIN-total);
+  const y = Math.max(TAB_H+4, b.y - h - 22);
+  return ops.map((op,i)=>({op, x:x+i*(w+gap), y:y, w:w, h:h}));
+}
+
+function drawOpChips(ctx){
+  const rects = getOpChipRects();
+  if(!rects.length) return;
+  const left = Math.max(0, opChips.until - Date.now());
+  const fade = Math.min(1, left/400);            // 消えぎわだけ薄くする
+  ctx.save();
+  ctx.globalAlpha = fade;
+  for(const r of rects){
+    const cur = r.op===opChips.op;
+    ctx.fillStyle = cur ? 'rgba(100,160,255,0.95)' : 'rgba(255,255,255,0.92)';
+    ctx.beginPath(); ctx.roundRect(r.x,r.y,r.w,r.h,8); ctx.fill();
+    ctx.strokeStyle = cur ? 'rgba(255,255,255,0.9)' : 'rgba(80,90,110,0.5)';
+    ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.roundRect(r.x,r.y,r.w,r.h,8); ctx.stroke();
+    ctx.fillStyle = cur ? 'white' : '#334';
+    ctx.font='bold 17px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText({'+':'＋','-':'−','x':'×','div':'÷'}[r.op], r.x+r.w/2, r.y+r.h/2);
+  }
+  ctx.restore();
+}
+
+// 演算子を押し直したら、同じ2体から別の答えのキャラに置き換える
+function applyOpChip(op){
+  if(!opChips) return;
+  const { a, b, block } = opChips;
+  const { ans } = calcPair(a, b, op);
+  const cx = block.x + block.width/2, cy = block.y + block.height/2;
+  blocks = blocks.filter(bl => bl!==block);
+  const res = makeFused(a, b, op, ans, cx, cy);
+  for(let i=0;i<10;i++) fxParticles.push(new Particle(cx, cy));
+  opChips = { a:a, b:b, op:op, block:res, until:Date.now()+OP_CHIP_MS };
 }
 
 // マジックミラーにキャラを入れたときの複製。元のキャラはそのまま残る。
@@ -1397,7 +1417,10 @@ function handleEnd(x,y,pid){
     const d=Math.hypot(b.cx-other.cx,b.cy-other.cy);
     if(d<80&&canCalc(b,other,mode)&&d<bestD){ bestD=d; best=other; }
   }
-  if(best){ blocks=blocks.filter(bl=>bl!==b&&bl!==best); puzzle=new Puzzle(b,best,mode); }
+  if(best){
+    if(quizOn) { blocks=blocks.filter(bl=>bl!==b&&bl!==best); puzzle=new Puzzle(b,best,mode); }
+    else       { fuseBlocks(b,best); }
+  }
   updateTargets();
 }
 
@@ -1406,7 +1429,7 @@ function setMode(newMode){
   // 計算モード（＋−×÷）どうしの行き来ならキャラを残す。因数・ドリルを跨ぐときは片付ける
   const isCalc = m => m!=='factor' && m!=='quiz';
   if(!isCalc(mode) || !isCalc(newMode)) blocks=[];
-  mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={}; clrHold=null;
+  mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={}; clrHold=null; opChips=null;
   fxParticles=[]; mirrorFlash=0; mirrorRing=0; mirrorReflect=0; mirrorReflectNum=0;
   homeFlash=0; homeOpen=0; homeNum=0; homeAfter=0; mirrorAfter=0; mirrorHandoff=0;
   factorUI.classList.toggle('visible',newMode==='factor');
@@ -1519,6 +1542,7 @@ function loop(ts){
       // 鏡の中の映り込みや扉のあかりが見えなくなってしまうため。
       drawMirror(ctx, walkTime);
       drawHome(ctx, walkTime);
+      drawOpChips(ctx);
       // マジックミラーの紙吹雪
       for(const fp of fxParticles) fp.update();
       fxParticles = fxParticles.filter(fp=>fp.life>0);
