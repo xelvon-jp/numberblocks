@@ -2065,29 +2065,32 @@ function drawCubeBack(ctx, spec, x, y, bs){
 
 /* ── 0（ゼロ）───────────────────────────────────────────────────────
    ブロックも手足も持たない、ただ一人のキャラ。黒い「0」の輪と、その下に
-   浮かぶ大きな唇だけでできている。比率は公式の見た目に合わせた。
-   (cx, top) を上端の中心として、高さ H に収まるように描く。 */
+   浮かぶ大きな唇だけでできている。比率は公式の見た目から測った。
+   bs は「1マスの一辺」＝ One の背の高さ。ゼロの輪がちょうどその高さになる。
+   口は One と同じく少し傾けて、左寄りに置く（左右対称にしない）。 */
 const ZERO_LIP = [231, 130, 112];
-function zeroWidth(H){ return H*0.63; }
+const ZERO_RING_W = 0.586, ZERO_MOUTH_W = 1.04, ZERO_MOUTH_H = 0.64, ZERO_GAP = 0.024;
+function zeroHeight(bs){ return bs*(1 + ZERO_GAP + ZERO_MOUTH_H); }
+function zeroWidth(bs){ return bs*ZERO_MOUTH_W; }
 
-function drawZero(ctx, cx, top, H, t, animate){
-  const bob = animate ? Math.sin((t||0)*0.004)*H*0.025 : 0;
-  const ringW = H*0.35, ringH = H*0.60, thick = ringW*0.30;
+function drawZero(ctx, cx, top, bs, t, animate){
+  const bob = animate ? Math.sin((t||0)*0.004)*bs*0.04 : 0;
+  const ringW = bs*ZERO_RING_W, ringH = bs, thick = ringW*0.30;
   const rx = cx - ringW/2, ry = top + bob;
 
   ctx.save();
-  setStroke(H*0.1);
-  // 「0」の輪（外と内を重ねて、even-odd で真ん中を抜く）
+  setStroke(bs);
   ctx.fillStyle = '#0d0d0d';
   ctx.beginPath();
   ctx.roundRect(rx, ry, ringW, ringH, ringW/2);
   ctx.roundRect(rx+thick, ry+thick, ringW-thick*2, ringH-thick*2, (ringW-thick*2)/2);
   ctx.fill('evenodd');
 
-  // 唇（ほかのキャラと同じ口の描画をそのまま使う）
-  const mw = H*0.63, mh = mw*0.60;
-  const mcy = ry + ringH + H*0.02 + mh/2;
-  drawMouth(ctx, cx, mcy, mw, mh, ZERO_LIP, 3, H*0.1, mw*0.16, { teethStyle:'bands' });
+  const mw = bs*ZERO_MOUTH_W, mh = bs*ZERO_MOUTH_H;
+  const mcx = cx - mw*0.05;                       // 少し左寄り（One と同じ考え方）
+  const mcy = ry + ringH + bs*ZERO_GAP + mh/2;
+  drawMouth(ctx, mcx, mcy, mw, mh, ZERO_LIP, 3, bs, mw*0.16,
+            { teethStyle:'bands', tilt:10 });     // One と同じ 10 度の傾き
   ctx.restore();
 }
 

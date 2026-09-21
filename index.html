@@ -1581,11 +1581,10 @@ function drawClockParts(ctx, t, g){
   const a = clockPartsArea(g);
   // ちょうどの時刻は「0ふん」。ブロックを持たないゼロが出てくる。
   if(min === 0){
-    const H = Math.min(126, a.bottom - a.top - 26);
-    if(H > 30){
-      drawClockFormula(ctx, '0', a.top);
-      drawZero(ctx, sw/2, a.bottom - H, H, t, true);
-    }
+    // 背の高さは One と同じ＝1マスぶん。ほかのキャラと同じ物差しで並ぶ。
+    const bs = Math.max(6, Math.min(24, a.w, (a.bottom - a.top - 26)/1.7));
+    drawClockFormula(ctx, '0', a.top);
+    drawZero(ctx, sw/2, a.bottom - zeroHeight(bs), bs, t, true);
     return;
   }
 
