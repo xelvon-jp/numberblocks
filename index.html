@@ -178,6 +178,7 @@ const BAR_RIGHT_RESERVE = 116;               // 右に空ける幅（ずかん�
 const FACTOR_H = 115;
 const QUIZ_H   = 115;
 const MAX_NUM = 1000;    // 出せる数の上限。101以上は板・棒・粒で組み立てる
+const BIG_MAX_H = 400;   // 101以上のキャラの、画面上の高さの上限
 const MAX_BLOCKS = 30;   // 同時に置けるキャラの数
 const EDGE_MARGIN = 12;  // 画面の左右に空けておく幅（ブラウザのスワイプ対策）
 
@@ -735,7 +736,8 @@ class NumberBlock {
     if(this.num > 100){
       const maxW = sw - EDGE_MARGIN*2;
       // 上は「おうち・÷2・×2・ミラー」のアイコン列より下から。重ならないように。
-      const maxH = Math.max(60, calcFloor() - (TAB_H + 74));
+      // さらに 400px で頭打ちにする。遊び場いっぱいに伸びると圧迫感があるため。
+      const maxH = Math.min(BIG_MAX_H, Math.max(60, calcFloor() - (TAB_H + 74)));
       this.bs = Math.max(1.2, Math.min(BS, maxW/this.cols, maxH/this.rows));
     }
     this.width=this.cols*this.bs; this.height=this.rows*this.bs;
