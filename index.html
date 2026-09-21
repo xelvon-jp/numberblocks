@@ -1603,32 +1603,46 @@ function setMode(newMode){
 // 「今どの版で遊んでいるか」を確かめるための小さな表示。
 // 表示しているのはサーバーが返したこのファイルの更新時刻なので、
 // 古いキャッシュのまま開いていれば古い時刻が出る。
-// 1回目のタップで「さいよみこみ」に変わり、2回目で読み直す。
-// 子どもが誤って1回触っても何も起きない。
+// すぐ上に数字パッドの「7」があり、連打すると指が触れてしまうので、
+// タップでは何も起きない。1秒押し続けたときだけ読み直す（CLRと同じ作法）。
 (function(){
   const btn = document.getElementById('ver-btn');
   if(!btn) return;
+  const HOLD_MS = 1000;
   const d = new Date(document.lastModified);
   const two = v => String(v).padStart(2,'0');
   const stamp = isNaN(d) ? '-' :
     two(d.getMonth()+1)+'/'+two(d.getDate())+' '+two(d.getHours())+':'+two(d.getMinutes());
   const idle = 'v '+stamp;
   btn.textContent = idle;
-  let armed = false, timer = null;
-  btn.addEventListener('click', e => {
-    e.preventDefault(); e.stopPropagation();
-    if(armed){
+
+  let timer = null, tick = null, t0 = 0;
+  function reset(){
+    clearTimeout(timer); clearInterval(tick); timer = tick = null;
+    btn.classList.remove('armed'); btn.textContent = idle;
+  }
+  function start(e){
+    if(timer) return;
+    t0 = Date.now();
+    // 押しているあいだだけ、進み具合を出す。指が触れただけでは何も起きない。
+    tick = setInterval(() => {
+      const p = Math.min(1, (Date.now()-t0)/HOLD_MS);
+      if(p > 0.25){ btn.classList.add('armed'); btn.textContent = '↻ ' + '・'.repeat(Math.ceil(p*3)); }
+    }, 80);
+    timer = setTimeout(() => {
+      reset();
       // キャッシュを避けるため、毎回ちがうURLで読み直す
       const base = location.href.split('?')[0].split('#')[0];
       location.replace(base + '?v=' + Date.now());
-      return;
-    }
-    armed = true; btn.classList.add('armed'); btn.textContent = '↻ さいよみこみ';
-    clearTimeout(timer);
-    timer = setTimeout(() => {
-      armed = false; btn.classList.remove('armed'); btn.textContent = idle;
-    }, 4000);
-  });
+    }, HOLD_MS);
+  }
+  btn.addEventListener('touchstart', e => { e.preventDefault(); start(e); }, {passive:false});
+  btn.addEventListener('touchend',    reset);
+  btn.addEventListener('touchcancel', reset);
+  btn.addEventListener('mousedown',   start);
+  btn.addEventListener('mouseup',     reset);
+  btn.addEventListener('mouseleave',  reset);
+  btn.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); });
 })();
 
 // ─── ブラウザのジェスチャ対策 ─────────────────────────────────────────────
