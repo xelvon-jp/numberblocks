@@ -37,10 +37,21 @@
       font-size:9px; font-family:sans-serif; letter-spacing:0.02em;
       cursor:pointer; -webkit-tap-highlight-color:transparent;
     }
-    #ver-btn.armed {
-      background:rgba(0,0,0,0.55); color:#fff; font-size:11px; font-weight:700;
-      padding:5px 10px;
+    /* 長押しの進み具合。ボタンの上に出す。ボタン自身に出すと指で隠れるため。 */
+    #ver-hint {
+      position:fixed; left:6px; z-index:31; display:none;
+      bottom:calc(80px + env(safe-area-inset-bottom, 0px));
+      padding:6px 10px 7px; border-radius:9px;
+      background:rgba(0,0,0,0.72); color:#fff;
+      font-size:11px; font-weight:700; font-family:sans-serif;
+      pointer-events:none;
     }
+    #ver-hint.show { display:block; }
+    #ver-hint .bar {
+      margin-top:5px; width:104px; height:5px; border-radius:3px;
+      background:rgba(255,255,255,0.25); overflow:hidden;
+    }
+    #ver-hint .bar i { display:block; height:100%; width:0; background:#fff; }
     /* 画面下の安全域（ホームバー）の高さを測るためだけの目印 */
     #safe-probe {
       position:fixed; left:0; bottom:0; width:0;
@@ -108,6 +119,7 @@
 <canvas id="c"></canvas>
 <div id="safe-probe"></div>
 <button id="ver-btn" type="button" title="バージョン／再読み込み"></button>
+<div id="ver-hint"><span>↻ よみこみ</span><div class="bar"><i></i></div></div>
 <a id="zukan-btn" href="zukan.html" title="ずかん・キャラメイクへ">ずかん</a>
 <button id="fs-btn" title="フルスクリーン">⛶</button>
 <div id="factor-ui">
@@ -1616,19 +1628,21 @@ function setMode(newMode){
   const idle = 'v '+stamp;
   btn.textContent = idle;
 
+  const hint = document.getElementById('ver-hint');
+  const fill = hint ? hint.querySelector('.bar i') : null;
   let timer = null, tick = null, t0 = 0;
   function reset(){
     clearTimeout(timer); clearInterval(tick); timer = tick = null;
-    btn.classList.remove('armed'); btn.textContent = idle;
+    if(hint){ hint.classList.remove('show'); if(fill) fill.style.width = '0'; }
   }
   function start(e){
     if(timer) return;
     t0 = Date.now();
-    // 押しているあいだだけ、進み具合を出す。指が触れただけでは何も起きない。
+    // 押しているあいだの進み具合は、指より上に出す。ボタンの位置だと手で隠れる。
     tick = setInterval(() => {
       const p = Math.min(1, (Date.now()-t0)/HOLD_MS);
-      if(p > 0.25){ btn.classList.add('armed'); btn.textContent = '↻ ' + '・'.repeat(Math.ceil(p*3)); }
-    }, 80);
+      if(p > 0.12 && hint){ hint.classList.add('show'); if(fill) fill.style.width = (p*100)+'%'; }
+    }, 40);
     timer = setTimeout(() => {
       reset();
       // キャッシュを避けるため、毎回ちがうURLで読み直す
