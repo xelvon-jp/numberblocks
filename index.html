@@ -1462,7 +1462,7 @@ function clockMin(){  return clockT%60; }
 
 function getClockGeom(){
   const top = TAB_H + 12, bottom = calcFloor();
-  const R = Math.max(50, Math.min((sw - EDGE_MARGIN*2)/2, (bottom - top - 96)/2));
+  const R = Math.max(50, Math.min((sw - EDGE_MARGIN*2)/2, (bottom - top - 150)/2));
   return { cx: sw/2, cy: top + R + 4, R: R, textY: top + 2*R + 34 };
 }
 
@@ -1557,14 +1557,77 @@ function drawClockMode(ctx, t){
   ctx.fillStyle='#39485e'; ctx.fillText(kanji, tx, g.textY+1);
   ctx.restore();
 
-  // 分の数をキャラで見せる（0分のときは出さない）
-  if(min > 0){
-    const spec = blockSpec(min);
-    const avail = calcFloor() - (g.textY + 18);
-    const bs = Math.max(3, Math.min(20, (sw*0.5)/spec.cols, avail/spec.rows));
-    const x = sw/2 - spec.cols*bs/2, y = calcFloor() - spec.rows*bs;
-    drawNumberblock(ctx, min, x, y, bs, { t:t, animate:false, numberling:false });
+  drawClockParts(ctx, t, g);
+}
+
+// ─── 5のなかま ───────────────────────────────────────────────────────────
+// 長針が数字を1つ通り過ぎるたびに「5」が1体ふえる。3を指していれば5が3体。
+// 下の列をタップすると合体して「15」になり、もう一度タップすると5に戻る。
+// 「3なのに15ふん」の理由が、いつもの合体あそびと同じ手つきで分かる。
+let clockMerged = false;
+let clockPopAt = 0, clockPrevGroups = 0;
+
+function clockPartsArea(g){
+  return { top: g.textY + 18, bottom: calcFloor(), w: sw - EDGE_MARGIN*2 };
+}
+
+function drawClockParts(ctx, t, g){
+  const min = clockMin();
+  const groups = Math.floor(min/5);
+  if(groups !== clockPrevGroups){
+    if(groups > clockPrevGroups) clockPopAt = Date.now();   // 増えた瞬間だけ跳ねる
+    clockPrevGroups = groups;
   }
+  if(min === 0) return;
+
+  const a = clockPartsArea(g);
+  const availH = Math.max(30, a.bottom - a.top - 20), gap = 6;
+
+  if(clockMerged){
+    const spec = blockSpec(min);
+    const bs = Math.max(3, Math.min(26, a.w/spec.cols, availH/spec.rows));
+    const x = sw/2 - spec.cols*bs/2, y = a.bottom - spec.rows*bs;
+    drawClockFormula(ctx, String(min), a.top);
+    drawNumberblock(ctx, min, x, y, bs, { t:t, animate:false, numberling:false });
+    return;
+  }
+
+  const items = [];
+  for(let i=0;i<groups;i++) items.push(5);
+  const rem = min%5; if(rem) items.push(rem);
+  let totalCols = 0, maxRows = 1;
+  for(const n of items){ const sp=blockSpec(n); totalCols+=sp.cols; if(sp.rows>maxRows) maxRows=sp.rows; }
+  const bs = Math.max(3, Math.min(24, (a.w - (items.length-1)*gap)/totalCols, availH/maxRows));
+
+  // 式（5 + 5 + 5 = 15）
+  drawClockFormula(ctx, items.join(' + ') + ' = ' + min, a.top);
+
+  // 下ぞろえで並べる。いちばん最後に増えた1体だけ「ぽんっ」と跳ねる
+  const totalW = totalCols*bs + (items.length-1)*gap;
+  let x = sw/2 - totalW/2;
+  const pop = Math.max(0, 1 - (Date.now()-clockPopAt)/260);
+  for(let i=0;i<items.length;i++){
+    const n = items[i], sp = blockSpec(n);
+    const w = sp.cols*bs, h = sp.rows*bs, y = a.bottom - h;
+    const isNew = (pop>0 && rem===0 && i===items.length-1);
+    if(isNew){
+      const e = 1-pop, sc = 0.45 + 0.55*e;
+      ctx.save();
+      ctx.translate(x+w/2, y+h); ctx.scale(sc,sc); ctx.translate(-(x+w/2), -(y+h));
+      drawNumberblock(ctx, n, x, y, bs, { t:t, animate:true, numberling:false });
+      ctx.restore();
+    } else {
+      drawNumberblock(ctx, n, x, y, bs, { t:t, animate:false, numberling:false });
+    }
+    x += w + gap;
+  }
+}
+
+function drawClockFormula(ctx, txt, y){
+  ctx.save(); ctx.font='bold 15px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+  ctx.strokeStyle='white'; ctx.lineWidth=4; ctx.lineJoin='round';
+  ctx.strokeText(txt, sw/2, y); ctx.fillStyle='#233'; ctx.fillText(txt, sw/2, y);
+  ctx.restore();
 }
 
 // 針をつかむ・動かす
@@ -1576,6 +1639,13 @@ function clockAngleFrac(x,y){
 }
 function handleClockStart(x,y){
   const g = getClockGeom();
+  // 文字盤より下＝5のなかまの場所。タップで合体／もとに戻す。
+  if(y > g.textY && clockMin() > 0){
+    clockMerged = !clockMerged;
+    const a = clockPartsArea(g);
+    for(let i=0;i<14;i++) fxParticles.push(new Particle(sw/2, a.bottom-20));
+    return;
+  }
   const d = Math.hypot(x-g.cx, y-g.cy);
   if(d > g.R*1.15) return;
   // 近いほうの針をつかむ。短針は内側、長針は外側にあるので距離でも分ける。
@@ -1801,7 +1871,7 @@ function setMode(newMode){
   // 計算モード（＋−×÷）どうしの行き来ならキャラを残す。因数・ドリルを跨ぐときは片付ける
   const isCalc = m => m!=='factor' && m!=='quiz';
   if(!isCalc(mode) || !isCalc(newMode)) blocks=[];
-  mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={}; clrHold=null; opChips=null; clockDrag=null;
+  mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={}; clrHold=null; opChips=null; clockDrag=null; clockMerged=false;
   fxParticles=[]; mirrorFlash=0; mirrorRing=0; mirrorReflect=0; mirrorReflectNum=0;
   homeFlash=0; homeOpen=0; homeNum=0; homeAfter=0; mirrorAfter=0; mirrorHandoff=0;
   for(const k in tgtFx) tgtFx[k]={open:0,after:0,flash:0,num:0};
@@ -1908,6 +1978,9 @@ function loop(ts){
   ctx.clearRect(0,0,sw,sh); drawBG(ctx); drawTabsAndUI(ctx);
   if(mode==='clock'){
     drawClockMode(ctx, walkTime);
+    for(const fp of fxParticles) fp.update();
+    fxParticles = fxParticles.filter(fp=>fp.life>0);
+    for(const fp of fxParticles) fp.draw(ctx);
   } else if(mode==='factor'){
     lerpFactorBlocks(); drawFactorMode(ctx,walkTime);
   } else if(mode==='quiz'){
