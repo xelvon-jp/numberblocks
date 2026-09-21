@@ -1537,11 +1537,25 @@ function drawClockMode(ctx, t){
   ctx.fillStyle='#2b3a52'; ctx.beginPath(); ctx.arc(g.cx,g.cy,Math.max(4,g.R*0.055),0,Math.PI*2); ctx.fill();
   ctx.restore();
 
-  // 「3じ 15ふん」
-  const label = (hr===0?12:hr) + 'じ ' + (min===0 ? 'ちょうど' : min + 'ふん');
-  ctx.save(); ctx.font='bold 24px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.strokeStyle='white'; ctx.lineWidth=5; ctx.strokeText(label, sw/2, g.textY);
-  ctx.fillStyle='#111'; ctx.fillText(label, sw/2, g.textY); ctx.restore();
+  // 「10:40 (10時40分)」。デジタル表記を大きく、読みをその横に小さく。
+  const h12 = (hr===0 ? 12 : hr);
+  const digital = h12 + ':' + String(min).padStart(2,'0');
+  const kanji   = '(' + h12 + '時' + min + '分)';
+  ctx.save(); ctx.textAlign='left'; ctx.textBaseline='middle';
+  const fBig='bold 30px sans-serif', fSmall='bold 17px sans-serif';
+  ctx.font=fBig;   const wBig   = ctx.measureText(digital).width;
+  ctx.font=fSmall; const wSmall = ctx.measureText(kanji).width;
+  const gap = 8;
+  let tx = sw/2 - (wBig + gap + wSmall)/2;
+  ctx.lineJoin='round';
+  ctx.font=fBig;
+  ctx.strokeStyle='white'; ctx.lineWidth=6; ctx.strokeText(digital, tx, g.textY);
+  ctx.fillStyle='#111'; ctx.fillText(digital, tx, g.textY);
+  tx += wBig + gap;
+  ctx.font=fSmall;
+  ctx.strokeStyle='white'; ctx.lineWidth=5; ctx.strokeText(kanji, tx, g.textY+1);
+  ctx.fillStyle='#39485e'; ctx.fillText(kanji, tx, g.textY+1);
+  ctx.restore();
 
   // 分の数をキャラで見せる（0分のときは出さない）
   if(min > 0){
