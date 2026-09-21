@@ -2063,6 +2063,27 @@ function drawCubeBack(ctx, spec, x, y, bs){
   face([[fx,fy],[fx+d,fy-lift],[fx+S+d,fy-lift],[fx+S,fy]], mixWhite(g.fillRGB,0.45));
 }
 
+/* ── 1列に積んだかたち ─────────────────────────────────────────────
+   とけいの「5のなかま」の横に並べるとき、4 だけ 2×2 で背が低く列がそろわない。
+   1〜9 を1列に積み直した設計データを返す。色や顔はいつもどおりなので、
+   7＝にじいろ、9＝3階調グレーの特例もそのまま出る。 */
+const _colSpecCache = {};
+function columnSpec(n){
+  n = Math.max(1, Math.min(9, Math.round(n)));
+  if(_colSpecCache[n]) return _colSpecCache[n];
+  const cells = [], groups = [];
+  for(let j=0;j<n;j++){                       // j は下から数えた通し番号
+    const col = oneCellColor(n, j);
+    const bor = darken(col, 0.34);
+    groups.push({ kind:'one', cellIndexes:[cells.length], fillRGB:col, borderRGB:bor });
+    cells.push({ gx:0, gy:n-1-j, group:groups.length-1,
+                 colorRGB:col, borderRGB:bor, isTen:false, isHundred:false });
+  }
+  const p = numProps(n);
+  return (_colSpecCache[n] = { n:n, cols:1, rows:n, cells:cells, groups:groups,
+                               face:faceSpec(n,p), props:p });
+}
+
 /* ── 0（ゼロ）───────────────────────────────────────────────────────
    ブロックも手足も持たない、ただ一人のキャラ。黒い「0」の輪と、その下に
    浮かぶ大きな唇だけでできている。比率は公式の見た目から測った。
