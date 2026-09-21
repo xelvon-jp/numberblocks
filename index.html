@@ -1578,9 +1578,17 @@ function drawClockParts(ctx, t, g){
     if(groups > clockPrevGroups) clockPopAt = Date.now();   // 増えた瞬間だけ跳ねる
     clockPrevGroups = groups;
   }
-  if(min === 0) return;
-
   const a = clockPartsArea(g);
+  // ちょうどの時刻は「0ふん」。ブロックを持たないゼロが出てくる。
+  if(min === 0){
+    const H = Math.min(126, a.bottom - a.top - 26);
+    if(H > 30){
+      drawClockFormula(ctx, '0', a.top);
+      drawZero(ctx, sw/2, a.bottom - H, H, t, true);
+    }
+    return;
+  }
+
   const availH = Math.max(30, a.bottom - a.top - 20), gap = 6;
 
   if(clockMerged){

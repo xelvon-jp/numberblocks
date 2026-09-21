@@ -2063,6 +2063,34 @@ function drawCubeBack(ctx, spec, x, y, bs){
   face([[fx,fy],[fx+d,fy-lift],[fx+S+d,fy-lift],[fx+S,fy]], mixWhite(g.fillRGB,0.45));
 }
 
+/* ── 0（ゼロ）───────────────────────────────────────────────────────
+   ブロックも手足も持たない、ただ一人のキャラ。黒い「0」の輪と、その下に
+   浮かぶ大きな唇だけでできている。比率は公式の見た目に合わせた。
+   (cx, top) を上端の中心として、高さ H に収まるように描く。 */
+const ZERO_LIP = [231, 130, 112];
+function zeroWidth(H){ return H*0.63; }
+
+function drawZero(ctx, cx, top, H, t, animate){
+  const bob = animate ? Math.sin((t||0)*0.004)*H*0.025 : 0;
+  const ringW = H*0.35, ringH = H*0.60, thick = ringW*0.30;
+  const rx = cx - ringW/2, ry = top + bob;
+
+  ctx.save();
+  setStroke(H*0.1);
+  // 「0」の輪（外と内を重ねて、even-odd で真ん中を抜く）
+  ctx.fillStyle = '#0d0d0d';
+  ctx.beginPath();
+  ctx.roundRect(rx, ry, ringW, ringH, ringW/2);
+  ctx.roundRect(rx+thick, ry+thick, ringW-thick*2, ringH-thick*2, (ringW-thick*2)/2);
+  ctx.fill('evenodd');
+
+  // 唇（ほかのキャラと同じ口の描画をそのまま使う）
+  const mw = H*0.63, mh = mw*0.60;
+  const mcy = ry + ringH + H*0.02 + mh/2;
+  drawMouth(ctx, cx, mcy, mw, mh, ZERO_LIP, 3, H*0.1, mw*0.16, { teethStyle:'bands' });
+  ctx.restore();
+}
+
 /**
  * ナンバーブロックを描く。
  * (x,y) はブロック本体の左上。blockSize は1マスの一辺。
