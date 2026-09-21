@@ -100,12 +100,25 @@ window.addEventListener('resize', resize);
 resize();
 
 // ─── Constants / size ────────────────────────────────────────────────────────
-const BS_MAP = { S:20, M:40, L:60 };
+// スマホは画面が狭いので、キャラを一回り小さくする（スマホの L ＝ PCの M 相当）。
+// 端末の画面サイズで判定するので、ウィンドウを縮めただけのPCは対象外。
+const SCR_MIN = Math.min(
+  (window.screen && window.screen.width)  || window.innerWidth,
+  (window.screen && window.screen.height) || window.innerHeight
+);
+const IS_PHONE = SCR_MIN < 500;
+const BS_MAP = IS_PHONE ? { S:14, M:26, L:40 } : { S:20, M:40, L:60 };
 let bsKey = 'M';
 let BS = BS_MAP[bsKey];
 const GRAVITY  = 0.4;
 const GH       = 50;
-const TAB_H    = 38;
+// 上部バーは2段。上段＝S/M/L・マジックミラー・（HTML側の）ずかん/全画面、
+// 下段＝モードタブ。1段に詰めると幅が足りず重なるので段を分けている。
+const TAB_ROW_H = 36;                        // モードタブ1行ぶんの高さ
+const TOP_ROW_H = 44;                        // S/M/L とマジックミラーの行
+const TAB_H     = TOP_ROW_H + TAB_ROW_H;     // 上部バー全体の高さ
+const BAR_LEFT_RESERVE  = 92;                // 左に空ける幅（S/M/Lボタン）
+const BAR_RIGHT_RESERVE = 116;               // 右に空ける幅（ずかん・全画面ボタン）
 const FACTOR_H = 115;
 const QUIZ_H   = 115;
 const MAX_BLOCKS = 30;   // 同時に置けるキャラの数
@@ -130,38 +143,147 @@ const TAB_DEFS = [
 let tabBtns = [], sizeBtns = [];
 
 function drawTabsAndUI(ctx){
-  const n = TAB_DEFS.length;
-  const tabW = Math.min(Math.floor((sw - 96) / n), 82);
-  const totalTabW = n * tabW;
-  const tabSX = Math.max(0, (sw - 96 - totalTabW) / 2);
-  tabBtns = [];
-  for(let i=0;i<n;i++){
-    const td=TAB_DEFS[i], tx=tabSX+i*tabW, active=td.val===mode;
-    ctx.save();
-    ctx.fillStyle = active?'rgba(100,160,255,0.95)':'rgba(50,50,50,0.80)';
-    ctx.beginPath(); ctx.roundRect(tx+2,2,tabW-4,TAB_H-4,8); ctx.fill();
-    if(active){ ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=1.5; ctx.beginPath(); ctx.roundRect(tx+2,2,tabW-4,TAB_H-4,8); ctx.stroke(); }
-    ctx.fillStyle=active?'white':'#ccc';
-    ctx.font='bold '+(td.label.length>1?'13':'16')+'px sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(td.label,tx+tabW/2,2+(TAB_H-4)/2);
-    ctx.restore();
-    tabBtns.push({x:tx+2,y:2,w:tabW-4,h:TAB_H-4,val:td.val});
-  }
-  // S/M/L buttons
-  const szW=26, szH=TAB_H-8;
+  drawSizeButtons(ctx);
+  drawMirror(ctx, walkTime);
+  drawModeTabs(ctx);
+}
+
+// 上段左：キャラの大きさ S/M/L
+function drawSizeButtons(ctx){
+  const szW=28, szH=30, szY=Math.round((TOP_ROW_H-szH)/2);
   sizeBtns = [];
   ['S','M','L'].forEach((k,i)=>{
-    const bx=2+i*(szW+2), by=4, active=bsKey===k;
+    const bx=4+i*(szW+2), by=szY, active=bsKey===k;
     ctx.save();
     ctx.fillStyle=active?'rgba(255,180,0,0.95)':'rgba(50,50,50,0.8)';
-    ctx.beginPath(); ctx.roundRect(bx,by,szW,szH,5); ctx.fill();
-    ctx.fillStyle=active?'#333':'#aaa'; ctx.font='bold 12px sans-serif';
+    ctx.beginPath(); ctx.roundRect(bx,by,szW,szH,6); ctx.fill();
+    ctx.fillStyle=active?'#333':'#aaa'; ctx.font='bold 13px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(k,bx+szW/2,by+szH/2);
     ctx.restore();
     sizeBtns.push({x:bx,y:by,w:szW,h:szH,val:k});
   });
+}
+
+// ─── マジックミラー ───────────────────────────────────────────────────────────
+// 上段の中央に置く。ここへキャラをドラッグして離すと、そのキャラが複製される。
+// 因数モード・ドリルモードではキャラを自由に動かさないので出さない。
+let mirrorFlash = 0;      // 複製した瞬間の光り（1→0へ減衰）
+let fxParticles = [];     // 複製したときの紙吹雪
+
+function getMirrorRect(){
+  if(mode==='factor'||mode==='quiz') return null;
+  const w=34, h=40;
+  const cx=(BAR_LEFT_RESERVE + (sw - BAR_RIGHT_RESERVE))/2;
+  return { x:Math.round(cx-w/2), y:2, w:w, h:h };
+}
+
+// ドラッグ中の指／マウスがミラーの上にあるか。小さいので判定は広めにとる。
+function isOverMirror(x,y){
+  const m=getMirrorRect(); if(!m) return false;
+  return ptInRect(x, y, m.x-24, m.y-12, m.w+48, m.h+34);
+}
+
+// 上がアーチ型の鏡のかたち
+function mirrorPath(ctx,x,y,w,h){
+  const rad=w/2, r=5;
+  ctx.beginPath();
+  ctx.moveTo(x, y+h-r);
+  ctx.lineTo(x, y+rad);
+  ctx.arc(x+rad, y+rad, rad, Math.PI, 0);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.closePath();
+}
+
+function drawMirror(ctx, t){
+  const m=getMirrorRect(); if(!m) return;
+  if(mirrorFlash>0) mirrorFlash=Math.max(0, mirrorFlash-0.035);
+  const hover = !!(dragBlock && dragPtr && isOverMirror(dragPtr.x, dragPtr.y));
+  const pulse = Math.sin(t*0.004)*0.5+0.5;
+  const glow  = Math.max(mirrorFlash, hover?1:0);
+
+  ctx.save();
+  // ドラッグ中はここが落とし場所だと分かるように光らせる
+  if(glow>0){
+    ctx.shadowColor='rgba(150,220,255,'+(0.55+glow*0.45)+')';
+    ctx.shadowBlur=14+glow*16;
+  }
+  // 鏡面（虹色のグラデーション）
+  const g=ctx.createLinearGradient(m.x, m.y, m.x+m.w, m.y+m.h);
+  g.addColorStop(0.00,'#bcd8ff');
+  g.addColorStop(0.35,'#c3b2f2');
+  g.addColorStop(0.62,'#a9ead9');
+  g.addColorStop(1.00,'#f7c9e9');
+  ctx.fillStyle=g;
+  mirrorPath(ctx,m.x,m.y,m.w,m.h); ctx.fill();
+  ctx.shadowBlur=0;
+
+  // 内側の明るい面
+  const gi=ctx.createLinearGradient(m.x, m.y+m.h, m.x+m.w, m.y);
+  gi.addColorStop(0,'rgba(255,255,255,0.75)');
+  gi.addColorStop(0.5,'rgba(255,255,255,0.25)');
+  gi.addColorStop(1,'rgba(255,255,255,0.70)');
+  ctx.fillStyle=gi;
+  mirrorPath(ctx,m.x+4,m.y+4,m.w-8,m.h-7); ctx.fill();
+
+  // 斜めのハイライト（鏡らしさ）
+  ctx.save();
+  mirrorPath(ctx,m.x+4,m.y+4,m.w-8,m.h-7); ctx.clip();
+  ctx.fillStyle='rgba(255,255,255,'+(0.35+pulse*0.3)+')';
+  ctx.beginPath();
+  ctx.moveTo(m.x-4, m.y+m.h*0.72); ctx.lineTo(m.x+m.w*0.55, m.y-6);
+  ctx.lineTo(m.x+m.w*0.80, m.y-6); ctx.lineTo(m.x+m.w*0.20, m.y+m.h+6);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  // 虹色のふち
+  const gb=ctx.createLinearGradient(m.x, m.y+m.h, m.x+m.w, m.y);
+  gb.addColorStop(0,'#7fd8f0'); gb.addColorStop(0.5,'#b39ef0'); gb.addColorStop(1,'#7ff0c8');
+  ctx.strokeStyle=gb; ctx.lineWidth=2.5;
+  mirrorPath(ctx,m.x,m.y,m.w,m.h); ctx.stroke();
+
+  // 上のバッジ（おうちマーク）
+  const bx=m.x+m.w/2, by=m.y+m.w/2-2, br=m.w*0.26;
+  ctx.fillStyle='#e9f3ff'; ctx.strokeStyle='#8fb8e8'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(bx,by,br,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  const hw=br*0.95, hh=br*0.80;
+  ctx.fillStyle='#5ec8b8';
+  ctx.beginPath();                                   // 屋根
+  ctx.moveTo(bx, by-hh*0.72);
+  ctx.lineTo(bx+hw*0.72, by-hh*0.06);
+  ctx.lineTo(bx-hw*0.72, by-hh*0.06);
+  ctx.closePath(); ctx.fill();
+  ctx.fillRect(bx-hw*0.42, by-hh*0.06, hw*0.84, hh*0.66);   // 壁
+
+  ctx.restore();
+}
+
+// 下段：モードタブ（＋ − × ÷ 因数 ドリル）。画面幅いっぱいに等分する
+function drawModeTabs(ctx){
+  const n = TAB_DEFS.length;
+  const pad = 3;
+  const tabW = (sw - pad*2) / n;
+  tabBtns = [];
+  for(let i=0;i<n;i++){
+    const td=TAB_DEFS[i];
+    const tx=pad+i*tabW, ty=TOP_ROW_H, active=td.val===mode;
+    ctx.save();
+    ctx.fillStyle = active?'rgba(100,160,255,0.95)':'rgba(50,50,50,0.80)';
+    ctx.beginPath(); ctx.roundRect(tx+2,ty+2,tabW-4,TAB_ROW_H-4,8); ctx.fill();
+    if(active){
+      ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.roundRect(tx+2,ty+2,tabW-4,TAB_ROW_H-4,8); ctx.stroke();
+    }
+    ctx.fillStyle=active?'white':'#ccc';
+    ctx.font='bold '+(td.label.length>1?'13':'17')+'px sans-serif';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(td.label,tx+tabW/2,ty+TAB_ROW_H/2);
+    ctx.restore();
+    tabBtns.push({x:tx+2,y:ty+2,w:tabW-4,h:TAB_ROW_H-4,val:td.val});
+  }
 }
 
 // ─── NumberBlock ──────────────────────────────────────────────────────────────
@@ -457,6 +579,7 @@ class Puzzle {
 
 // ─── Game state ───────────────────────────────────────────────────────────────
 let blocks=[], puzzle=null, dragBlock=null, dragPointers={};
+let dragPtr=null;   // ドラッグ中の指／マウスの位置（マジックミラーの判定用）
 let lastTapBlock=null, lastTapTime=0, walkTime=0;
 
 function applyPhysics(){
@@ -793,19 +916,40 @@ function handleStart(x,y,pid){
       if(b===lastTapBlock&&now-lastTapTime<400){ blocks.splice(i,1); lastTapBlock=null; updateTargets(); return; }
       lastTapBlock=b; lastTapTime=now;
       dragPointers[pid]={x,y,offX:x-b.x,offY:y-b.y,block:b};
-      dragBlock=b; blocks.splice(i,1); blocks.push(b); return;
+      dragBlock=b; dragPtr={x:x,y:y}; blocks.splice(i,1); blocks.push(b); return;
     }
   }
+}
+
+// マジックミラーにキャラを入れたときの複製。元のキャラはそのまま残る。
+function duplicateAtMirror(b){
+  const m=getMirrorRect();
+  // ミラーまで勢いよく運んでくるので、そのままだと元のキャラが上へ飛んでいく。
+  // 速度を消して、ミラーの真下から落としなおす。
+  if(m){ b.vx=0; b.vy=0; b.y=Math.max(b.y, m.y+m.h+4); }
+  if(m && blocks.length < MAX_BLOCKS){
+    const copy=new NumberBlock(b.num, m.x+m.w/2, m.y+m.h+4);
+    copy.x = m.x + m.w/2 - copy.width/2;
+    copy.vx = 0; copy.vy = 1;
+    blocks.push(copy);
+    mirrorFlash = 1;
+    const px=m.x+m.w/2, py=m.y+m.h;
+    for(let i=0;i<22;i++) fxParticles.push(new Particle(px,py));
+  }
+  updateTargets();
 }
 
 function handleMove(x,y,pid){
   const ptr=dragPointers[pid]; if(!ptr) return;
   const b=ptr.block; b.vx=x-ptr.x; b.vy=y-ptr.y; b.x=x-ptr.offX; b.y=y-ptr.offY; ptr.x=x; ptr.y=y;
+  if(b===dragBlock) dragPtr={x:x,y:y};
 }
 
 function handleEnd(x,y,pid){
-  const ptr=dragPointers[pid]; if(!ptr){ dragBlock=null; return; }
-  const b=ptr.block; delete dragPointers[pid]; dragBlock=null;
+  const ptr=dragPointers[pid]; if(!ptr){ dragBlock=null; dragPtr=null; return; }
+  const b=ptr.block; delete dragPointers[pid]; dragBlock=null; dragPtr=null;
+  // マジックミラーの上で離した → そのキャラを複製する（合体はしない）
+  if(isOverMirror(x,y)){ duplicateAtMirror(b); return; }
   let best=null,bestD=Infinity;
   for(const other of blocks){
     if(other===b) continue;
@@ -821,7 +965,8 @@ function setMode(newMode){
   // 計算モード（＋−×÷）どうしの行き来ならキャラを残す。因数・ドリルを跨ぐときは片付ける
   const isCalc = m => m!=='factor' && m!=='quiz';
   if(!isCalc(mode) || !isCalc(newMode)) blocks=[];
-  mode=newMode; puzzle=null; dragBlock=null; dragPointers={};
+  mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={};
+  fxParticles=[]; mirrorFlash=0;
   factorUI.classList.toggle('visible',newMode==='factor');
   quizUI.classList.toggle('visible',newMode==='quiz');
   if(newMode==='factor'){ buildFactorRows(factorVal); updateFactorTargets(); factorReveal={}; }
@@ -887,6 +1032,10 @@ function loop(ts){
         }
         dragBlock.draw(ctx,walkTime,0);
       }
+      // マジックミラーの紙吹雪
+      for(const fp of fxParticles) fp.update();
+      fxParticles = fxParticles.filter(fp=>fp.life>0);
+      for(const fp of fxParticles) fp.draw(ctx);
       drawFormula(ctx);
       drawNumpad(ctx);
       drawKeyInput(ctx, dt);
