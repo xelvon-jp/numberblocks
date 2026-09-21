@@ -191,9 +191,11 @@ function drawSizeButtons(ctx){
   ['S','M','L'].forEach((k,i)=>{
     const bx=4+i*(szW+2), by=szY, active=bsKey===k;
     ctx.save();
-    ctx.fillStyle=active?'rgba(255,180,0,0.95)':'rgba(50,50,50,0.8)';
+    ctx.fillStyle=active?'rgba(255,180,0,0.95)':'rgba(82,92,110,0.95)';
     ctx.beginPath(); ctx.roundRect(bx,by,szW,szH,6); ctx.fill();
-    ctx.fillStyle=active?'#333':'#aaa'; ctx.font='bold 13px sans-serif';
+    ctx.strokeStyle=active?'rgba(255,255,255,0.75)':'rgba(255,255,255,0.35)';
+    ctx.lineWidth=1.5; ctx.beginPath(); ctx.roundRect(bx,by,szW,szH,6); ctx.stroke();
+    ctx.fillStyle=active?'#333':'#eef2f8'; ctx.font='bold 13px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(k,bx+szW/2,by+szH/2);
     ctx.restore();
@@ -224,7 +226,10 @@ function getMirrorRect(){
 // ドラッグ中の指／マウスがミラーの上にあるか。小さいので判定は広めにとる。
 function isOverMirror(x,y){
   const m=getMirrorRect(); if(!m) return false;
-  return ptInRect(x, y, m.x-24, m.y-12, m.w+48, m.h+34);
+  // 反応したあとは判定を広げる。拡大した鏡の端に指が行っても
+  // 「入った・出た」を繰り返してちらつかないようにするため。
+  const grow = mirrorReflect>0.5 ? 26 : 0;
+  return ptInRect(x, y, m.x-24-grow, m.y-12-grow, m.w+48+grow*2, m.h+34+grow*2);
 }
 
 // 上がアーチ型の鏡のかたち
@@ -308,11 +313,16 @@ function drawMirror(ctx, t){
   // 「何が起きるか」は鏡の中の映り込みが伝えるので、こちらは
   // 「今が離すタイミング」だけを伝える役に徹する。
   const beat  = 0.5+0.5*Math.sin(t*0.013);
-  const swell = 1 + 0.09*mirrorReflect*beat + 0.13*mirrorFlash;
+  const swell = 1 + mirrorReflect*(0.92 + 0.10*beat) + 0.13*mirrorFlash;
   if(swell !== 1){
-    ctx.translate(m.x+m.w/2, m.y+m.h/2);
+    // 大きくすると画面からはみ出すので、中心を内側へずらしながら広げる
+    const cx0=m.x+m.w/2, cy0=m.y+m.h/2;
+    const hw=m.w*swell/2, hh=m.h*swell/2;
+    const cx=Math.min(Math.max(cx0, EDGE_MARGIN+hw), sw-EDGE_MARGIN-hw);
+    const cy=Math.max(cy0, TAB_H+6+hh);
+    ctx.translate(cx, cy);
     ctx.scale(swell, swell);
-    ctx.translate(-(m.x+m.w/2), -(m.y+m.h/2));
+    ctx.translate(-cx0, -cy0);
   }
   if(glow>0){
     ctx.shadowColor='rgba(150,220,255,'+(0.55+glow*0.45)+')';
@@ -389,13 +399,13 @@ function drawModeTabs(ctx){
     const td=TAB_DEFS[i];
     const tx=pad+i*tabW, ty=TOP_ROW_H, active=td.val===mode;
     ctx.save();
-    ctx.fillStyle = active?'rgba(100,160,255,0.95)':'rgba(50,50,50,0.80)';
+    // 選んでいないタブが「押せない」ように見えないよう、はっきり明るくする
+    ctx.fillStyle = active?'rgba(100,160,255,0.95)':'rgba(82,92,110,0.95)';
     ctx.beginPath(); ctx.roundRect(tx+2,ty+2,tabW-4,TAB_ROW_H-4,8); ctx.fill();
-    if(active){
-      ctx.strokeStyle='rgba(255,255,255,0.7)'; ctx.lineWidth=1.5;
-      ctx.beginPath(); ctx.roundRect(tx+2,ty+2,tabW-4,TAB_ROW_H-4,8); ctx.stroke();
-    }
-    ctx.fillStyle=active?'white':'#ccc';
+    ctx.strokeStyle = active?'rgba(255,255,255,0.75)':'rgba(255,255,255,0.35)';
+    ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.roundRect(tx+2,ty+2,tabW-4,TAB_ROW_H-4,8); ctx.stroke();
+    ctx.fillStyle=active?'white':'#eef2f8';
     ctx.font='bold '+(td.label.length>1?'13':'17')+'px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(td.label,tx+tabW/2,ty+TAB_ROW_H/2);
@@ -414,6 +424,7 @@ class NumberBlock {
     this.id=blockIdCounter++; this.num=Math.max(1,Math.min(100,num));
     this.x=x; this.y=y; this.vx=0; this.vy=0; this.onGround=false; this.targetX=x;
     this.birth=1;   // 1 なら通常。0 から始めるとミラーから生まれる演出が付く
+    this.launch=0;  // >0 のあいだは整列を無視して飛ぶ（ミラーからの射出）
     this._computeShape();
   }
   _computeShape(){
@@ -617,7 +628,9 @@ class Puzzle {
 
   draw(ctx,t){
     const {px,py,pw,ph}=this._panelRect();
-    ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fillRect(0,0,sw,sh);
+    // 暗幕は上部バーより下だけに掛ける。画面全体に掛けるとモードタブまで
+    // 暗くなり、他のモードに切り替えられないように見えてしまう。
+    ctx.fillStyle='rgba(0,0,0,0.72)'; ctx.fillRect(0,TAB_H,sw,sh-TAB_H);
     const grad=ctx.createLinearGradient(px,py,px+pw,py+ph);
     grad.addColorStop(0,'#f80'); grad.addColorStop(0.5,'#e00'); grad.addColorStop(1,'#80f');
     ctx.save(); ctx.beginPath(); ctx.roundRect(px-3,py-3,pw+6,ph+6,20); ctx.fillStyle=grad; ctx.fill(); ctx.restore();
@@ -721,15 +734,20 @@ let lastTapBlock=null, lastTapTime=0, walkTime=0;
 function applyPhysics(){
   for(const b of blocks){
     if(b===dragBlock) continue;
-    const dx=b.targetX-b.x;
-    if(Math.abs(dx)>1){ b.vx=dx>0?2:-2; } else { b.vx=0; b.x=b.targetX; }
+    if(b.launch>0){
+      // ミラーから射出された直後。整列に引き戻さず、そのまま飛ばす
+      b.launch--; b.vx*=0.97;
+    } else {
+      const dx=b.targetX-b.x;
+      if(Math.abs(dx)>1){ b.vx=dx>0?2:-2; } else { b.vx=0; b.x=b.targetX; }
+    }
     b.vy+=GRAVITY; b.x+=b.vx; b.y+=b.vy;
     const fl=calcFloor()-b.height;
     if(b.y>=fl){ b.y=fl; b.vy=0; b.onGround=true; } else b.onGround=false;
     // 画面の左右ギリギリに立たせると、つかもうとした指が
     // Safari の「端からスワイプで戻る」に取られてしまう。少し内側で止める。
-    if(b.x<EDGE_MARGIN) b.x=EDGE_MARGIN;
-    if(b.x+b.width>sw-EDGE_MARGIN) b.x=sw-EDGE_MARGIN-b.width;
+    if(b.x<EDGE_MARGIN){ b.x=EDGE_MARGIN; if(b.launch>0){ b.vx=0; b.launch=0; } }
+    if(b.x+b.width>sw-EDGE_MARGIN){ b.x=sw-EDGE_MARGIN-b.width; if(b.launch>0){ b.vx=0; b.launch=0; } }
   }
 }
 
@@ -782,10 +800,34 @@ function drawFormula(ctx){
   else if(mode==='x'&&nums.length===2) formula=`${nums[0]} × ${nums[1]} = ${nums[0]*nums[1]}`;
   else if(mode==='div'&&nums.length===2){ const big=Math.max(...nums),sm=Math.min(...nums); if(sm>=1&&big%sm===0) formula=`${big} ÷ ${sm} = ${big/sm}`; }
   if(!formula) formula=nums.join(', ');
-  const ty=TAB_H+16;
-  ctx.save(); ctx.font='bold 16px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.strokeStyle='white'; ctx.lineWidth=4; ctx.strokeText(formula,sw/2,ty);
-  ctx.fillStyle='#111'; ctx.fillText(formula,sw/2,ty); ctx.restore();
+  ctx.save();
+  ctx.font='bold 16px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  const maxW = sw - 24;
+  const lines = wrapText(ctx, formula, maxW);
+  const lh = 20;
+  let ty = TAB_H + 16;
+  for(const line of lines){
+    ctx.strokeStyle='white'; ctx.lineWidth=4; ctx.strokeText(line, sw/2, ty);
+    ctx.fillStyle='#111'; ctx.fillText(line, sw/2, ty);
+    ty += lh;
+  }
+  ctx.restore();
+}
+
+// 数式が画面幅に収まらないときは、区切り（空白）で折り返す。
+// 「7 +」で行が終わらないよう、演算子は次の行の先頭に送らず行末に残す。
+function wrapText(ctx, text, maxW){
+  if(ctx.measureText(text).width <= maxW) return [text];
+  const parts = text.split(' ');
+  const lines = [];
+  let cur = '';
+  for(const part of parts){
+    const next = cur ? cur+' '+part : part;
+    if(cur && ctx.measureText(next).width > maxW){ lines.push(cur); cur = part; }
+    else cur = next;
+  }
+  if(cur) lines.push(cur);
+  return lines;
 }
 
 // ─── Numpad ───────────────────────────────────────────────────────────────────
@@ -1068,7 +1110,10 @@ function duplicateAtMirror(b){
   if(m && blocks.length < MAX_BLOCKS){
     const copy=new NumberBlock(b.num, m.x+m.w/2, m.y+m.h+4);
     copy.x = m.x + m.w/2 - copy.width/2;
-    copy.vx = 0; copy.vy = 1;
+    // 元のキャラは真下に落ちるので、複製は左斜め下へ飛ばす。
+    // 2体が別々の方向に分かれるので「増えた」ことがはっきり分かる。
+    copy.vx = -7; copy.vy = -1.5;
+    copy.launch = 48;        // このあいだは整列に引っぱられず自由に飛ぶ
     copy.birth = 0;          // 鏡から「ぽんっ」と出てくる
     blocks.push(copy);
     mirrorFlash = 1; mirrorRing = 1;
