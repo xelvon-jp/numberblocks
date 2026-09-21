@@ -2,12 +2,36 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <!-- ホーム画面に追加して起動すると全画面（スタンドアロン）になり、
+       Safari の「引っぱって更新」「左端スワイプで戻る」が無くなる。
+       キャラのドラッグがブラウザの操作と取り合いにならないので、これが一番効く。 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="ナンバーブロックス">
   <title>Number Blocks</title>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
-    body { background:#000; overflow:hidden; touch-action:none; }
-    canvas { display:block; }
+    html, body {
+      width:100%; height:100%;
+      background:#000; overflow:hidden;
+      overscroll-behavior:none;          /* 引っぱって更新・端のバウンドを止める */
+      touch-action:none;                 /* ピンチ／ダブルタップ拡大を止める */
+      -webkit-user-select:none; user-select:none;
+      -webkit-touch-callout:none;        /* 長押しの「画像を保存」メニューを止める */
+      -webkit-tap-highlight-color:transparent;
+    }
+    body { position:fixed; top:0; left:0; }
+    canvas {
+      display:block; touch-action:none;
+      -webkit-touch-callout:none; -webkit-user-select:none; user-select:none;
+    }
+    /* 画面下の安全域（ホームバー）の高さを測るためだけの目印 */
+    #safe-probe {
+      position:fixed; left:0; bottom:0; width:0;
+      height:env(safe-area-inset-bottom, 0px); pointer-events:none;
+    }
     #fs-btn {
       position:fixed; top:6px; right:6px; z-index:20;
       width:36px; height:36px; border-radius:8px;
@@ -29,10 +53,12 @@
     #zukan-btn:hover { background:rgba(60,60,60,0.75); }
     #factor-ui {
       display:none; position:fixed;
-      bottom:0; left:0; right:0; height:115px;
+      bottom:0; left:0; right:0;
+      height:calc(115px + env(safe-area-inset-bottom, 0px));
       background:rgba(0,0,0,0.18); z-index:10;
       padding:10px 16px 12px; flex-direction:column;
       align-items:center; gap:6px;
+      padding-bottom:calc(12px + env(safe-area-inset-bottom, 0px));
     }
     #factor-ui.visible { display:flex; }
     #factor-num { font-size:28px; font-weight:bold; color:white; line-height:1; }
@@ -40,10 +66,12 @@
     /* ドリル（四則計算をひたすら解く）モードの設定パネル */
     #quiz-ui {
       display:none; position:fixed;
-      bottom:0; left:0; right:0; height:115px;
+      bottom:0; left:0; right:0;
+      height:calc(115px + env(safe-area-inset-bottom, 0px));
       background:rgba(0,0,0,0.18); z-index:10;
       padding:10px 16px 12px; flex-direction:column;
       align-items:center; gap:8px;
+      padding-bottom:calc(12px + env(safe-area-inset-bottom, 0px));
     }
     #quiz-ui.visible { display:flex; }
     .quizRow { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:center; }
@@ -64,6 +92,7 @@
 </head>
 <body>
 <canvas id="c"></canvas>
+<div id="safe-probe"></div>
 <a id="zukan-btn" href="zukan.html" title="ずかん・キャラメイクへ">ずかん</a>
 <button id="fs-btn" title="フルスクリーン">⛶</button>
 <div id="factor-ui">
@@ -122,11 +151,17 @@ const BAR_RIGHT_RESERVE = 116;               // 右に空ける幅（ずかん�
 const FACTOR_H = 115;
 const QUIZ_H   = 115;
 const MAX_BLOCKS = 30;   // 同時に置けるキャラの数
+const EDGE_MARGIN = 12;  // 画面の左右に空けておく幅（ブラウザのスワイプ対策）
 
 function isLandscape(){ return sw > sh * 1.2; }
-function getPadH(){ return isLandscape() ? 56 : 110; }
+// 画面下のホームバーにボタンが隠れないよう、安全域ぶんを足しておく
+const safeProbe = document.getElementById('safe-probe');
+function safeBottom(){
+  return safeProbe ? Math.round(safeProbe.getBoundingClientRect().height) : 0;
+}
+function getPadH(){ return (isLandscape() ? 56 : 110) + safeBottom(); }
 // 画面下に出るパネルの高さ（モードで変わる）
-function bottomPanelH(){ return mode==='factor' ? FACTOR_H : mode==='quiz' ? QUIZ_H : getPadH(); }
+function bottomPanelH(){ return mode==='factor' ? FACTOR_H+safeBottom() : mode==='quiz' ? QUIZ_H+safeBottom() : getPadH(); }
 function calcFloor(){ return sh - GH - bottomPanelH() - 12; }
 
 // ─── Colors ───────────────────────────────────────────────────────────────────
@@ -590,8 +625,10 @@ function applyPhysics(){
     b.vy+=GRAVITY; b.x+=b.vx; b.y+=b.vy;
     const fl=calcFloor()-b.height;
     if(b.y>=fl){ b.y=fl; b.vy=0; b.onGround=true; } else b.onGround=false;
-    if(b.x<0) b.x=0;
-    if(b.x+b.width>sw) b.x=sw-b.width;
+    // 画面の左右ギリギリに立たせると、つかもうとした指が
+    // Safari の「端からスワイプで戻る」に取られてしまう。少し内側で止める。
+    if(b.x<EDGE_MARGIN) b.x=EDGE_MARGIN;
+    if(b.x+b.width>sw-EDGE_MARGIN) b.x=sw-EDGE_MARGIN-b.width;
   }
 }
 
@@ -601,7 +638,7 @@ function updateTargets(){
   // 数が増えると1列に収まらなくなるので、間隔を詰めて画面内に入れる。
   // それでも足りないときは少しだけ重ねる（小さい数から順に並ぶので、
   // 重なっても手前の大きい数が隠れてしまうことはない）。
-  const margin = 14;
+  const margin = 14 + EDGE_MARGIN;
   const blocksW = sorted.reduce((s,b)=>s+b.width,0);
   const avail   = sw - margin*2;
   if(sorted.length === 1){ sorted[0].targetX = Math.max(margin, (sw-blocksW)/2); return; }
@@ -697,7 +734,7 @@ function buildFactorRows(n){
   BS=1;
   const rowCounts=divisors.map(d=>{ const tmp=new NumberBlock(d,0,0); return tmp.rows; });
   BS=savedBS;
-  const avail=sh-TAB_H-FACTOR_H-8;
+  const avail=sh-TAB_H-FACTOR_H-safeBottom()-8;
   const totalBlockRows=rowCounts.reduce((s,r)=>s+r,0);
   // factorBS × totalBlockRows + 12 × numRows ≤ avail
   factorBS=Math.max(4,Math.min(BS,Math.floor((avail-12*divisors.length)/Math.max(1,totalBlockRows))));
@@ -975,9 +1012,40 @@ function setMode(newMode){
 }
 
 // ─── Touch / Mouse ────────────────────────────────────────────────────────────
+// ─── ブラウザのジェスチャ対策 ─────────────────────────────────────────────
+// Safari はピンチ・ダブルタップ拡大・長押しメニュー・引っぱって更新を
+// 勝手に拾ってしまう。キャラのドラッグと取り合いになるので明示的に止める。
+['gesturestart','gesturechange','gestureend'].forEach(ev=>{
+  document.addEventListener(ev, e=>e.preventDefault(), {passive:false});
+});
+document.addEventListener('contextmenu', e=>e.preventDefault());          // 長押しメニュー
+document.addEventListener('dblclick',   e=>e.preventDefault(), {passive:false}); // ダブルタップ拡大
+document.addEventListener('touchmove', e=>{
+  // スライダー（因数・ドリルのつまみ）だけはブラウザに操作させる
+  if(e.target && e.target.closest && e.target.closest('input,button,a')) return;
+  if(e.cancelable) e.preventDefault();
+}, {passive:false});
+
+// OS やブラウザに指を横取りされたとき（コントロールセンター、端スワイプ、着信など）は
+// touchcancel が飛んでくる。ここで後始末しないとキャラが指に貼りついたままになる。
+function cancelDrag(pid){
+  const ptr=dragPointers[pid]; if(!ptr) return;
+  delete dragPointers[pid];
+  ptr.block.vx=0; ptr.block.vy=0;
+  if(ptr.block===dragBlock){ dragBlock=null; dragPtr=null; }
+  updateTargets();
+}
+function cancelAllDrags(){
+  for(const pid in dragPointers) cancelDrag(pid);
+  dragBlock=null; dragPtr=null; mouseDown=false;
+}
+document.addEventListener('visibilitychange', ()=>{ if(document.hidden) cancelAllDrags(); });
+window.addEventListener('blur', cancelAllDrags);
+
 canvas.addEventListener('touchstart',e=>{ e.preventDefault(); for(const t of e.changedTouches){ const {x,y}=getPos(e,t); handleStart(x,y,t.identifier); } },{passive:false});
 canvas.addEventListener('touchmove', e=>{ e.preventDefault(); for(const t of e.changedTouches){ const {x,y}=getPos(e,t); handleMove(x,y,t.identifier); } },{passive:false});
 canvas.addEventListener('touchend',  e=>{ e.preventDefault(); for(const t of e.changedTouches){ const {x,y}=getPos(e,t); handleEnd(x,y,t.identifier); } },{passive:false});
+canvas.addEventListener('touchcancel', e=>{ for(const t of e.changedTouches) cancelDrag(t.identifier); },{passive:false});
 
 let mouseDown=false;
 canvas.addEventListener('mousedown',e=>{ mouseDown=true; const rect=canvas.getBoundingClientRect(); handleStart((e.clientX-rect.left)*(sw/rect.width),(e.clientY-rect.top)*(sh/rect.height),'mouse'); });
