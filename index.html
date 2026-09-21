@@ -1528,10 +1528,11 @@ function drawClockMode(ctx, t){
   // 針（短針は時、長針は分）
   const hFrac = (clockT/720), mFrac = (min/60);
   const hp = handPos(g, hFrac, g.R*0.48), mp = handPos(g, mFrac, g.R*0.80);
+  // 短針＝赤（みじかくて太い）／長針＝青（ながくて細い）
   ctx.lineCap='round';
-  ctx.strokeStyle='#2b3a52'; ctx.lineWidth=Math.max(6,g.R*0.075);
+  ctx.strokeStyle='#e0403f'; ctx.lineWidth=Math.max(6,g.R*0.075);
   ctx.beginPath(); ctx.moveTo(g.cx,g.cy); ctx.lineTo(hp.x,hp.y); ctx.stroke();
-  ctx.strokeStyle='#e0403f'; ctx.lineWidth=Math.max(3.5,g.R*0.042);
+  ctx.strokeStyle='#1f6fd8'; ctx.lineWidth=Math.max(3.5,g.R*0.042);
   ctx.beginPath(); ctx.moveTo(g.cx,g.cy); ctx.lineTo(mp.x,mp.y); ctx.stroke();
   ctx.fillStyle='#2b3a52'; ctx.beginPath(); ctx.arc(g.cx,g.cy,Math.max(4,g.R*0.055),0,Math.PI*2); ctx.fill();
   ctx.restore();
