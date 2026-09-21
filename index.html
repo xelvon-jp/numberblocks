@@ -261,10 +261,14 @@ function getHomeRect(){   return getTargetRect('home'); }
 // 指と手のひらは「触れた点より下」を覆う。判定を下へ大きく伸ばしておくと、
 // 本体を直接押さえなくても手前で反応するので、演出が手に隠れない。
 // 4つぶんの縦長の帯が隙間なく並ぶので、必ずどれか1つだけが反応する。
+// アイコンの下へどれだけ伸ばすか。指と手のひらはタップした点より下を覆うので、
+// 少し下でも反応するようにしてアイコンが隠れないようにする。ただし伸ばしすぎると
+// 関係ない場所で離したのに反応してしまうので、アイコンのすぐ下までに留める。
+const ZONE_BELOW = 72;
 function targetZone(id){
   const m=getTargetRect(id); if(!m) return null;
   const half=(m.w+m.gap)/2, cx=m.x+m.w/2;
-  return { x:cx-half, y:m.y-12, w:half*2, h:m.h+200 };
+  return { x:cx-half, y:m.y-12, w:half*2, h:m.h+ZONE_BELOW };
 }
 function isOverTarget(id,x,y){
   const z=targetZone(id);
