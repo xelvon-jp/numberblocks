@@ -206,6 +206,7 @@ function drawSizeButtons(ctx){
 // 因数モード・ドリルモードではキャラを自由に動かさないので出さない。
 let mirrorFlash = 0;      // 複製した瞬間の光り（1→0へ減衰）
 let fxParticles = [];     // 複製したときの紙吹雪
+let mirrorRing  = 0;      // 複製した瞬間に広がる光の輪（0→1）
 let mirrorReflect = 0;    // 鏡に映るキャラの出かた（0→1）
 let mirrorReflectNum = 0; // 今どのキャラが映っているか
 
@@ -283,6 +284,18 @@ function drawMirrorReflection(ctx, m, num, prog, t){
 function drawMirror(ctx, t){
   const m=getMirrorRect(); if(!m) return;
   if(mirrorFlash>0) mirrorFlash=Math.max(0, mirrorFlash-0.035);
+  // 複製できた合図の光の輪。鏡から外へ広がって消える。
+  if(mirrorRing>0){
+    mirrorRing=Math.max(0, mirrorRing-0.045);
+    const e=1-mirrorRing;
+    ctx.save();
+    ctx.globalAlpha=mirrorRing*0.85;
+    ctx.strokeStyle='rgba(255,255,255,0.95)'; ctx.lineWidth=3*mirrorRing+1;
+    ctx.beginPath();
+    ctx.ellipse(m.x+m.w/2, m.y+m.h/2, m.w*(0.5+e*1.1), m.h*(0.5+e*1.0), 0, 0, Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
+  }
   const hover = !!(dragBlock && dragPtr && isOverMirror(dragPtr.x, dragPtr.y));
   if(hover) mirrorReflectNum = dragBlock.num;
   mirrorReflect += ((hover?1:0) - mirrorReflect) * 0.25;   // すっと現れて、すっと消える
@@ -291,10 +304,19 @@ function drawMirror(ctx, t){
   const glow  = Math.max(mirrorFlash, hover?1:0);
 
   ctx.save();
-  // ドラッグ中はここが落とし場所だと分かるように光らせる
+  // ドロップできる状態のときは、鏡がふくらんで脈打つ。
+  // 「何が起きるか」は鏡の中の映り込みが伝えるので、こちらは
+  // 「今が離すタイミング」だけを伝える役に徹する。
+  const beat  = 0.5+0.5*Math.sin(t*0.013);
+  const swell = 1 + 0.09*mirrorReflect*beat + 0.13*mirrorFlash;
+  if(swell !== 1){
+    ctx.translate(m.x+m.w/2, m.y+m.h/2);
+    ctx.scale(swell, swell);
+    ctx.translate(-(m.x+m.w/2), -(m.y+m.h/2));
+  }
   if(glow>0){
     ctx.shadowColor='rgba(150,220,255,'+(0.55+glow*0.45)+')';
-    ctx.shadowBlur=14+glow*16;
+    ctx.shadowBlur=14+glow*(16+14*beat);
   }
   // 鏡面（虹色のグラデーション）
   const g=ctx.createLinearGradient(m.x, m.y, m.x+m.w, m.y+m.h);
@@ -333,8 +355,13 @@ function drawMirror(ctx, t){
   // 虹色のふち
   const gb=ctx.createLinearGradient(m.x, m.y+m.h, m.x+m.w, m.y);
   gb.addColorStop(0,'#7fd8f0'); gb.addColorStop(0.5,'#b39ef0'); gb.addColorStop(1,'#7ff0c8');
-  ctx.strokeStyle=gb; ctx.lineWidth=2.5;
+  ctx.strokeStyle=gb; ctx.lineWidth=2.5 + 1.8*mirrorReflect*beat;
+  if(mirrorReflect>0){
+    ctx.shadowColor='rgba(255,255,255,'+(0.5*mirrorReflect)+')';
+    ctx.shadowBlur=8*mirrorReflect;
+  }
   mirrorPath(ctx,m.x,m.y,m.w,m.h); ctx.stroke();
+  ctx.shadowBlur=0;
 
   // 上のバッジ（おうちマーク）
   const bx=m.x+m.w/2, by=m.y+m.w*0.21, br=m.w*0.16;
@@ -386,6 +413,7 @@ class NumberBlock {
   constructor(num,x,y){
     this.id=blockIdCounter++; this.num=Math.max(1,Math.min(100,num));
     this.x=x; this.y=y; this.vx=0; this.vy=0; this.onGround=false; this.targetX=x;
+    this.birth=1;   // 1 なら通常。0 から始めるとミラーから生まれる演出が付く
     this._computeShape();
   }
   _computeShape(){
@@ -397,6 +425,23 @@ class NumberBlock {
   get cx(){ return this.x+this.width/2; }
   get cy(){ return this.y+this.height/2; }
   draw(ctx,t=0,bounceY=0){
+    // ミラーから出てきた直後は、小さく現れて「ぽんっ」と実物大になる
+    if(this.birth < 1){
+      this.birth = Math.min(1, this.birth + 0.055);
+      const p=this.birth, c1=1.70158, c3=c1+1;
+      const back = 1 + c3*Math.pow(p-1,3) + c1*Math.pow(p-1,2);   // 少し行き過ぎて戻る
+      const sc = 0.30 + 0.70*back;
+      const ax=this.x+this.width/2, ay=this.y+this.height;        // 足元を軸にする
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, 0.35+0.75*p);
+      ctx.translate(ax,ay); ctx.scale(sc,sc); ctx.translate(-ax,-ay);
+      this._drawBody(ctx,t,bounceY);
+      ctx.restore();
+      return;
+    }
+    this._drawBody(ctx,t,bounceY);
+  }
+  _drawBody(ctx,t=0,bounceY=0){
     const n=this.num,x=this.x,y=this.y+bounceY;
     const isMoving=Math.abs(this.vx)>0.5||Math.abs(this.vy)>1.0;
     drawNumberblock(ctx, n, x, y, BS, { t:t, animate:isMoving, numberling:false });
@@ -1024,8 +1069,9 @@ function duplicateAtMirror(b){
     const copy=new NumberBlock(b.num, m.x+m.w/2, m.y+m.h+4);
     copy.x = m.x + m.w/2 - copy.width/2;
     copy.vx = 0; copy.vy = 1;
+    copy.birth = 0;          // 鏡から「ぽんっ」と出てくる
     blocks.push(copy);
-    mirrorFlash = 1;
+    mirrorFlash = 1; mirrorRing = 1;
     const px=m.x+m.w/2, py=m.y+m.h;
     for(let i=0;i<22;i++) fxParticles.push(new Particle(px,py));
   }
@@ -1059,7 +1105,7 @@ function setMode(newMode){
   const isCalc = m => m!=='factor' && m!=='quiz';
   if(!isCalc(mode) || !isCalc(newMode)) blocks=[];
   mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={};
-  fxParticles=[]; mirrorFlash=0; mirrorReflect=0; mirrorReflectNum=0;
+  fxParticles=[]; mirrorFlash=0; mirrorRing=0; mirrorReflect=0; mirrorReflectNum=0;
   factorUI.classList.toggle('visible',newMode==='factor');
   quizUI.classList.toggle('visible',newMode==='quiz');
   if(newMode==='factor'){ buildFactorRows(factorVal); updateFactorTargets(); factorReveal={}; }
