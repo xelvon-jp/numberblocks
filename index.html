@@ -645,7 +645,8 @@ class Puzzle {
     this.eliminated=new Set();
     this.wrongFlash=0; this.wrongChoiceIdx=null; // 誤答演出
     this.phase='countdown'; // 'countdown'|'correct'|'timeout'|'done'
-    this.elapsed=0; this.COUNTDOWN=5000; this.CORRECT_ANIM=2000;
+    // 正解演出は続けて何問も解くので、長いとテンポが悪くなる
+    this.elapsed=0; this.COUNTDOWN=5000; this.CORRECT_ANIM=1200;
     this.particles=[];
   }
 
