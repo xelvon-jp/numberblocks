@@ -27,6 +27,20 @@
       display:block; touch-action:none;
       -webkit-touch-callout:none; -webkit-user-select:none; user-select:none;
     }
+    /* バージョン表示。子どもの操作の邪魔にならないよう、
+       数字パッドのさらに下の余白に、薄く小さく置く。 */
+    #ver-btn {
+      position:fixed; left:4px; z-index:30;
+      bottom:calc(2px + env(safe-area-inset-bottom, 0px));
+      padding:2px 6px; border:0; border-radius:6px;
+      background:transparent; color:rgba(255,255,255,0.55);
+      font-size:9px; font-family:sans-serif; letter-spacing:0.02em;
+      cursor:pointer; -webkit-tap-highlight-color:transparent;
+    }
+    #ver-btn.armed {
+      background:rgba(0,0,0,0.55); color:#fff; font-size:11px; font-weight:700;
+      padding:5px 10px;
+    }
     /* 画面下の安全域（ホームバー）の高さを測るためだけの目印 */
     #safe-probe {
       position:fixed; left:0; bottom:0; width:0;
@@ -93,6 +107,7 @@
 <body>
 <canvas id="c"></canvas>
 <div id="safe-probe"></div>
+<button id="ver-btn" type="button" title="バージョン／再読み込み"></button>
 <a id="zukan-btn" href="zukan.html" title="ずかん・キャラメイクへ">ずかん</a>
 <button id="fs-btn" title="フルスクリーン">⛶</button>
 <div id="factor-ui">
@@ -1570,6 +1585,38 @@ function setMode(newMode){
 }
 
 // ─── Touch / Mouse ────────────────────────────────────────────────────────────
+// ─── バージョン表示と再読み込み ───────────────────────────────────────────
+// 「今どの版で遊んでいるか」を確かめるための小さな表示。
+// 表示しているのはサーバーが返したこのファイルの更新時刻なので、
+// 古いキャッシュのまま開いていれば古い時刻が出る。
+// 1回目のタップで「さいよみこみ」に変わり、2回目で読み直す。
+// 子どもが誤って1回触っても何も起きない。
+(function(){
+  const btn = document.getElementById('ver-btn');
+  if(!btn) return;
+  const d = new Date(document.lastModified);
+  const two = v => String(v).padStart(2,'0');
+  const stamp = isNaN(d) ? '-' :
+    two(d.getMonth()+1)+'/'+two(d.getDate())+' '+two(d.getHours())+':'+two(d.getMinutes());
+  const idle = 'v '+stamp;
+  btn.textContent = idle;
+  let armed = false, timer = null;
+  btn.addEventListener('click', e => {
+    e.preventDefault(); e.stopPropagation();
+    if(armed){
+      // キャッシュを避けるため、毎回ちがうURLで読み直す
+      const base = location.href.split('?')[0].split('#')[0];
+      location.replace(base + '?v=' + Date.now());
+      return;
+    }
+    armed = true; btn.classList.add('armed'); btn.textContent = '↻ さいよみこみ';
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      armed = false; btn.classList.remove('armed'); btn.textContent = idle;
+    }, 4000);
+  });
+})();
+
 // ─── ブラウザのジェスチャ対策 ─────────────────────────────────────────────
 // Safari はピンチ・ダブルタップ拡大・長押しメニュー・引っぱって更新を
 // 勝手に拾ってしまう。キャラのドラッグと取り合いになるので明示的に止める。
