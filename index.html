@@ -802,6 +802,16 @@ function opsAvailableFor(a,b){
   return ['+','-','x','div'].filter(m=>canCalc(A,B,m));
 }
 
+// 2体がどれだけ近いか。中心どうしの距離だと、大きいキャラは体の上に置いても
+// 中心が遠くて届かない。体（四角）どうしの隙間で測るので、重なっていれば0になる。
+function blockGap(a,b){
+  const dx = Math.max(b.x-(a.x+a.width),  a.x-(b.x+b.width),  0);
+  const dy = Math.max(b.y-(a.y+a.height), a.y-(b.y+b.height), 0);
+  return Math.hypot(dx,dy);
+}
+const MERGE_REACH = 70;   // ここまで近づけたら合体できる
+const NEAR_REACH  = 100;  // 合図（光る／通行止め）を出しはじめる距離
+
 function canCalc(a,b,m){
   if(m==='+')   return a.num+b.num<=MAX_NUM;
   if(m==='-')   return Math.abs(a.num-b.num)>=1;
@@ -1562,8 +1572,8 @@ function handleEnd(x,y,pid){
   let best=null,bestD=Infinity;
   for(const other of blocks){
     if(other===b) continue;
-    const d=Math.hypot(b.cx-other.cx,b.cy-other.cy);
-    if(d<80&&canCalc(b,other,mode)&&d<bestD){ bestD=d; best=other; }
+    const d=blockGap(b,other);
+    if(d<MERGE_REACH&&canCalc(b,other,mode)&&d<bestD){ bestD=d; best=other; }
   }
   if(best){
     if(quizOn) { blocks=blocks.filter(bl=>bl!==b&&bl!==best); puzzle=new Puzzle(b,best,mode); }
@@ -1696,13 +1706,13 @@ function loop(ts){
         let bestMerge=null,bestMergeD=Infinity;
         for(const o of blocks){
           if(o===dragBlock) continue;
-          const d=Math.hypot(dragBlock.cx-o.cx,dragBlock.cy-o.cy);
-          if(d<80&&canCalc(dragBlock,o,mode)&&d<bestMergeD){ bestMergeD=d; bestMerge=o; }
+          const d=blockGap(dragBlock,o);
+          if(d<MERGE_REACH&&canCalc(dragBlock,o,mode)&&d<bestMergeD){ bestMergeD=d; bestMerge=o; }
         }
         for(const o of blocks){
           if(o===dragBlock) continue;
-          const d=Math.hypot(dragBlock.cx-o.cx,dragBlock.cy-o.cy);
-          if(d<100){
+          const d=blockGap(dragBlock,o);
+          if(d<NEAR_REACH){
             if(o===bestMerge) drawOKGlow(ctx,o,walkTime);
             else if(!canCalc(dragBlock,o,mode)) drawNoEntry(ctx,o.cx,o.y-28,22);
           }
