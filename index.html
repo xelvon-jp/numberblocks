@@ -645,8 +645,9 @@ class Puzzle {
     this.eliminated=new Set();
     this.wrongFlash=0; this.wrongChoiceIdx=null; // 誤答演出
     this.phase='countdown'; // 'countdown'|'correct'|'timeout'|'done'
-    // 正解演出は続けて何問も解くので、長いとテンポが悪くなる
-    this.elapsed=0; this.COUNTDOWN=5000; this.CORRECT_ANIM=1200;
+    // 正解演出は続けて何問も解くので、長いとテンポが悪くなる。
+    // さらに、待たされないよう画面をタップすれば途中でも先へ進める。
+    this.elapsed=0; this.COUNTDOWN=5000; this.CORRECT_ANIM=700;
     this.particles=[];
   }
 
@@ -1212,6 +1213,8 @@ function getPos(e,t){
 function handleStart(x,y,pid){
   for(const sb of sizeBtns){ if(ptInRect(x,y,sb.x,sb.y,sb.w,sb.h)){ setBlockSize(sb.val); return; } }
   for(const tb of tabBtns){ if(ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)){ setMode(tb.val); return; } }
+  // 正解演出の途中なら、どこをタップしても次へ進む。見終わった子を待たせない。
+  if(puzzle && puzzle.phase==='correct'){ puzzle.phase='done'; return; }
   if(mode==='factor'){ handleFactorTap(x,y); return; }
   if(mode==='quiz'){
     // ドリル中は選択肢のタップだけ受け付ける（キャラの操作や数字パッドは無い）
