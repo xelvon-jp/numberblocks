@@ -10,3 +10,7 @@ _publish/
 apply-overrides.js
 # 手元のバックアップ
 *.BAK
+
+# テスト用に入れる道具（tests/ で npm install すると入る）
+tests/node_modules/
+tests/package-lock.json

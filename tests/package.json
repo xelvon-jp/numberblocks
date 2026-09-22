@@ -1,0 +1,7 @@
+{
+  "name": "numberblocks-tests",
+  "private": true,
+  "description": "ブラウザでゲームを動かして確かめるテスト",
+  "scripts": { "test": "node run.js" },
+  "devDependencies": { "playwright-core": "1.63.0" }
+}

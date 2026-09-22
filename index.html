@@ -108,7 +108,14 @@
     }
     .opBtn.on { background:rgba(100,160,255,0.95); color:white; border-color:rgba(255,255,255,0.7); }
     #quiz-max { width:min(240px,52vw); height:28px; cursor:pointer; accent-color:#f80; }
+    /* 2段目（かず・スライダー・じかん）は折り返さず1行に収める。
+       折り返すとパネルの高さ（115px固定）からあふれて、じかんボタンが
+       画面の外へ押し出されてしまう。スライダーだけを伸び縮みさせる。 */
+    .quizRow.slim { flex-wrap:nowrap; width:100%; max-width:440px; }
+    .quizRow.slim label { white-space:nowrap; flex:0 0 auto; }
+    .quizRow.slim #quiz-max { flex:1 1 auto; width:auto; min-width:60px; }
     #quiz-limit {
+      flex:0 0 auto; white-space:nowrap;
       height:38px; padding:0 12px; border-radius:9px; cursor:pointer;
       border:1.5px solid rgba(255,255,255,0.35); background:rgba(50,50,50,0.8);
       color:#e9eefb; font-size:13px; font-weight:700;
@@ -133,7 +140,7 @@
     <button class="opBtn"    data-op="x"  title="かけざん">×</button>
     <button class="opBtn"    data-op="div" title="わりざん">÷</button>
   </div>
-  <div class="quizRow">
+  <div class="quizRow slim">
     <label>かず 1〜<span id="quiz-max-val">10</span></label>
     <input type="range" id="quiz-max" min="3" max="100" value="10">
     <button id="quiz-limit">じかん：なし</button>
