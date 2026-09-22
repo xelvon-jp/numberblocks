@@ -242,71 +242,71 @@ const TASK_LEVELS = [
 ];
 const TASKS = [
   // レベル1：つみかさねる
-  { lv:0, n:5,    use:[1],      hint:'1を5こ' },
-  { lv:0, n:6,    use:[2],      hint:'2を3こ' },
-  { lv:0, n:8,    use:[1],      hint:'×2を3かい' },
-  { lv:0, n:9,    use:[3],      hint:'3を3こ' },
-  { lv:0, n:10,   use:[4],      hint:'4+4のあと' },
-  { lv:0, n:12,   use:[3],      hint:'3+3を×2' },
-  { lv:0, n:7,    use:[2],      hint:'2を3こと1' },
-  { lv:0, n:15,   use:[5],      hint:'5を3こ' },
-  { lv:0, n:16,   use:[1],      hint:'×2を4かい' },
-  { lv:0, n:14,   use:[4],      hint:'4を3こと2' },
+  { lv:0, n:5,    use:[1], best:5,      hint:'1を5こ' },
+  { lv:0, n:6,    use:[2], best:4,      hint:'2を3こ' },
+  { lv:0, n:8,    use:[1], best:4,      hint:'×2を3かい' },
+  { lv:0, n:9,    use:[3], best:3,      hint:'3を3こ' },
+  { lv:0, n:10,   use:[4], best:5,      hint:'4+4のあと' },
+  { lv:0, n:12,   use:[3], best:3,      hint:'3+3を×2' },
+  { lv:0, n:7,    use:[2], best:6,      hint:'2を3こと1' },
+  { lv:0, n:15,   use:[5], best:4,      hint:'5を3こ' },
+  { lv:0, n:16,   use:[1], best:5,      hint:'×2を4かい' },
+  { lv:0, n:14,   use:[4], best:6,      hint:'4を3こと2' },
   // レベル2：×2をつかう
-  { lv:1, n:20,   use:[2],      hint:'×2でふやす' },
-  { lv:1, n:24,   use:[3],      hint:'3を×2で3かい' },
-  { lv:1, n:18,   use:[9],      hint:'9+9' },
-  { lv:1, n:32,   use:[1],      hint:'×2を5かい' },
-  { lv:1, n:40,   use:[5],      hint:'5を×2で3かい' },
-  { lv:1, n:25,   use:[5],      hint:'5×5' },
-  { lv:1, n:48,   use:[6],      hint:'6を×2で3かい' },
-  { lv:1, n:64,   use:[2],      hint:'×2を5かい' },
-  { lv:1, n:27,   use:[3],      hint:'3×3×3' },
-  { lv:1, n:36,   use:[6],      hint:'6×6' },
+  { lv:1, n:20,   use:[2], best:6,      hint:'×2でふやす' },
+  { lv:1, n:24,   use:[3], best:4,      hint:'3を×2で3かい' },
+  { lv:1, n:18,   use:[9], best:2,      hint:'9+9' },
+  { lv:1, n:32,   use:[1], best:6,      hint:'×2を5かい' },
+  { lv:1, n:40,   use:[5], best:4,      hint:'5を×2で3かい' },
+  { lv:1, n:25,   use:[5], best:3,      hint:'5×5' },
+  { lv:1, n:48,   use:[6], best:4,      hint:'6を×2で3かい' },
+  { lv:1, n:64,   use:[2], best:5,      hint:'×2を5かい' },
+  { lv:1, n:27,   use:[3], best:5,      hint:'3×3×3' },
+  { lv:1, n:36,   use:[6], best:3,      hint:'6×6' },
   // レベル3：10をつくる
-  { lv:2, n:10,   use:[3,7],    hint:'3+7' },
-  { lv:2, n:30,   use:[4,7],    hint:'7×4のあと' },
-  { lv:2, n:50,   use:[3,7],    hint:'10を5こ' },
-  { lv:2, n:60,   use:[8,2],    hint:'8+2から' },
-  { lv:2, n:35,   use:[7,5],    hint:'7×5' },
-  { lv:2, n:45,   use:[9,5],    hint:'9×5' },
-  { lv:2, n:80,   use:[6,4],    hint:'10を8こ' },
-  { lv:2, n:70,   use:[9,1],    hint:'9+1から' },
-  { lv:2, n:90,   use:[9],      hint:'9を10こ' },
-  { lv:2, n:100,  use:[3,7],    hint:'3+7は10' },
+  { lv:2, n:10,   use:[3,7], best:3,    hint:'3+7' },
+  { lv:2, n:30,   use:[4,7], best:5,    hint:'7×4のあと' },
+  { lv:2, n:50,   use:[3,7], best:6,    hint:'10を5こ' },
+  { lv:2, n:60,   use:[8,2], best:6,    hint:'8+2から' },
+  { lv:2, n:35,   use:[7,5], best:3,    hint:'7×5' },
+  { lv:2, n:45,   use:[9,5], best:3,    hint:'9×5' },
+  { lv:2, n:80,   use:[6,4], best:6,    hint:'10を8こ' },
+  { lv:2, n:70,   use:[9,1], best:6,    hint:'9+1から' },
+  { lv:2, n:90,   use:[9], best:5,      hint:'9を10こ' },
+  { lv:2, n:100,  use:[3,7], best:5,    hint:'3+7は10' },
   // レベル4：100のかべ
-  { lv:3, n:100,  use:[5],      hint:'5×5から×2' },
-  { lv:3, n:100,  use:[1],      hint:'×2でのばして たす' },
-  { lv:3, n:120,  use:[3],      hint:'24をならべる' },
-  { lv:3, n:128,  use:[1],      hint:'×2を7かい' },
-  { lv:3, n:144,  use:[6],      hint:'36を×2で2かい' },
-  { lv:3, n:150,  use:[5],      hint:'50を3こ' },
-  { lv:3, n:200,  use:[4],      hint:'100をつくってから' },
-  { lv:3, n:250,  use:[5],      hint:'500のはんぶん' },
-  { lv:3, n:300,  use:[6],      hint:'6を×2でのばす' },
-  { lv:3, n:500,  use:[5],      hint:'100をつくってから' },
+  { lv:3, n:100,  use:[5], best:4,      hint:'5×5から×2' },
+  { lv:3, n:100,  use:[1], best:8,      hint:'×2でのばして たす' },
+  { lv:3, n:120,  use:[3], best:8,      hint:'24をならべる' },
+  { lv:3, n:128,  use:[1], best:7,      hint:'×2を7かい' },
+  { lv:3, n:144,  use:[6], best:4,      hint:'36を×2で2かい' },
+  { lv:3, n:150,  use:[5], best:7,      hint:'50を3こ' },
+  { lv:3, n:200,  use:[4], best:8,      hint:'100をつくってから' },
+  { lv:3, n:250,  use:[5], best:6,      hint:'500のはんぶん' },
+  { lv:3, n:300,  use:[6], best:7,      hint:'6を×2でのばす' },
+  { lv:3, n:500,  use:[5], best:6,      hint:'100をつくってから' },
   // レベル5：1000へ
-  { lv:4, n:512,  use:[1],      hint:'×2を9かい' },
-  { lv:4, n:513,  use:[1],      hint:'512のつぎ' },
-  { lv:4, n:600,  use:[10,6],   hint:'6を100ばい' },
-  { lv:4, n:777,  use:[7,10],   hint:'700と70と7' },
-  { lv:4, n:888,  use:[8,10],   hint:'800と80と8' },
-  { lv:4, n:365,  use:[10,6,5], hint:'1ねんのかず' },
-  { lv:4, n:999,  use:[10,9],   hint:'1000より1すくない' },
-  { lv:4, n:1000, use:[10],     hint:'10を3かいかける' },
-  { lv:4, n:1000, use:[5],      hint:'5から100をつくる' },
-  { lv:4, n:1000, use:[8],      hint:'512からたしていく' },
+  { lv:4, n:512,  use:[1], best:8,      hint:'×2を9かい' },
+  { lv:4, n:513,  use:[1], best:10,      hint:'512のつぎ' },
+  { lv:4, n:600,  use:[10,6], best:5,   hint:'6を100ばい' },
+  { lv:4, n:777,  use:[7,10], best:7,   hint:'700と70と7' },
+  { lv:4, n:888,  use:[8,10], best:9,   hint:'800と80と8' },
+  { lv:4, n:365,  use:[10,6,5], best:7, hint:'1ねんのかず' },
+  { lv:4, n:999,  use:[10,9], best:9,   hint:'1000より1すくない' },
+  { lv:4, n:1000, use:[10], best:5,     hint:'10を3かいかける' },
+  { lv:4, n:1000, use:[5], best:7,      hint:'5から100をつくる' },
+  { lv:4, n:1000, use:[8], best:10,      hint:'512からたしていく' },
   // レベル6：なぞとき
-  { lv:5, n:1,    use:[7],      hint:'おなじかずでわる' },
-  { lv:5, n:3,    use:[9],      hint:'1をつくってから' },
-  { lv:5, n:11,   use:[5],      hint:'10とすこし' },
-  { lv:5, n:13,   use:[4],      hint:'12とすこし' },
-  { lv:5, n:17,   use:[6],      hint:'18から1をひく' },
-  { lv:5, n:19,   use:[10,3],   hint:'20から1をひく' },
-  { lv:5, n:23,   use:[5],      hint:'25から2をひく' },
-  { lv:5, n:49,   use:[7],      hint:'7×7' },
-  { lv:5, n:99,   use:[10],     hint:'100から1をひく' },
-  { lv:5, n:101,  use:[10],     hint:'100のつぎ' }
+  { lv:5, n:1,    use:[7], best:3,      hint:'おなじかずでわる' },
+  { lv:5, n:3,    use:[9], best:6,      hint:'1をつくってから' },
+  { lv:5, n:11,   use:[5], best:6,      hint:'10とすこし' },
+  { lv:5, n:13,   use:[4], best:8,      hint:'12とすこし' },
+  { lv:5, n:17,   use:[6], best:8,      hint:'18から1をひく' },
+  { lv:5, n:19,   use:[10,3], best:5,   hint:'20から1をひく' },
+  { lv:5, n:23,   use:[5], best:8,      hint:'25から2をひく' },
+  { lv:5, n:49,   use:[7], best:3,      hint:'7×7' },
+  { lv:5, n:99,   use:[10], best:7,     hint:'100から1をひく' },
+  { lv:5, n:101,  use:[10], best:7,     hint:'100のつぎ' }
 ];
 const TASK_KEY = 'nbg.task.v1';
 let taskOn = false, taskIdx = 0, taskDone = false;
@@ -316,6 +316,7 @@ let taskLog     = [];   // いま解いている途中の手順
 let stageOpen   = false;// ステージいちらんを出しているか
 let stageDetail = -1;   // てじゅんを見せているステージ（-1＝出していない）
 let stageBtns   = [];
+let hintOn      = false;// ヒントを開いているか（おだいを変えると閉じる）
 try{
   const raw = localStorage.getItem(TASK_KEY);
   if(raw){
@@ -337,7 +338,7 @@ function taskActive(){ return taskOn && mode!=='factor' && mode!=='quiz' && mode
 // そのおだいを最初から始める
 function startTask(i){
   taskIdx = Math.max(0, Math.min(TASKS.length-1, i));
-  taskDone = false; taskLog = [];
+  taskDone = false; taskLog = []; hintOn = false; winFx = null;
   blocks = []; puzzle = null; clearUndo();
   stageOpen = false; stageDetail = -1;
   saveTask(); updateTargets();
@@ -1458,6 +1459,9 @@ function drawFormula(ctx){
   const lines = wrapText(ctx, formula, maxW);
   const lh = 20;
   let ty = TAB_H + 132;   // ドロップ先のアイコン列（拡大時を含む）の下
+  // おだいカード（とヒントのふきだし）が出ているときは、その下から書く
+  const tc = getTaskCardRect();
+  if(tc) ty = tc.y + tc.h + 14 + ((hintOn && !taskDone) ? 39 : 0);
   for(const line of lines){
     ctx.strokeStyle='white'; ctx.lineWidth=4; ctx.strokeText(line, sw/2, ty);
     ctx.fillStyle='#111'; ctx.fillText(line, sw/2, ty);
@@ -2004,13 +2008,90 @@ function handleClockMove(x,y){
   }
 }
 
+// ─── クリアしたときの演出 ─────────────────────────────────────────
+// できたキャラを主役にする。うしろから集中線がひろがり、本人はぴょんと跳ね、
+// 紙吹雪がキャラから吹き出す。最短手でできたときだけ「さいたん！」が出る。
+let winFx = null;              // {block, t, minimal, moves}
+const WIN_MS = 2000;
+
+function drawWinLines(ctx){
+  if(!winFx || !winFx.block) return;
+  const b = winFx.block, t = winFx.t;
+  const cx = b.x + b.width/2, cy = b.y + b.height/2;
+  // 0→1 へ一気に開いて、おわりにかけてすうっと消える
+  const grow = Math.min(1, t/260), fade = Math.min(1, Math.max(0, (WIN_MS-t)/700));
+  const hole  = (Math.max(b.width, b.height)/2 + 26) * (0.45 + 0.55*grow);
+  const outer = Math.hypot(sw, sh);
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, TAB_H, sw, sh - bottomPanelH() - TAB_H);
+  ctx.clip();
+  ctx.translate(cx, cy);
+  const N = 46;
+  for(let i=0;i<N;i++){
+    const a = (i/N)*Math.PI*2 + t*0.00018;
+    const w = 0.004 + 0.013*(((i*37)%9)/9);       // 太さをばらけさせて手描きっぽく
+    const r0 = hole * (1 + 0.18*(((i*13)%5)/5));  // 内側のふちもそろえない
+    ctx.beginPath();
+    ctx.moveTo(Math.cos(a)*r0, Math.sin(a)*r0);
+    ctx.lineTo(Math.cos(a-w)*outer, Math.sin(a-w)*outer);
+    ctx.lineTo(Math.cos(a+w)*outer, Math.sin(a+w)*outer);
+    ctx.closePath();
+    ctx.fillStyle = (i%3===0) ? 'rgba(255,226,130,'+(0.55*fade)+')'
+                              : 'rgba(255,255,255,'+(0.62*fade)+')';
+    ctx.fill();
+  }
+  // 広がる光の輪
+  if(grow < 1 || t < 900){
+    const rr = hole + 240*Math.min(1, t/900);
+    ctx.beginPath(); ctx.arc(0,0,rr,0,Math.PI*2);
+    ctx.strokeStyle='rgba(255,255,255,'+(0.5*(1-Math.min(1,t/900)))+')';
+    ctx.lineWidth = 10*(1-Math.min(1,t/900))+2; ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawWinStamp(ctx){
+  if(!winFx) return;
+  const b = winFx.block, t = winFx.t;
+  const fade = Math.min(1, Math.max(0, (WIN_MS-t)/500));
+  // 出るときにちょっと行き過ぎてから戻る（ぽんっと押した感じ）
+  const e = Math.min(1, t/190);
+  const sc = 1 + 0.55*(1-e)*(1-e) - 0.22*Math.sin(e*Math.PI);
+  const cx = b ? Math.min(Math.max(90, b.x + b.width/2), sw-90) : sw/2;
+  // 顔はいちばん上のブロックにあるので、その下（胸のあたり）に押す
+  const cy = b ? Math.min(b.y + b.bs*1.7 + 24, calcFloor() - 34)
+               : (TAB_H + calcFloor())/2;
+  ctx.save();
+  ctx.globalAlpha = fade;
+  ctx.translate(cx, cy); ctx.scale(sc, sc); ctx.rotate(-0.06);
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.lineJoin='round';
+  ctx.font='bold 40px sans-serif';
+  ctx.strokeStyle='#fff'; ctx.lineWidth=9; ctx.strokeText('できた！',0,0);
+  ctx.fillStyle='#e8622a'; ctx.fillText('できた！',0,0);
+  if(winFx.minimal){
+    ctx.font='bold 22px sans-serif';
+    ctx.strokeStyle='#fff'; ctx.lineWidth=7; ctx.strokeText('さいたん！',0,32);
+    ctx.fillStyle='#d69500'; ctx.fillText('さいたん！',0,32);
+  }
+  ctx.restore();
+}
+
+function updateWinFx(dt){
+  if(!winFx) return;
+  winFx.t += dt;
+  if(winFx.block && !blocks.includes(winFx.block)) winFx.block = blocks.find(b=>b.num===winFx.num) || null;
+  if(winFx.t > WIN_MS) winFx = null;
+}
+
 // ─── おだいカード ─────────────────────────────────────────────────────────
 // ドロップ先のアイコン列の下、数式の上に置く。遊び方は変えず、お題だけ乗せる。
 let taskBtns = [];
 
 function getTaskCardRect(){
   if(!taskActive()) return null;
-  return { x:playLeft(), y:TAB_H+76, w:sw-playLeft()-EDGE_MARGIN, h:52 };
+  return { x:playLeft(), y:TAB_H+76, w:sw-playLeft()-EDGE_MARGIN, h:58 };
 }
 
 // カードの中の小さなボタン
@@ -2039,7 +2120,9 @@ function drawTaskCard(ctx, t){
   ctx.textBaseline='middle';
   if(taskDone){
     ctx.textAlign='left'; ctx.fillStyle='#6b4a00'; ctx.font='bold 19px sans-serif';
-    ctx.fillText('できた！  ' + task.n, r.x+14, r.y+r.h/2);
+    ctx.fillText('できた！  ' + task.n, r.x+14, r.y+21);
+    ctx.font='bold 12px sans-serif'; ctx.fillStyle='#8a6a1a';
+    ctx.fillText(taskLog.length + ' て' + (taskLog.length<=task.best ? '　さいたん！' : ''), r.x+14, r.y+41);
     const bh=32, by=r.y+(r.h-bh)/2;
     const nw=58, tw=68, gap=6;
     const bx2 = r.x+r.w-10-nw, bx1 = bx2-gap-tw;
@@ -2062,18 +2145,43 @@ function drawTaskCard(ctx, t){
     ctx.fillStyle='#16233a'; ctx.font='bold 18px sans-serif';
     ctx.fillText(task.use.join(' と '), ux, r.y+35);
 
-    // 右：ステージいちらんへ（何面めかも見せる）
-    const bw=64, bh=34, bx=r.x+r.w-bw-10, by=r.y+(r.h-bh)/2;
+    // 右：ヒントと、ステージいちらんへ（何面めかも見せる）
+    const bh=36, by=r.y+(r.h-bh)/2;
+    const bw=64, bx=r.x+r.w-bw-10;
     ctx.fillStyle = lv.color;
     ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,9); ctx.fill();
     ctx.fillStyle='#fff'; ctx.textAlign='center';
     ctx.font='bold 14px sans-serif';
-    ctx.fillText(stageLabel(taskIdx), bx+bw/2, by+12);
+    ctx.fillText(stageLabel(taskIdx), bx+bw/2, by+13);
     ctx.font='bold 10px sans-serif';
-    ctx.fillText('いちらん', bx+bw/2, by+25);
+    ctx.fillText('いちらん', bx+bw/2, by+27);
     taskBtns.push({x:bx,y:by,w:bw,h:bh,val:'stages'});
+
+    const hw=40, hx=bx-hw-6;
+    ctx.fillStyle = hintOn ? 'rgba(255,196,60,0.97)' : 'rgba(236,240,248,0.98)';
+    ctx.beginPath(); ctx.roundRect(hx,by,hw,bh,9); ctx.fill();
+    ctx.strokeStyle='rgba(70,90,120,0.28)'; ctx.lineWidth=1.2;
+    ctx.beginPath(); ctx.roundRect(hx,by,hw,bh,9); ctx.stroke();
+    ctx.fillStyle = hintOn ? '#5a3c00' : '#5a6a84';
+    ctx.font='bold 17px sans-serif'; ctx.fillText('?', hx+hw/2, by+14);
+    ctx.font='bold 9px sans-serif';  ctx.fillText('ヒント', hx+hw/2, by+28);
+    taskBtns.push({x:hx,y:by,w:hw,h:bh,val:'hint'});
   }
   ctx.restore();
+
+  // ヒントのふきだし（カードのすぐ下）
+  if(hintOn && !taskDone){
+    const hy = r.y + r.h + 7, hh = 32;
+    ctx.save();
+    ctx.fillStyle='rgba(255,239,190,0.97)';
+    ctx.beginPath(); ctx.roundRect(r.x+8, hy, r.w-16, hh, 10); ctx.fill();
+    ctx.strokeStyle='rgba(215,165,40,0.8)'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.roundRect(r.x+8, hy, r.w-16, hh, 10); ctx.stroke();
+    ctx.fillStyle='#6b4a00'; ctx.font='bold 15px sans-serif';
+    ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText('ヒント： ' + task.hint, r.x+20, hy+hh/2);
+    ctx.restore();
+  }
 }
 
 // ─── ステージいちらん ─────────────────────────────────────────────────
@@ -2134,9 +2242,11 @@ function drawStageSelect(ctx, t){
       const nt = String(TASKS[idx].n);
       ctx.font='bold ' + (nt.length>3 ? 11 : 13) + 'px sans-serif'; ctx.textAlign='center';
       ctx.fillText(nt, x+w/2, y+h/2-3);
-      ctx.font='9px sans-serif';
-      ctx.fillStyle = done ? 'rgba(255,255,255,0.85)' : '#8fa2bb';
-      ctx.fillText(done ? '✓' : String(c+1), x+w/2, y+h-7);
+      const lg = taskLogs[idx];
+      const star = done && lg && lg.length <= TASKS[idx].best;
+      ctx.font = star ? '10px sans-serif' : '9px sans-serif';
+      ctx.fillStyle = star ? '#fff8d0' : (done ? 'rgba(255,255,255,0.85)' : '#8fa2bb');
+      ctx.fillText(done ? (star ? '★' : '✓') : String(c+1), x+w/2, y+h-7);
       stageBtns.push({x:x,y:y,w:w,h:h,val:'go',idx:idx});
     });
   }
@@ -2174,6 +2284,17 @@ function drawStageDetail(ctx, idx){
   ctx.fillText(stageLabel(idx) + '　つかえる ' + task.use.join(' と '), x+16, y+20);
   ctx.fillStyle='#16233a'; ctx.font='bold 21px sans-serif';
   ctx.fillText(task.n + ' の てじゅん', x+16, y+44);
+  if(steps.length){
+    ctx.textAlign='right'; ctx.font='bold 12px sans-serif';
+    const tie = steps.length <= task.best;
+    ctx.fillStyle = tie ? '#c08a20' : '#5a6a80';
+    ctx.fillText('きみ ' + steps.length + 'て' + (tie ? '　さいたん！' : ''), x+w-16, y+30);
+    if(!tie){
+      ctx.fillStyle='#8a97a8';
+      ctx.fillText('さいたんは ' + task.best + 'て', x+w-16, y+47);
+    }
+    ctx.textAlign='left';
+  }
 
   ctx.font='15px sans-serif'; ctx.fillStyle='#2b3a52';
   lines.forEach((ln,i)=>{ ctx.fillText(ln, x+18, y+70+i*lh); });
@@ -2212,9 +2333,17 @@ function checkTask(){
   if(blocks.some(b=>b.num===t.n)){
     taskDone = true;
     taskCleared[taskIdx] = true;
-    taskLogs[taskIdx] = taskLog.slice();
+    const kept = taskLogs[taskIdx];
+    if(!kept || taskLog.length < kept.length) taskLogs[taskIdx] = taskLog.slice();
     saveTask();
-    for(let i=0;i<40;i++) fxParticles.push(new Particle(sw/2, TAB_H+120));
+    const win = blocks.find(b=>b.num===t.n);
+    winFx = { block:win, num:t.n, t:0, minimal: taskLog.length <= t.best, moves: taskLog.length };
+    if(win){
+      win.vy = -9; win.onGround = false;              // うれしくて跳ねる
+      for(let i=0;i<70;i++) fxParticles.push(new Particle(win.cx, win.y + win.height*0.35));
+    } else {
+      for(let i=0;i<40;i++) fxParticles.push(new Particle(sw/2, TAB_H+120));
+    }
   }
 }
 
@@ -2256,7 +2385,8 @@ function handleStart(x,y,pid){
   }
   for(const tb of taskBtns){
     if(!ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)) continue;
-    if(tb.val==='next')        nextTask();
+    if(tb.val==='hint')        hintOn = !hintOn;
+    else if(tb.val==='next')   nextTask();
     else if(tb.val==='stages'){ stageOpen=true; stageDetail=-1; }
     else if(tb.val==='steps'){  stageOpen=true; stageDetail=taskIdx; }
     return;
@@ -2550,6 +2680,8 @@ function drawFrame(ts){
       }
     } else {
       applyPhysics();
+      updateWinFx(dt);
+      drawWinLines(ctx);
       for(const b of blocks){ if(b===dragBlock) continue; b.draw(ctx,walkTime,0); }
       if(dragBlock){
         let bestMerge=null,bestMergeD=Infinity;
@@ -2586,6 +2718,7 @@ function drawFrame(ts){
       fxParticles = fxParticles.filter(fp=>fp.life>0);
       for(const fp of fxParticles) fp.draw(ctx);
       checkTask();
+      drawWinStamp(ctx);
       drawTaskCard(ctx, walkTime);
       drawFormula(ctx);
       drawNumpad(ctx);
