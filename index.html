@@ -338,7 +338,7 @@ function taskActive(){ return taskOn && mode!=='factor' && mode!=='quiz' && mode
 function startTask(i){
   taskIdx = Math.max(0, Math.min(TASKS.length-1, i));
   taskDone = false; taskLog = [];
-  blocks = []; opChips = null; puzzle = null;
+  blocks = []; puzzle = null;
   stageOpen = false; stageDetail = -1;
   saveTask(); updateTargets();
 }
@@ -1034,10 +1034,6 @@ function calcPair(a,b,op){
   if(op==='-')  return { n1:lg, n2:sm, ans:lg-sm };
   return { n1:lg, n2:sm, ans:lg/sm };
 }
-function opsAvailableFor(a,b){
-  const A={num:a}, B={num:b};
-  return ['+','-','x','div'].filter(m=>canCalc(A,B,m));
-}
 
 // 2体がどれだけ近いか。中心どうしの距離だと、大きいキャラは体の上に置いても
 // 中心が遠くて届かない。体（四角）どうしの隙間で測るので、重なっていれば0になる。
@@ -1464,7 +1460,7 @@ function drawNumpad(ctx){
   let clrProg = 0;
   if(clrHold){
     clrProg = Math.min(1, (Date.now()-clrHold.t0)/CLR_HOLD_MS);
-    if(clrProg>=1){ blocks=[]; opChips=null; taskLog=[]; updateTargets(); clrHold=null; clrProg=0; }
+    if(clrProg>=1){ blocks=[]; taskLog=[]; updateTargets(); clrHold=null; clrProg=0; }
   }
   for(const b of getNumpadLayout()){
     const holding = (b.val==='CLR' && clrProg>0);
@@ -2189,7 +2185,7 @@ function handleStart(x,y,pid){
     if(ptInRect(x,y,gb.x,gb.y,gb.w,gb.h)){
       if(gb.val==='quiz') setQuizOn(!quizOn);
       else { taskOn = !taskOn; taskDone=false; taskLog=[]; stageOpen=false; stageDetail=-1;
-             blocks=[]; opChips=null; saveTask(); updateTargets(); }
+             blocks=[]; saveTask(); updateTargets(); }
       return;
     }
   }
@@ -2225,9 +2221,6 @@ function handleStart(x,y,pid){
       return;
     }
   }
-  for(const r of getOpChipRects()){
-    if(ptInRect(x,y,r.x-4,r.y-4,r.w+8,r.h+8)){ applyOpChip(r.op); return; }
-  }
   for(let i=blocks.length-1;i>=0;i--){
     const b=blocks[i];
     if(blockHit(b,x,y)){
@@ -2241,9 +2234,6 @@ function handleStart(x,y,pid){
 
 // クイズOFFのときの合体。本物のナンバーブロックスのように、枠も選択肢も出さず
 // その場で1体のキャラになる。演出は「生まれる」動きと光の粒だけ。
-// 直後にだけ小さな演算子ボタンを出し、押せば同じ2体で別の計算に切り替わる。
-let opChips = null;   // {a, b, op, block, until}
-const OP_CHIP_MS = 2600;
 
 function fuseBlocks(a, c){
   const na=a.num, nc=c.num;
@@ -2253,7 +2243,6 @@ function fuseBlocks(a, c){
   blocks = blocks.filter(bl => bl!==a && bl!==c);
   const res = makeFused(na, nc, mode, ans, cx, cy);
   for(let i=0;i<20;i++) fxParticles.push(new Particle(cx, cy));
-  opChips = { a:na, b:nc, op:mode, block:res, until:Date.now()+OP_CHIP_MS };
 }
 
 // 合体後のキャラを、2体がいた場所に置く
@@ -2265,55 +2254,6 @@ function makeFused(na, nc, op, ans, cx, cy){
   blocks.push(res);
   updateTargets();
   return res;
-}
-
-// 合体直後に出る小さな演算子ボタン。モードを変えずに他の計算へ行けるようにする。
-function getOpChipRects(){
-  if(!opChips || Date.now()>opChips.until) return [];
-  if(!blocks.includes(opChips.block)){ opChips=null; return []; }
-  const ops = opsAvailableFor(opChips.a, opChips.b);
-  if(ops.length<2) return [];
-  const w=34, h=30, gap=5;
-  const total = ops.length*w + (ops.length-1)*gap;
-  const b = opChips.block;
-  let x = Math.min(Math.max(playLeft(), b.x + b.width/2 - total/2), sw-EDGE_MARGIN-total);
-  const y = Math.max(TAB_H+4, b.y - h - 22);
-  return ops.map((op,i)=>({op, x:x+i*(w+gap), y:y, w:w, h:h}));
-}
-
-function drawOpChips(ctx){
-  const rects = getOpChipRects();
-  if(!rects.length) return;
-  const left = Math.max(0, opChips.until - Date.now());
-  const fade = Math.min(1, left/400);            // 消えぎわだけ薄くする
-  ctx.save();
-  ctx.globalAlpha = fade;
-  for(const r of rects){
-    const cur = r.op===opChips.op;
-    ctx.fillStyle = cur ? 'rgba(100,160,255,0.95)' : 'rgba(255,255,255,0.92)';
-    ctx.beginPath(); ctx.roundRect(r.x,r.y,r.w,r.h,8); ctx.fill();
-    ctx.strokeStyle = cur ? 'rgba(255,255,255,0.9)' : 'rgba(80,90,110,0.5)';
-    ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.roundRect(r.x,r.y,r.w,r.h,8); ctx.stroke();
-    ctx.fillStyle = cur ? 'white' : '#334';
-    ctx.font='bold 17px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText({'+':'＋','-':'−','x':'×','div':'÷'}[r.op], r.x+r.w/2, r.y+r.h/2);
-  }
-  ctx.restore();
-}
-
-// 演算子を押し直したら、同じ2体から別の答えのキャラに置き換える
-function applyOpChip(op){
-  if(!opChips) return;
-  const { a, b, block } = opChips;
-  const { n1, n2, ans } = calcPair(a, b, op);
-  if(taskLog.length) taskLog.pop();          // さっきの計算は無かったことにする
-  logStep(op, n1, n2, Math.max(1,Math.round(ans)));
-  const cx = block.x + block.width/2, cy = block.y + block.height/2;
-  blocks = blocks.filter(bl => bl!==block);
-  const res = makeFused(a, b, op, ans, cx, cy);
-  for(let i=0;i<10;i++) fxParticles.push(new Particle(cx, cy));
-  opChips = { a:a, b:b, op:op, block:res, until:Date.now()+OP_CHIP_MS };
 }
 
 // マジックミラーにキャラを入れたときの複製。元のキャラはそのまま残る。
@@ -2387,7 +2327,7 @@ function setMode(newMode){
   const isCalc = m => m!=='factor' && m!=='quiz';
   if(!isCalc(mode) || !isCalc(newMode)) blocks=[];
   if(!isCalcMode(newMode)){ stageOpen=false; stageDetail=-1; }
-  mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={}; clrHold=null; opChips=null; clockDrag=null; clockMerged=false;
+  mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={}; clrHold=null; clockDrag=null; clockMerged=false;
   fxParticles=[]; mirrorFlash=0; mirrorRing=0; mirrorReflect=0; mirrorReflectNum=0;
   homeFlash=0; homeOpen=0; homeNum=0; homeAfter=0; mirrorAfter=0; mirrorHandoff=0;
   for(const k in tgtFx) tgtFx[k]={open:0,after:0,flash:0,num:0};
@@ -2573,7 +2513,6 @@ function drawFrame(ts){
       // ミラーとおうちは最後に描く。持っているキャラで隠れると、
       // 鏡の中の映り込みや扉のあかりが見えなくなってしまうため。
       drawDropTargets(ctx, walkTime);
-      drawOpChips(ctx);
       // マジックミラーの紙吹雪
       for(const fp of fxParticles) fp.update();
       fxParticles = fxParticles.filter(fp=>fp.life>0);
