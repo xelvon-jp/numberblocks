@@ -338,7 +338,7 @@ function taskActive(){ return taskOn && mode!=='factor' && mode!=='quiz' && mode
 function startTask(i){
   taskIdx = Math.max(0, Math.min(TASKS.length-1, i));
   taskDone = false; taskLog = [];
-  blocks = []; puzzle = null;
+  blocks = []; puzzle = null; clearUndo();
   stageOpen = false; stageDetail = -1;
   saveTask(); updateTargets();
 }
@@ -376,6 +376,35 @@ const TAB_DEFS = [
 ];
 let tabBtns = [], sizeBtns = [], toggleBtns = [], opBarBtns = [];
 
+// ─── もどす（アンドゥ）────────────────────────────────────────────
+// 「まちがえた！」をすぐ取り消せるように、直前の場面を3つぶん覚えておく。
+// 覚えているのは、そのとき画面にいたキャラの数と位置だけ。
+const UNDO_MAX = 3;
+let undoStack = [];
+function pushUndo(){
+  undoStack.push({
+    items: blocks.map(b=>({ n:b.num, x:b.x, y:b.y })),
+    logLen: taskLog.length,
+    done: taskDone
+  });
+  if(undoStack.length > UNDO_MAX) undoStack.shift();   // 古いものから捨てる
+}
+function clearUndo(){ undoStack = []; }
+function canUndo(){ return undoStack.length > 0; }
+function doUndo(){
+  const snap = undoStack.pop(); if(!snap) return;
+  blocks = snap.items.map(it=>{
+    const b = new NumberBlock(it.n, it.x, it.y);
+    b.targetX = it.x; b.birth = 1;
+    return b;
+  });
+  if(taskLog.length > snap.logLen) taskLog.length = snap.logLen;
+  taskDone = snap.done;
+  puzzle = null; dragBlock = null; dragPtr = null; dragPointers = {};
+  for(let i=0;i<12;i++) fxParticles.push(new Particle(sw/2, calcFloor()-40));
+  updateTargets();
+}
+
 // ─── 演算子バー（数字キーのすぐ上）───────────────────────────────────
 // 数を出すキーと同じ指の届く場所に置く。選んでいるものだけを
 // 大きく・明るくして、いまどの計算をしているかがひと目で分かるようにする。
@@ -383,12 +412,40 @@ function railOn(){ return isCalcMode(); }
 function opBarH(){ return railOn() ? (isLandscape() ? 40 : 54) : 0; }
 // 遊ぶ場所の左端（いまは演算子バーが下にあるので、ふつうの余白のまま）
 function playLeft(){ return EDGE_MARGIN; }
+const UNDO_W = 74;   // 「もどす」ボタンの幅（演算子の右どなり）
 function opBarRects(){
   const h = opBarH(); if(!h) return [];
   const y = sh - getPadH() - h;
   const n = CALC_OPS.length, gap = 8, pad = 6;
-  const w = (sw - pad*2 - gap*(n-1)) / n;
-  return CALC_OPS.map((op,i)=>({ op:op, x:pad + i*(w+gap), y:y+4, w:w, h:h-9 }));
+  const w = (sw - pad*2 - gap*n - UNDO_W) / n;
+  const list = CALC_OPS.map((op,i)=>({ op:op, x:pad + i*(w+gap), y:y+4, w:w, h:h-9 }));
+  list.push({ op:'undo', x:pad + n*(w+gap), y:y+4, w:UNDO_W, h:h-9 });
+  return list;
+}
+
+// 「もどす」ボタン。あと何回もどせるかを丸で見せる（読めなくても分かる）
+function drawUndoBtn(ctx, r){
+  const ok = canUndo();
+  ctx.save();
+  ctx.fillStyle = ok ? 'rgba(255,196,60,0.97)' : 'rgba(255,255,255,0.45)';
+  ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 11); ctx.fill();
+  ctx.strokeStyle = ok ? 'rgba(180,120,10,0.55)' : 'rgba(70,90,120,0.22)';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 11); ctx.stroke();
+  ctx.fillStyle = ok ? '#5a3c00' : 'rgba(90,106,132,0.5)';
+  ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.font='bold 13px sans-serif';
+  ctx.fillText('↩ もどす', r.x + r.w/2, r.y + r.h/2 - 7);
+  // 残り回数の丸
+  const dr = 3.5, dg = 11, cy = r.y + r.h - 12;
+  const x0 = r.x + r.w/2 - dg*(UNDO_MAX-1)/2;
+  for(let i=0;i<UNDO_MAX;i++){
+    ctx.beginPath(); ctx.arc(x0 + i*dg, cy, dr, 0, Math.PI*2);
+    ctx.fillStyle = (i < undoStack.length)
+      ? (ok ? '#5a3c00' : '#8a97a8') : 'rgba(0,0,0,0.13)';
+    ctx.fill();
+  }
+  ctx.restore();
 }
 function drawOpBar(ctx, t){
   opBarBtns = [];
@@ -399,6 +456,7 @@ function drawOpBar(ctx, t){
   ctx.fillStyle='rgba(0,0,0,0.10)';
   ctx.fillRect(0, rects[0].y-4, sw, opBarH());
   for(const r of rects){
+    if(r.op === 'undo'){ drawUndoBtn(ctx, r); opBarBtns.push({x:r.x-3,y:r.y-4,w:r.w+6,h:r.h+8,op:'undo'}); continue; }
     const on = (r.op === mode);
     ctx.save();
     if(on){
@@ -529,6 +587,7 @@ let homeNum   = 0;     // 今どのキャラが入ろうとしているか
 // キャラをおうちへ帰す（＝画面から消す）
 function sendHome(b){
   const m=getHomeRect(); if(!m) return;
+  pushUndo();
   blocks = blocks.filter(x=>x!==b);
   logStep('home', b.num);
   homeNum = b.num; homeFlash = 1; homeAfter = 1;   // 離したあとに扉が閉じるまでを見せる
@@ -697,6 +756,7 @@ function drawScaleTarget(ctx, t, id){
 // ドロップされたキャラを2倍／半分に置き換える
 function scaleBlock(b, id){
   const m=getTargetRect(id); if(!m) return;
+  pushUndo();
   const n = scaledNum(id, b.num);
   logStep(id, b.num, null, n);
   blocks = blocks.filter(x=>x!==b);
@@ -1367,6 +1427,7 @@ function updateTargets(){
 
 function spawnBlock(num){
   if(blocks.length>=MAX_BLOCKS) return;
+  pushUndo();
   blocks.push(new NumberBlock(num,sw/2+(Math.random()-0.5)*100,TAB_H+76));
   logStep('new', num);
   updateTargets();
@@ -1460,7 +1521,7 @@ function drawNumpad(ctx){
   let clrProg = 0;
   if(clrHold){
     clrProg = Math.min(1, (Date.now()-clrHold.t0)/CLR_HOLD_MS);
-    if(clrProg>=1){ blocks=[]; taskLog=[]; updateTargets(); clrHold=null; clrProg=0; }
+    if(clrProg>=1){ pushUndo(); blocks=[]; taskLog=[]; updateTargets(); clrHold=null; clrProg=0; }
   }
   for(const b of getNumpadLayout()){
     const holding = (b.val==='CLR' && clrProg>0);
@@ -2178,13 +2239,17 @@ function getPos(e,t){
 function handleStart(x,y,pid){
   // いちらんを出しているあいだは、ほかのボタンには触れさせない
   if(stageOpen){ handleStageTap(x,y); return; }
-  for(const ob of opBarBtns){ if(ptInRect(x,y,ob.x,ob.y,ob.w,ob.h)){ setMode(ob.op); return; } }
+  for(const ob of opBarBtns){
+    if(!ptInRect(x,y,ob.x,ob.y,ob.w,ob.h)) continue;
+    if(ob.op==='undo') doUndo(); else setMode(ob.op);
+    return;
+  }
   for(const sb of sizeBtns){ if(ptInRect(x,y,sb.x,sb.y,sb.w,sb.h)){ setBlockSize(sb.val); return; } }
   for(const tb of tabBtns){ if(ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)){ setMode(tb.val); return; } }
   for(const gb of toggleBtns){
     if(ptInRect(x,y,gb.x,gb.y,gb.w,gb.h)){
       if(gb.val==='quiz') setQuizOn(!quizOn);
-      else { taskOn = !taskOn; taskDone=false; taskLog=[]; stageOpen=false; stageDetail=-1;
+      else { taskOn = !taskOn; taskDone=false; taskLog=[]; clearUndo(); stageOpen=false; stageDetail=-1;
              blocks=[]; saveTask(); updateTargets(); }
       return;
     }
@@ -2236,6 +2301,7 @@ function handleStart(x,y,pid){
 // その場で1体のキャラになる。演出は「生まれる」動きと光の粒だけ。
 
 function fuseBlocks(a, c){
+  pushUndo();
   const na=a.num, nc=c.num;
   const cx=(a.cx + c.cx)/2, cy=(a.cy + c.cy)/2;
   const { n1, n2, ans } = calcPair(na, nc, mode);
@@ -2263,6 +2329,7 @@ function duplicateAtMirror(b){
   // 速度を消して、ミラーの真下から落としなおす。
   if(m){ b.vx=0; b.vy=0; b.y=Math.max(b.y, m.y+m.h+4); }
   if(m && blocks.length < MAX_BLOCKS){
+    pushUndo();
     const copy=new NumberBlock(b.num, m.x+m.w/2, m.y+m.h+4);
     copy.x = m.x + m.w/2 - copy.width/2;
     // 元のキャラは真下に落ちるので、複製は左斜め下へ飛ばす。
@@ -2312,7 +2379,7 @@ function handleEnd(x,y,pid){
     if(d<MERGE_REACH&&canCalc(b,other,mode)&&d<bestD){ bestD=d; best=other; }
   }
   if(best){
-    if(quizOn) { blocks=blocks.filter(bl=>bl!==b&&bl!==best); puzzle=new Puzzle(b,best,mode); }
+    if(quizOn) { pushUndo(); blocks=blocks.filter(bl=>bl!==b&&bl!==best); puzzle=new Puzzle(b,best,mode); }
     else       { fuseBlocks(b,best); }
   }
   updateTargets();
@@ -2328,6 +2395,7 @@ function setMode(newMode){
   if(!isCalc(mode) || !isCalc(newMode)) blocks=[];
   if(!isCalcMode(newMode)){ stageOpen=false; stageDetail=-1; }
   mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={}; clrHold=null; clockDrag=null; clockMerged=false;
+  if(!isCalcMode(newMode)) clearUndo();
   fxParticles=[]; mirrorFlash=0; mirrorRing=0; mirrorReflect=0; mirrorReflectNum=0;
   homeFlash=0; homeOpen=0; homeNum=0; homeAfter=0; mirrorAfter=0; mirrorHandoff=0;
   for(const k in tgtFx) tgtFx[k]={open:0,after:0,flash:0,num:0};
