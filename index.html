@@ -330,21 +330,72 @@ function hintReady(){
   if(taskLog.length >= (t.best||0) + HINT_AFTER_MOVES) return true;
   return taskStartT > 0 && (Date.now() - taskStartT) > HINT_AFTER_MS;
 }
+// ── だれが遊んでいるか ────────────────────────────────────────────
+// ひなたの記録と、パパの下見（テストプレイ）の記録を混ぜない。
+// クリア状況・てじゅん・いま何問めかを、ひとりずつ別に持つ。
+const PROFILES = [
+  { id:'hinata', name:'ひなた', color:'#3f8fd0' },
+  { id:'papa',   name:'パパ',   color:'#d9813a' }
+];
+let profileIdx = 0;
+function profile(){ return PROFILES[profileIdx]; }
+function emptyRec(){ return { idx:0, cleared:{}, logs:{} }; }
+let taskStore = { hinata:emptyRec(), papa:emptyRec() };
+
 try{
   const raw = localStorage.getItem(TASK_KEY);
   if(raw){
     const v = JSON.parse(raw);
-    taskOn = !!v.on; taskIdx = Math.min(TASKS.length-1, v.idx|0);
-    if(v.cleared) for(const k of v.cleared) taskCleared[k] = true;
-    if(v.logs) taskLogs = v.logs;
+    taskOn = !!v.on;
+    if(v.v === 2 && v.p){
+      for(const pr of PROFILES){
+        const r = v.p[pr.id];
+        if(r) taskStore[pr.id] = { idx:r.idx|0, cleared:r.cleared||{}, logs:r.logs||{} };
+      }
+      const i = PROFILES.findIndex(pr=>pr.id === v.cur);
+      if(i >= 0) profileIdx = i;
+    } else {
+      // ひとりぶんしか無かったころの記録。ひなたのものとして引き継ぐ。
+      const cl = {};
+      if(v.cleared) for(const k of v.cleared) cl[k] = true;
+      taskStore.hinata = { idx:v.idx|0, cleared:cl, logs:v.logs||{} };
+    }
   }
 }catch(e){}
+
+// いま選んでいる子の記録を、遊び中に使う変数へつなぎ直す。
+// 中身は同じオブジェクトを指すので、書き込みはそのまま記録に残る。
+function loadProfileState(){
+  const r = taskStore[profile().id] || (taskStore[profile().id] = emptyRec());
+  taskIdx = Math.min(TASKS.length-1, r.idx|0);
+  taskCleared = r.cleared;
+  taskLogs    = r.logs;
+}
+loadProfileState();
+
 function saveTask(){
+  const r = taskStore[profile().id];
+  r.idx = taskIdx; r.cleared = taskCleared; r.logs = taskLogs;
   try{
     localStorage.setItem(TASK_KEY, JSON.stringify({
-      on:taskOn, idx:taskIdx, cleared:Object.keys(taskCleared), logs:taskLogs
+      v:2, on:taskOn, cur:profile().id, p:taskStore
     }));
   }catch(e){}
+}
+
+function setProfile(i){
+  if(i === profileIdx || !PROFILES[i]) return;
+  saveTask();                 // いままでの子の記録をしまう
+  profileIdx = i;
+  loadProfileState();
+  taskDone = false; taskLog = []; winFx = null;
+  hintOn = false; hintShownAt = 0; taskStartT = Date.now();
+  blocks = []; puzzle = null; clearUndo();
+  stageDetail = -1;
+  saveTask(); updateTargets();
+}
+function clearedCountOf(id){
+  const r = taskStore[id]; return r ? Object.keys(r.cleared).length : 0;
 }
 function currentTask(){ return TASKS[Math.min(taskIdx, TASKS.length-1)]; }
 function taskActive(){ return taskOn && mode!=='factor' && mode!=='quiz' && mode!=='clock'; }
@@ -2152,17 +2203,8 @@ function drawTaskCard(ctx, t){
     taskBtns.push({x:bx1,y:by,w:tw,h:bh,val:'steps'});
     taskBtns.push({x:bx2,y:by,w:nw,h:bh,val:'next'});
   } else {
-    // 「◯をつくろう！」。使える数字は数字キーを見れば分かるので書かない。
-    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
-    const ty0 = r.y+33;
-    ctx.fillStyle='#16233a'; ctx.font='bold 28px sans-serif';
-    ctx.fillText(String(task.n), r.x+16, ty0);
-    const nw = ctx.measureText(String(task.n)).width;
-    ctx.font='bold 18px sans-serif'; ctx.fillStyle='#2b3a52';
-    ctx.fillText(' を つくろう！', r.x+16+nw, ty0);
-    ctx.textBaseline='middle';
 
-    // 右：ヒントと、ステージいちらんへ（何面めかも見せる）
+    // 右：あそんでいる子・ヒント・ステージいちらん
     const bh=36, by=r.y+7;
     const bw=64, bx=r.x+r.w-bw-10;
     ctx.fillStyle = lv.color;
@@ -2173,6 +2215,7 @@ function drawTaskCard(ctx, t){
     ctx.font='bold 10px sans-serif';
     ctx.fillText('いちらん', bx+bw/2, by+27);
     taskBtns.push({x:bx,y:by,w:bw,h:bh,val:'stages'});
+    let leftOfBtns = bx;   // 右に並べたボタンの、いちばん左のふち
 
     // ヒントは最初から出さない。なかなか解けないときだけ、ふわっと出てくる。
     if(hintReady()){
@@ -2196,9 +2239,39 @@ function drawTaskCard(ctx, t){
       ctx.font='bold 9px sans-serif';  ctx.fillText('ヒント', hx+hw/2, by+28);
       ctx.restore();
       taskBtns.push({x:hx,y:by,w:hw,h:bh,val:'hint'});
+      leftOfBtns = hx;
     } else if(hintOn){
       hintOn = false;   // 出す条件から外れたら、ふきだしも閉じる
     }
+
+    // だれの記録として残るのかが分かるように、名前を出しておく
+    const nw2=54, nx=leftOfBtns-nw2-6;
+    ctx.fillStyle = profile().color;
+    ctx.beginPath(); ctx.roundRect(nx,by+4,nw2,bh-8,8); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.textAlign='center';
+    ctx.font='bold 12px sans-serif'; ctx.fillText(profile().name, nx+nw2/2, by+bh/2);
+    taskBtns.push({x:nx,y:by+4,w:nw2,h:bh-8,val:'stages'});
+
+    // 「◯をつくろう！」。使える数字は数字キーを見れば分かるので書かない。
+    // 右のボタンにぶつかりそうなら、ひと回り小さくして収める。
+    const titleMax = nx - r.x - 22;
+    const tail = ' を つくろう！';
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    let f1 = 28, f2 = 18;
+    for(let k=0;k<3;k++){
+      ctx.font='bold '+f1+'px sans-serif';
+      const w1 = ctx.measureText(String(task.n)).width;
+      ctx.font='bold '+f2+'px sans-serif';
+      if(w1 + ctx.measureText(tail).width <= titleMax) break;
+      f1 -= 4; f2 -= 2;
+    }
+    const ty0 = r.y+33;
+    ctx.fillStyle='#16233a'; ctx.font='bold '+f1+'px sans-serif';
+    ctx.fillText(String(task.n), r.x+16, ty0);
+    const nw = ctx.measureText(String(task.n)).width;
+    ctx.font='bold '+f2+'px sans-serif'; ctx.fillStyle='#2b3a52';
+    ctx.fillText(tail, r.x+16+nw, ty0);
+    ctx.textBaseline='middle';
   }
   ctx.restore();
 
@@ -2245,10 +2318,28 @@ function drawStageSelect(ctx, t){
 
   // 見出し
   ctx.textBaseline='middle'; ctx.textAlign='left';
-  ctx.fillStyle='#fff'; ctx.font='bold 17px sans-serif';
+  ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif';
   ctx.fillText('ステージ', g.pad, TAB_H+26);
-  ctx.fillStyle='#9fb4d0'; ctx.font='bold 12px sans-serif';
-  ctx.fillText('クリア ' + clearedCount() + ' / ' + TASKS.length, g.pad+84, TAB_H+27);
+
+  // だれの記録を見ているか。押すとその子に切り替わる（記録は別々）
+  const pw=74, ph=32, pgap=5, px0=g.pad+66, py=TAB_H+10;
+  PROFILES.forEach((pr,i)=>{
+    const x = px0 + i*(pw+pgap), on = (i===profileIdx);
+    ctx.fillStyle = on ? pr.color : 'rgba(255,255,255,0.07)';
+    ctx.beginPath(); ctx.roundRect(x,py,pw,ph,9); ctx.fill();
+    ctx.strokeStyle = on ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.22)';
+    ctx.lineWidth = on ? 2 : 1;
+    ctx.beginPath(); ctx.roundRect(x,py,pw,ph,9); ctx.stroke();
+    ctx.textAlign='center';
+    ctx.fillStyle = on ? '#fff' : '#b9c8dc';
+    ctx.font='bold 12px sans-serif'; ctx.fillText(pr.name, x+pw/2, py+11);
+    ctx.font='bold 10px sans-serif';
+    ctx.fillStyle = on ? 'rgba(255,255,255,0.85)' : '#8fa2bb';
+    ctx.fillText(clearedCountOf(pr.id) + ' / ' + TASKS.length, x+pw/2, py+24);
+    stageBtns.push({x:x,y:py,w:pw,h:ph,val:'prof',i:i});
+  });
+  ctx.textAlign='left';
+
   const cw2=62, ch2=30, cx2=sw-g.pad-cw2, cy2=TAB_H+11;
   drawCardBtn(ctx, cx2, cy2, cw2, ch2, 'とじる', 'rgba(255,255,255,0.9)', '#22314a');
   stageBtns.push({x:cx2,y:cy2,w:cw2,h:ch2,val:'close'});
@@ -2345,7 +2436,8 @@ function handleStageTap(x,y){
   for(let i=stageBtns.length-1;i>=0;i--){
     const b = stageBtns[i];
     if(!ptInRect(x,y,b.x,b.y,b.w,b.h)) continue;
-    if(b.val==='close'){ stageOpen=false; stageDetail=-1; }
+    if(b.val==='prof'){ setProfile(b.i); }
+    else if(b.val==='close'){ stageOpen=false; stageDetail=-1; }
     else if(b.val==='closeDetail'){ stageDetail=-1; }
     else if(b.val==='retry'){ startTask(b.idx); }
     else if(b.val==='go'){
