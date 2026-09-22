@@ -1612,35 +1612,80 @@ function drawClockParts(ctx, t, g){
     return;
   }
 
+  // 5は2体でペアにして手をつなぐ。ペアの下に「10」を出すので、
+  // 10のかたまりがいくつあるかが一目で分かる。
   const items = [];
   for(let i=0;i<groups;i++) items.push(5);
   const rem = min%5; if(rem) items.push(rem);
-  let totalCols = 0, maxRows = 1;
-  for(const n of items){ const sp=clockPartSpec(n); totalCols+=sp.cols; if(sp.rows>maxRows) maxRows=sp.rows; }
-  const bs = Math.max(3, Math.min(24, (a.w - (items.length-1)*gap)/totalCols, availH/maxRows));
+  const nFives = groups;
 
-  // 式（5 + 5 + 5 = 15）
+  // ペアの中は腕が届く間隔、ペアとペアのあいだは広め。
+  // 間隔は1マスの大きさに比例するので、先に「1マス何個ぶん空くか」を数える。
+  const GAP_IN = 0.55, GAP_OUT = 1.6;
+  const gapUnitAt = i => (i < nFives && i % 2 === 1) ? GAP_IN : GAP_OUT;
+  let totalCols = 0, maxRows = 1, gapUnits = 0;
+  for(let i=0;i<items.length;i++){
+    const sp = clockPartSpec(items[i]);
+    totalCols += sp.cols; if(sp.rows>maxRows) maxRows = sp.rows;
+    if(i>0) gapUnits += gapUnitAt(i);
+  }
+  const labelH = 20;                                  // 下に「10」を出すぶん
+  const bs = Math.max(3, Math.min(24, a.w/(totalCols+gapUnits), (availH-labelH)/maxRows));
+  const baseY = a.bottom - labelH;
+
   drawClockFormula(ctx, items.join(' + ') + ' = ' + min, a.top);
 
-  // 下ぞろえで並べる。いちばん最後に増えた1体だけ「ぽんっ」と跳ねる
-  const totalW = totalCols*bs + (items.length-1)*gap;
-  let x = sw/2 - totalW/2;
-  const pop = Math.max(0, 1 - (Date.now()-clockPopAt)/260);
+  // 位置を先に決めてから描く（ペアの下に線を引くため）
+  const place = [];
+  let x = sw/2 - (totalCols*bs + gapUnits*bs)/2;
   for(let i=0;i<items.length;i++){
-    const n = items[i], sp = clockPartSpec(n);
-    const w = sp.cols*bs, h = sp.rows*bs, y = a.bottom - h;
-    const isNew = (pop>0 && rem===0 && i===items.length-1);
+    if(i>0) x += gapUnitAt(i)*bs;
+    const sp = clockPartSpec(items[i]);
+    place.push({ n:items[i], sp:sp, x:x, w:sp.cols*bs, h:sp.rows*bs });
+    x += sp.cols*bs;
+  }
+
+  // ペアの下の「10」
+  ctx.save();
+  ctx.strokeStyle='rgba(40,60,90,0.55)'; ctx.lineWidth=2; ctx.lineCap='round';
+  ctx.font='bold 13px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
+  for(let i=0;i+1<nFives;i+=2){
+    const L=place[i], R=place[i+1];
+    const y = baseY + 5;
+    ctx.beginPath(); ctx.moveTo(L.x, y); ctx.lineTo(R.x+R.w, y); ctx.stroke();
+    ctx.strokeStyle='white'; ctx.lineWidth=4; ctx.lineJoin='round';
+    ctx.strokeText('10', (L.x+R.x+R.w)/2, y+2);
+    ctx.fillStyle='#233'; ctx.fillText('10', (L.x+R.x+R.w)/2, y+2);
+    ctx.strokeStyle='rgba(40,60,90,0.55)'; ctx.lineWidth=2;
+  }
+  ctx.restore();
+
+  // 増えた瞬間の1体だけ「ぽんっ」と跳ねる
+  const pop = Math.max(0, 1 - (Date.now()-clockPopAt)/260);
+  for(let i=0;i<place.length;i++){
+    const it = place[i], y = baseY - it.h;
+    const isNew = (pop>0 && rem===0 && i===place.length-1);
     if(isNew){
       const e = 1-pop, sc = 0.45 + 0.55*e;
       ctx.save();
-      ctx.translate(x+w/2, y+h); ctx.scale(sc,sc); ctx.translate(-(x+w/2), -(y+h));
-      drawNumberblock(ctx, n, x, y, bs, { t:t, animate:true, numberling:false, spec:sp });
+      ctx.translate(it.x+it.w/2, y+it.h); ctx.scale(sc,sc); ctx.translate(-(it.x+it.w/2), -(y+it.h));
+      drawNumberblock(ctx, it.n, it.x, y, bs, { t:t, animate:true, numberling:false, spec:it.sp });
       ctx.restore();
     } else {
-      drawNumberblock(ctx, n, x, y, bs, { t:t, animate:false, numberling:false, spec:sp });
+      drawNumberblock(ctx, it.n, it.x, y, bs, { t:t, animate:false, numberling:false, spec:it.sp });
     }
-    x += w + gap;
   }
+
+  // つないだ手の印。腕は体の後ろに描かれるので、そのままだと隣の体に隠れて
+  // 「手をつないでいる」ことが伝わらない。合わさる位置に丸を重ねて示す。
+  const clasp = darken(oneCellColor(5,0), 0.55);
+  ctx.save(); ctx.fillStyle = rgb(clasp);
+  for(let i=0;i+1<nFives;i+=2){
+    const L=place[i], R=place[i+1];
+    const cx2 = (L.x+L.w + R.x)/2, cy2 = baseY - L.h*0.40;
+    ctx.beginPath(); ctx.arc(cx2, cy2, Math.max(2.5, bs*0.17), 0, Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
 }
 
 function drawClockFormula(ctx, txt, y){

@@ -1772,6 +1772,8 @@ function drawFace(ctx, spec, x, y, bs, geo){
   const f = spec.face;
   // 100より大きい数の頭は10×10の板。顔の寸法は 100 の設定をそのまま借りる。
   const G = getFaceGeom(spec.n > 100 ? 100 : spec.n);
+  // 設計データ側に顔の指定があれば上書きする（1列に積み直した形などで使う）
+  if(spec.faceGeom){ for(const k in spec.faceGeom) G[k] = spec.faceGeom[k]; }
   const w = spec.cols*bs, h = spec.rows*bs;
 
   // 顔は「その行（既定は一番上の2段）が実際に存在する範囲」の中央に置く。
@@ -2080,8 +2082,14 @@ function columnSpec(n){
                  colorRGB:col, borderRGB:bor, isTen:false, isHundred:false });
   }
   const p = numProps(n);
-  return (_colSpecCache[n] = { n:n, cols:1, rows:n, cells:cells, groups:groups,
-                               face:faceSpec(n,p), props:p });
+  const spec = { n:n, cols:1, rows:n, cells:cells, groups:groups,
+                 face:faceSpec(n,p), props:p };
+  // 4 や 9 のように本来は横に広いキャラは、顔も横幅に合わせて作られている。
+  // 1列にすると目が大きすぎ、口が2段目にはみ出すので、細い体向けに直す。
+  if(blockSpec(n).cols > 1){
+    spec.faceGeom = { eyeScale:0.80, faceOffsetY:0, mouthOffsetY:0 };
+  }
+  return (_colSpecCache[n] = spec);
 }
 
 /* ── 0（ゼロ）───────────────────────────────────────────────────────
