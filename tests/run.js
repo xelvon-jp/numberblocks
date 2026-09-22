@@ -75,7 +75,7 @@ function makeT(browser, baseUrl){
       await sleep(250);
       if(!o.keepPicker){
         await page.evaluate(who => {
-          if(whoOpen){ whoOpen = false; setWhoOverlay(false); }
+          whoOpen = false;
           const i = PROFILES.findIndex(p => p.id === who);
           if(i >= 0) setProfile(i);
           setQuizOn(false);

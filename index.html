@@ -57,25 +57,6 @@
       position:fixed; left:0; bottom:0; width:0;
       height:env(safe-area-inset-bottom, 0px); pointer-events:none;
     }
-    #fs-btn {
-      position:fixed; top:6px; right:6px; z-index:20;
-      width:36px; height:36px; border-radius:8px;
-      background:rgba(0,0,0,0.45); border:1.5px solid rgba(255,255,255,0.35);
-      color:white; font-size:18px; cursor:pointer;
-      display:flex; align-items:center; justify-content:center;
-      transition:background 0.15s;
-    }
-    #fs-btn:hover { background:rgba(60,60,60,0.75); }
-    /* ずかん（キャラメイク）へ行き来するボタン。フルスクリーンの左隣 */
-    #zukan-btn {
-      position:fixed; top:6px; right:48px; z-index:20;
-      height:36px; padding:0 12px; border-radius:8px;
-      background:rgba(0,0,0,0.45); border:1.5px solid rgba(255,255,255,0.35);
-      color:white; font-size:13px; font-weight:700; cursor:pointer;
-      display:flex; align-items:center; justify-content:center;
-      text-decoration:none; transition:background 0.15s;
-    }
-    #zukan-btn:hover { background:rgba(60,60,60,0.75); }
     #factor-ui {
       display:none; position:fixed;
       bottom:0; left:0; right:0;
@@ -127,8 +108,6 @@
 <div id="safe-probe"></div>
 <button id="ver-btn" type="button" title="バージョン／再読み込み"></button>
 <div id="ver-hint"><span>↻ よみこみ</span><div class="bar"><i></i></div></div>
-<a id="zukan-btn" href="zukan.html" title="ずかん・キャラメイクへ">ずかん</a>
-<button id="fs-btn" title="フルスクリーン">⛶</button>
 <div id="factor-ui">
   <div id="factor-num">12</div>
   <input type="range" id="factor-range" min="1" max="100" value="12">
@@ -191,13 +170,12 @@ let bsKey = 'A';              // 開いたときは A（オート）から始め
 let BS = BS_MAP.L;
 const GRAVITY  = 0.4;
 const GH       = 50;
-// 上部バーは2段。上段＝S/M/L・マジックミラー・（HTML側の）ずかん/全画面、
-// 下段＝モードタブ。1段に詰めると幅が足りず重なるので段を分けている。
-const TAB_ROW_H = 36;                        // モードタブ1行ぶんの高さ
-const TOP_ROW_H = 44;                        // S/M/L とマジックミラーの行
+// 上部バーはモードタブの1段だけ。キャラの大きさ・クイズ・おだい・ずかん などの
+// めったに変えない設定は、右はしの歯車から開く「せってい」にまとめてある。
+const TAB_ROW_H = 40;                        // モードタブ1行ぶんの高さ
+const TOP_ROW_H = 4;                         // タブの上に少しだけあける
 const TAB_H     = TOP_ROW_H + TAB_ROW_H;     // 上部バー全体の高さ
-const BAR_LEFT_RESERVE  = 116;               // 左に空ける幅（S/M/L/A ボタン）
-const BAR_RIGHT_RESERVE = 116;               // 右に空ける幅（ずかん・全画面ボタン）
+const GEAR_W    = 46;                        // 右はしの歯車ボタンの幅
 const FACTOR_H = 115;
 const QUIZ_H   = 115;
 const MAX_NUM = 1000;    // 出せる数の上限。101以上は板・棒・粒で組み立てる
@@ -464,7 +442,7 @@ function guardKidProfile(){
   if(whoOpen || !profile().kid) return;       // 大人どうしは見張らない
   if(Date.now() - lastTouchAt < KID_IDLE_MS) return;
   setProfile(PAPA_IDX);
-  whoOpen = true; setWhoOverlay(true);
+  whoOpen = true;
 }
 
 // ── ゆびの おおきさ ──────────────────────────────────────────────
@@ -588,7 +566,7 @@ const TAB_DEFS = [
   {label:'けいさん', val:'calc'}, {label:'因数', val:'factor'},
   {label:'ドリル', val:'quiz'},   {label:'とけい', val:'clock'}
 ];
-let tabBtns = [], sizeBtns = [], toggleBtns = [], opBarBtns = [];
+let tabBtns = [], opBarBtns = [];
 
 // ─── もどす（アンドゥ）────────────────────────────────────────────
 // 「まちがえた！」をすぐ取り消せるように、直前の場面を3つぶん覚えておく。
@@ -699,8 +677,6 @@ function drawTabsAndUI(ctx){
   // ＋−×÷ の段を出さないモードでは、当たり判定も消しておく
   // （残っていると、ドリル中にそこを触って計算モードへ飛んでしまう）
   if(!railOn()) opBarBtns = [];
-  drawSizeButtons(ctx);
-  drawQuizToggle(ctx);
   drawModeTabs(ctx);
   // おだい中は、いまだれの記録に残るのかを細い帯で常に見せる
   if(taskActive()){
@@ -711,25 +687,6 @@ function drawTabsAndUI(ctx){
   }
   // ミラーはタブの位置を使って置くので、タブを並べたあとに描く。
   // 床のキャラに隠れないよう、実際の描画はメインループ側から呼ぶ。
-}
-
-// 上段左：キャラの大きさ S/M/L
-function drawSizeButtons(ctx){
-  const szW=26, szH=30, szY=Math.round((TOP_ROW_H-szH)/2);
-  sizeBtns = [];
-  SIZE_KEYS.forEach((k,i)=>{
-    const bx=4+i*(szW+2), by=szY, active=bsKey===k;
-    ctx.save();
-    ctx.fillStyle=active?'rgba(255,180,0,0.95)':'rgba(82,92,110,0.95)';
-    ctx.beginPath(); ctx.roundRect(bx,by,szW,szH,6); ctx.fill();
-    ctx.strokeStyle=active?'rgba(255,255,255,0.75)':'rgba(255,255,255,0.35)';
-    ctx.lineWidth=1.5; ctx.beginPath(); ctx.roundRect(bx,by,szW,szH,6); ctx.stroke();
-    ctx.fillStyle=active?'#333':'#eef2f8'; ctx.font='bold 13px sans-serif';
-    ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(k,bx+szW/2,by+szH/2);
-    ctx.restore();
-    sizeBtns.push({x:bx,y:by,w:szW,h:szH,val:k});
-  });
 }
 
 // ─── マジックミラー ───────────────────────────────────────────────────────────
@@ -1167,38 +1124,10 @@ function drawMirror(ctx, t){
   ctx.restore();
 }
 
-// 上段中央：合体したときにクイズを出すかどうかの切り替え。
-// ドリルモードはクイズそのものなので、そこでは出さない。
-function drawQuizToggle(ctx){
-  toggleBtns = [];
-  if(mode==='factor'||mode==='quiz'||mode==='clock') return;
-  const h=30, gap=6, y=Math.round((TOP_ROW_H-h)/2);
-  const left = BAR_LEFT_RESERVE, right = sw - BAR_RIGHT_RESERVE;
-  const w = Math.min(76, Math.floor((right-left-gap)/2));
-  const x0 = Math.round((left+right)/2 - w - gap/2);
-  const defs = [
-    { val:'quiz', on:quizOn, label:'クイズ '+(quizOn?'ON':'OFF') },
-    { val:'task', on:taskOn, label:'おだい '+(taskOn?'ON':'OFF') }
-  ];
-  defs.forEach((d,i)=>{
-    const x = x0 + i*(w+gap);
-    ctx.save();
-    ctx.fillStyle = d.on ? 'rgba(100,160,255,0.95)' : 'rgba(82,92,110,0.95)';
-    ctx.beginPath(); ctx.roundRect(x,y,w,h,8); ctx.fill();
-    ctx.strokeStyle='rgba(255,255,255,'+(d.on?0.75:0.35)+')'; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.roundRect(x,y,w,h,8); ctx.stroke();
-    ctx.fillStyle='white'; ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.font='bold 11px sans-serif';
-    ctx.fillText(d.label, x+w/2, y+h/2);
-    ctx.restore();
-    toggleBtns.push({x:x,y:y,w:w,h:h,val:d.val});
-  });
-}
-
-// 下段：モードタブ（＋ − × ÷ 因数 ドリル）。画面幅いっぱいに等分する
+// モードタブ（けいさん 因数 ドリル とけい）と、右はしの歯車（せってい）
 function drawModeTabs(ctx){
   const pad = 3;
-  const tabW = (sw - pad*2) / TAB_DEFS.length;
+  const tabW = (sw - pad*2 - GEAR_W) / TAB_DEFS.length;
   tabBtns = [];
   let tx = pad;
   for(let i=0;i<TAB_DEFS.length;i++){
@@ -1220,6 +1149,35 @@ function drawModeTabs(ctx){
     tabBtns.push({x:tx+2,y:ty+2,w:tabW-4,h:TAB_ROW_H-4,val:td.val});
     tx += tabW;
   }
+  // 歯車。めったに使わないので、タブより控えめな色にする
+  const gx = tx+2, gy = TOP_ROW_H+2, gw = GEAR_W-4, gh = TAB_ROW_H-4;
+  ctx.save();
+  ctx.fillStyle = setOpen ? 'rgba(100,160,255,0.95)' : 'rgba(82,92,110,0.75)';
+  ctx.beginPath(); ctx.roundRect(gx,gy,gw,gh,8); ctx.fill();
+  drawGear(ctx, gx+gw/2, gy+gh/2, 10, '#eef2f8', setOpen ? '#5c8fe0' : '#5a6576');
+  ctx.restore();
+  tabBtns.push({x:gx,y:gy,w:gw,h:gh,val:'settings'});
+}
+
+// 歯車の絵。絵文字の⚙は端末によってカラーになってしまうので自分で描く
+function drawGear(ctx, cx, cy, r, color, hole){
+  const teeth = 8, inner = r*0.72, tw = 0.30;
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for(let i=0;i<teeth;i++){
+    const a = i/teeth*Math.PI*2;
+    ctx.lineTo(cx+Math.cos(a-tw)*inner, cy+Math.sin(a-tw)*inner);
+    ctx.lineTo(cx+Math.cos(a-tw*0.6)*r,  cy+Math.sin(a-tw*0.6)*r);
+    ctx.lineTo(cx+Math.cos(a+tw*0.6)*r,  cy+Math.sin(a+tw*0.6)*r);
+    ctx.lineTo(cx+Math.cos(a+tw)*inner, cy+Math.sin(a+tw)*inner);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy, r*0.34, 0, Math.PI*2);
+  ctx.fillStyle = hole;                          // まん中の穴
+  ctx.fill();
+  ctx.restore();
 }
 
 // ─── NumberBlock ──────────────────────────────────────────────────────────────
@@ -2576,6 +2534,117 @@ function drawStageSelect(ctx, t){
   else if(stageDetail>=0) drawStageDetail(ctx, stageDetail);
 }
 
+// ─── せってい ─────────────────────────────────────────────────────
+// めったに変えないものをまとめた画面。タブ右はしの歯車から開く。
+let setOpen = false, setBtns = [];
+const CAN_FULLSCREEN = !!(document.documentElement.requestFullscreen);  // iPhoneでは使えない
+
+function toggleFullscreen(){
+  if(!document.fullscreenElement){
+    const p = document.documentElement.requestFullscreen && document.documentElement.requestFullscreen();
+    if(p && p.catch) p.catch(()=>{});
+  } else if(document.exitFullscreen){
+    document.exitFullscreen();
+  }
+}
+
+// おだいを入れたり切ったりする。入れるときは、だれの記録にするかを先に聞く
+// （パパやママが気づかず ひなたの記録で遊んでしまわないように）。
+function setTaskOn(v){
+  if(taskOn === v) return;
+  taskOn = v; taskDone = false; taskLog = []; clearUndo();
+  stageOpen = false; stageDetail = -1;
+  hintOn = false; hintShownAt = 0; taskStartT = Date.now();
+  blocks = []; saveTask(); updateTargets();
+  if(v){ setOpen = false; whoOpen = true; }
+}
+
+function drawSettings(ctx){
+  setBtns = [];
+  const rows = [
+    { label:'キャラの おおきさ', key:'size',
+      opts: SIZE_KEYS.map(k => ({ text:k, v:k, on: bsKey === k })) },
+    { label:'クイズ（がったいで もんだい）', key:'quiz',
+      opts: [{ text:'ON', v:true, on:quizOn }, { text:'OFF', v:false, on:!quizOn }] },
+    { label:'おだい', key:'task',
+      opts: [{ text:'ON', v:true, on:taskOn }, { text:'OFF', v:false, on:!taskOn }] },
+  ];
+  // 横向きなど高さが足りないときは、行とボタンを詰めて収める
+  const avail = sh - TAB_H - 16;
+  const fullH = 54 + rows.length*54 + 14 + 44 + 12 + 44 + 16;
+  const tight = fullH > avail;
+  const rowH = tight ? 44 : 54, bigH = tight ? 38 : 44, w = Math.min(360, sw-20);
+  const h = 54 + rows.length*rowH + 14 + bigH + (tight ? 8 : 12) + bigH + (tight ? 10 : 16);
+  const x = (sw-w)/2, y = TAB_H + 8 + Math.max(0, (avail - h)/2);
+
+  ctx.save();
+  ctx.fillStyle='rgba(14,24,40,0.6)'; ctx.fillRect(0,TAB_H,sw,sh-TAB_H);
+  ctx.fillStyle='#fdfdff';
+  ctx.beginPath(); ctx.roundRect(x,y,w,h,14); ctx.fill();
+  ctx.textBaseline='middle'; ctx.textAlign='left';
+  ctx.fillStyle='#16233a'; ctx.font='bold 18px sans-serif';
+  ctx.fillText('せってい', x+16, y+28);
+
+  let ty = y+54;
+  for(const r of rows){
+    ctx.textAlign='left'; ctx.fillStyle='#2b3a52'; ctx.font='bold 13px sans-serif';
+    // ラベルが長いときは、かっこの中を小さく2行めへ
+    const m = r.label.match(/^(.*?)（(.*)）$/);
+    if(m){
+      ctx.fillText(m[1], x+16, ty+rowH/2-7);
+      ctx.fillStyle='#8a97a8'; ctx.font='11px sans-serif';
+      ctx.fillText(m[2], x+16, ty+rowH/2+9);
+    } else {
+      ctx.fillText(r.label, x+16, ty+rowH/2);
+    }
+    const bw = (r.opts.length > 2) ? 38 : 54, gap = 4, bh = 34;
+    let bx = x + w - 16 - (r.opts.length*bw + (r.opts.length-1)*gap);
+    for(const o of r.opts){
+      drawCardBtn(ctx, bx, ty+(rowH-bh)/2, bw, bh, o.text,
+                  o.on ? 'rgba(60,110,240,0.95)' : 'rgba(228,233,242,0.98)',
+                  o.on ? '#fff' : '#22314a');
+      setBtns.push({ x:bx, y:ty+(rowH-bh)/2, w:bw, h:bh, val:r.key, v:o.v });
+      bx += bw + gap;
+    }
+    ty += rowH;
+  }
+
+  ctx.strokeStyle='rgba(60,80,110,0.18)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(x+16,ty+6); ctx.lineTo(x+w-16,ty+6); ctx.stroke();
+  ty += 14;
+
+  // ずかん と 全画面（全画面は使える端末だけ）
+  const n = CAN_FULLSCREEN ? 2 : 1, g2 = 8, bw2 = (w - 32 - g2*(n-1)) / n;
+  drawCardBtn(ctx, x+16, ty, bw2, bigH, 'ずかん・キャラメイクへ', 'rgba(228,233,242,0.98)', '#22314a');
+  setBtns.push({ x:x+16, y:ty, w:bw2, h:bigH, val:'zukan' });
+  if(CAN_FULLSCREEN){
+    drawCardBtn(ctx, x+16+bw2+g2, ty, bw2, bigH, document.fullscreenElement ? 'ぜんがめん やめる' : 'ぜんがめん',
+                'rgba(228,233,242,0.98)', '#22314a');
+    setBtns.push({ x:x+16+bw2+g2, y:ty, w:bw2, h:bigH, val:'fs' });
+  }
+  ty += bigH + (tight ? 8 : 12);
+
+  drawCardBtn(ctx, x+16, ty, w-32, bigH, 'とじる', 'rgba(60,110,240,0.95)', '#fff');
+  setBtns.push({ x:x+16, y:ty, w:w-32, h:bigH, val:'close' });
+  ctx.restore();
+  return { x, y, w, h };
+}
+
+function handleSettingsTap(x, y){
+  for(const b of setBtns){
+    if(!ptInRect(x,y,b.x,b.y,b.w,b.h)) continue;
+    if(b.val==='size')       setBlockSize(b.v);
+    else if(b.val==='quiz')  setQuizOn(b.v);
+    else if(b.val==='task')  setTaskOn(b.v);
+    else if(b.val==='zukan') location.href = 'zukan.html';
+    else if(b.val==='fs')    toggleFullscreen();
+    else if(b.val==='close') setOpen = false;
+    return;
+  }
+  // パネルの外を押したら閉じる
+  if(y > TAB_H) setOpen = false;
+}
+
 // ─── だれが あそぶ？ ────────────────────────────────────────────
 // 久しぶりに開いたときだけ出す。押すだけなので、ひなたも自分で選べる。
 function drawWhoPicker(ctx, t){
@@ -2611,21 +2680,11 @@ function drawWhoPicker(ctx, t){
   });
   ctx.restore();
 }
-// ずかん・全画面は canvas の外（HTML）にあるので、覆いかぶさらない。
-// 聞いているあいだは押せないように隠す。
-function setWhoOverlay(on){
-  const z = document.getElementById('zukan-btn'), f = document.getElementById('fs-btn');
-  if(z) z.style.display = on ? 'none' : '';
-  if(f) f.style.display = on ? 'none' : '';
-}
-setWhoOverlay(whoOpen);
-
 function handleWhoTap(x,y){
   for(const b of whoBtns){
     if(!ptInRect(x,y,b.x,b.y,b.w,b.h)) continue;
     setProfile(b.i);          // 同じ子を選んだときは何も起きない
     whoOpen = false;
-    setWhoOverlay(false);
     noteSeen();
     return;
   }
@@ -2844,7 +2903,7 @@ function handleStageTap(x,y,pid){
     else if(b.val==='close'){
       stageOpen=false; stageDetail=-1;
       // きろくをのぞいたあとは、だれの番か決め直してから遊ぶ
-      if(askOnListClose){ askOnListClose=false; whoOpen=true; setWhoOverlay(true); }
+      if(askOnListClose){ askOnListClose=false; whoOpen=true; }
     }
     else if(b.val==='closeDetail'){ stageDetail=-1; }
     else if(b.val==='retry'){ startTask(b.idx); }
@@ -2905,6 +2964,12 @@ function handleStart(x,y,pid){
   noteSeen();
   // 「だれが あそぶ？」を出しているあいだは、それだけ受け付ける
   if(whoOpen){ handleWhoTap(x,y); return; }
+  // せってい を出しているあいだは、それだけ受け付ける（タブの歯車で閉じることもできる）
+  if(setOpen){
+    const g = tabBtns.find(b => b.val === 'settings');
+    if(g && ptInRect(x,y,g.x,g.y,g.w,g.h)){ setOpen = false; return; }
+    handleSettingsTap(x,y); return;
+  }
   // いちらんを出しているあいだは、ほかのボタンには触れさせない
   if(stageOpen){ handleStageTap(x,y,pid); return; }
   for(const ob of opBarBtns){
@@ -2912,16 +2977,11 @@ function handleStart(x,y,pid){
     if(ob.op==='undo') doUndo(); else setMode(ob.op);
     return;
   }
-  for(const sb of sizeBtns){ if(ptInRect(x,y,sb.x,sb.y,sb.w,sb.h)){ setBlockSize(sb.val); return; } }
-  for(const tb of tabBtns){ if(ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)){ setMode(tb.val); return; } }
-  for(const gb of toggleBtns){
-    if(ptInRect(x,y,gb.x,gb.y,gb.w,gb.h)){
-      if(gb.val==='quiz') setQuizOn(!quizOn);
-      else { taskOn = !taskOn; taskDone=false; taskLog=[]; clearUndo(); stageOpen=false; stageDetail=-1;
-             hintOn=false; hintShownAt=0; taskStartT=Date.now();
-             blocks=[]; saveTask(); updateTargets(); }
-      return;
-    }
+  for(const tb of tabBtns){
+    if(!ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)) continue;
+    if(tb.val==='settings'){ setOpen = true; stageOpen = false; }
+    else setMode(tb.val);
+    return;
   }
   for(const tb of taskBtns){
     if(!ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)) continue;
@@ -3275,6 +3335,7 @@ function drawFrame(ts){
   }
   // ステージいちらんはいちばん上に重ねる
   if(stageOpen) drawStageSelect(ctx, walkTime);
+  if(setOpen) drawSettings(ctx);
   // 「だれが あそぶ？」はさらにその上
   if(whoOpen) drawWhoPicker(ctx, walkTime);
 }
@@ -3343,13 +3404,6 @@ function drawKeyInput(ctx, dt){
 }
 
 // ─── Fullscreen ───────────────────────────────────────────────────────────────
-const fsBtn = document.getElementById('fs-btn');
-function updateFsIcon(){ fsBtn.textContent = document.fullscreenElement ? '✕' : '⛶'; }
-fsBtn.addEventListener('click', ()=>{
-  if(!document.fullscreenElement) document.documentElement.requestFullscreen();
-  else document.exitFullscreen();
-});
-document.addEventListener('fullscreenchange', updateFsIcon);
 
 // ─── 図鑑での編集をその場で受け取る ───────────────────────────────────────────
 // zukan.html を別ウィンドウで開いて調整すると、共通エンジンが変更を検知して

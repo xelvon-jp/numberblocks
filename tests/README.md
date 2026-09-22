@@ -19,6 +19,7 @@ Claude Code on the web の環境なら、そのまま動きます。
 | `task.test.js`    | おだいの手数・クリア判定・ほめことば・ヒント |
 | `undo.test.js`    | もどす（3手まで） |
 | `profile.test.js` | ひなた と パパ の記録を混ぜない |
+| `settings.test.js`| 歯車の「せってい」（大きさ・クイズ・おだい）が効く |
 | `smoke.test.js`   | ひととおり動かして止まらない |
 
 ## おだいを足すとき
