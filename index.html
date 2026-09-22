@@ -317,6 +317,19 @@ let stageOpen   = false;// ステージいちらんを出しているか
 let stageDetail = -1;   // てじゅんを見せているステージ（-1＝出していない）
 let stageBtns   = [];
 let hintOn      = false;// ヒントを開いているか（おだいを変えると閉じる）
+let taskStartT  = 0;    // このおだいを始めた時こく
+let hintShownAt = 0;    // ヒントボタンが出てきた時こく（ふわっと出すため）
+// ヒントは最初から見せない。しばらく解けていないときだけ、そっと出す。
+// 「時間がかかっている」か「さいたんよりだいぶ手数がかさんでいる」のどちらか。
+const HINT_AFTER_MS = 60000;
+const HINT_AFTER_MOVES = 4;
+function hintReady(){
+  if(!taskActive() || taskDone) return false;
+  if(hintShownAt) return true;   // 一度出したら、そのおだいのあいだは引っこめない
+  const t = currentTask();
+  if(taskLog.length >= (t.best||0) + HINT_AFTER_MOVES) return true;
+  return taskStartT > 0 && (Date.now() - taskStartT) > HINT_AFTER_MS;
+}
 try{
   const raw = localStorage.getItem(TASK_KEY);
   if(raw){
@@ -338,7 +351,8 @@ function taskActive(){ return taskOn && mode!=='factor' && mode!=='quiz' && mode
 // そのおだいを最初から始める
 function startTask(i){
   taskIdx = Math.max(0, Math.min(TASKS.length-1, i));
-  taskDone = false; taskLog = []; hintOn = false; winFx = null;
+  taskDone = false; taskLog = []; winFx = null;
+  hintOn = false; hintShownAt = 0; taskStartT = Date.now();
   blocks = []; puzzle = null; clearUndo();
   stageOpen = false; stageDetail = -1;
   saveTask(); updateTargets();
@@ -2108,6 +2122,7 @@ function drawTaskCard(ctx, t){
   const r = getTaskCardRect(); if(!r) return;
   const task = currentTask();
   const pulse = 0.5+0.5*Math.sin(t*0.006);
+  if(!taskStartT) taskStartT = Date.now();   // 開き直したときの数えはじめ
   const lv = TASK_LEVELS[task.lv||0];
 
   ctx.save();
@@ -2157,15 +2172,31 @@ function drawTaskCard(ctx, t){
     ctx.fillText('いちらん', bx+bw/2, by+27);
     taskBtns.push({x:bx,y:by,w:bw,h:bh,val:'stages'});
 
-    const hw=40, hx=bx-hw-6;
-    ctx.fillStyle = hintOn ? 'rgba(255,196,60,0.97)' : 'rgba(236,240,248,0.98)';
-    ctx.beginPath(); ctx.roundRect(hx,by,hw,bh,9); ctx.fill();
-    ctx.strokeStyle='rgba(70,90,120,0.28)'; ctx.lineWidth=1.2;
-    ctx.beginPath(); ctx.roundRect(hx,by,hw,bh,9); ctx.stroke();
-    ctx.fillStyle = hintOn ? '#5a3c00' : '#5a6a84';
-    ctx.font='bold 17px sans-serif'; ctx.fillText('?', hx+hw/2, by+14);
-    ctx.font='bold 9px sans-serif';  ctx.fillText('ヒント', hx+hw/2, by+28);
-    taskBtns.push({x:hx,y:by,w:hw,h:bh,val:'hint'});
+    // ヒントは最初から出さない。なかなか解けないときだけ、ふわっと出てくる。
+    if(hintReady()){
+      if(!hintShownAt) hintShownAt = Date.now();
+      const age = Date.now() - hintShownAt;
+      const hw=40, hx=bx-hw-6;
+      ctx.save();
+      ctx.globalAlpha = Math.min(1, age/450);
+      // 出てきた直後だけ、気づいてもらえるように ふちが やさしく明滅する
+      if(!hintOn && age < 6000){
+        ctx.shadowColor='rgba(255,190,60,'+(0.45+0.4*pulse)+')'; ctx.shadowBlur=12;
+      }
+      ctx.fillStyle = hintOn ? 'rgba(255,196,60,0.97)' : 'rgba(236,240,248,0.98)';
+      ctx.beginPath(); ctx.roundRect(hx,by,hw,bh,9); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle='rgba(70,90,120,0.28)'; ctx.lineWidth=1.2;
+      ctx.beginPath(); ctx.roundRect(hx,by,hw,bh,9); ctx.stroke();
+      ctx.fillStyle = hintOn ? '#5a3c00' : '#5a6a84';
+      ctx.textAlign='center';
+      ctx.font='bold 17px sans-serif'; ctx.fillText('?', hx+hw/2, by+14);
+      ctx.font='bold 9px sans-serif';  ctx.fillText('ヒント', hx+hw/2, by+28);
+      ctx.restore();
+      taskBtns.push({x:hx,y:by,w:hw,h:bh,val:'hint'});
+    } else if(hintOn){
+      hintOn = false;   // 出す条件から外れたら、ふきだしも閉じる
+    }
   }
   ctx.restore();
 
@@ -2379,6 +2410,7 @@ function handleStart(x,y,pid){
     if(ptInRect(x,y,gb.x,gb.y,gb.w,gb.h)){
       if(gb.val==='quiz') setQuizOn(!quizOn);
       else { taskOn = !taskOn; taskDone=false; taskLog=[]; clearUndo(); stageOpen=false; stageDetail=-1;
+             hintOn=false; hintShownAt=0; taskStartT=Date.now();
              blocks=[]; saveTask(); updateTargets(); }
       return;
     }
