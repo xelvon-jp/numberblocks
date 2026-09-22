@@ -98,4 +98,66 @@ module.exports = {
     t.eq([r.hinata, r.papa], [0, 3], 'うつしたあとの数がおかしい');
     t.eq([r.l5, r.l6], [9, 9], '同じおだいで、短いほうの記録が残っていない');
   },
+
+  'ママの記録も、ひなた・パパと別々に残る': async t => {
+    const p = await t.open({ who:'mama' });
+    await p.evaluate(() => {
+      taskOn = true; startTask(20);
+      spawnBlock(3); spawnBlock(7); fuseBlocks(blocks[0], blocks[1]); checkTask();
+    });
+    t.eq(await p.evaluate(() => PROFILES.map(pr => clearedCountOf(pr.id))), [0, 0, 1],
+         'ママのクリアが ひなた・パパ側に付いた');
+  },
+
+  'ひなたは、パパかママのどちらかに並べば「とってもじょうず！」': async t => {
+    const p = await t.open({ who:'hinata' });
+    const got = await p.evaluate(() => {
+      const idx = TASKS.findIndex(x => x.n === 777);
+      const mk = n => new Array(n);
+      const j = (moves, papa, mama) => {
+        taskStore.papa.logs = {}; taskStore.mama.logs = {};
+        if(papa !== null) taskStore.papa.logs[idx] = mk(papa);
+        if(mama !== null) taskStore.mama.logs[idx] = mk(mama);
+        const r = judgeClear(idx, moves, null);
+        return r ? r.text : null;
+      };
+      return [ j(12, 13, null),    // パパに勝った
+               j(12, null, 12),    // ママに並んだ
+               j(12, 13, 9),       // ママには負けたが パパに勝った
+               j(14, 13, 9) ];     // どちらにも負けた（おてほん＋2 も こえている）
+    });
+    t.eq(got, ['とってもじょうず！','とってもじょうず！','とってもじょうず！', null],
+         'ほかの人の記録とのくらべかたがちがう');
+  },
+
+  'ママのまま放っておいても、パパには戻らない（見張るのは ひなただけ）': async t => {
+    const p = await t.open({ who:'mama' });
+    await p.evaluate(() => { taskOn = true; lastTouchAt = Date.now() - 60*60*1000; guardKidProfile(); });
+    t.eq(await p.evaluate(() => [profile().id, whoOpen]), ['mama', false], 'ママなのにパパへ戻された');
+  },
+
+  '「だれが あそぶ？」で ママを選べる': async t => {
+    const p = await t.open({ storage:{ 'nbg.task.v1': OLD }, keepPicker:true });
+    t.eq(await p.evaluate(() => whoBtns.length), 3, '選ぶボタンが3つない');
+    await p.evaluate(() => { const w = whoBtns[2]; handleStart(w.x + w.w/2, w.y + w.h/2, 'z'); });
+    t.eq(await p.evaluate(() => [profile().id, whoOpen]), ['mama', false], 'ママを押しても決まらない');
+  },
+
+  'ひなたの記録を ママへ うつせる（パパへの行と取りちがえない）': async t => {
+    const p = await t.open({ who:'hinata' });
+    await p.evaluate(() => {
+      const mk = n => new Array(n).fill({ k:'new', a:1 });
+      taskStore.hinata = { idx:0, cleared:{0:true, 1:true}, logs:{0:mk(5), 1:mk(4)} };
+      loadProfileState();
+      taskOn = true; stageOpen = true; recOpen = true;
+      drawStageSelect(ctx, 0);
+      const ask = stageBtns.find(b => b.val === 'recAsk' && b.kind === 'move' && b.lv === 2);
+      handleStart(ask.x + ask.w/2, ask.y + ask.h/2, 'm');
+      drawStageSelect(ctx, 0);
+      const yes = stageBtns.find(b => b.val === 'recYes');
+      handleStart(yes.x + yes.w/2, yes.y + yes.h/2, 'm');
+    });
+    t.eq(await p.evaluate(() => PROFILES.map(pr => clearedCountOf(pr.id))), [0, 0, 2],
+         'ママへうつしたのに、行き先がちがう');
+  },
 };

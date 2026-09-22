@@ -76,4 +76,38 @@ module.exports = {
     ).map(b => b.num));
     t.eq(bad, [], '横にしたとき画面からはみ出すキャラがある');
   },
+
+  'ステージいちらんの名前の札が、どの画面でも きろく・とじる と重ならない': async t => {
+    for(const [w,h] of SIZES){
+      const p = await t.open({ width:w, height:h });
+      const r = await p.evaluate(() => {
+        taskOn = true; stageOpen = true; drawStageSelect(ctx, 0);
+        const box = b => ({ l:b.x, r:b.x + b.w, t:b.y, b:b.y + b.h });
+        const hit = (a, c) => a.l < c.r && c.l < a.r && a.t < c.b && c.t < a.b;
+        const chips = stageBtns.filter(b => b.val === 'prof').map(box);
+        const btns  = stageBtns.filter(b => b.val === 'rec' || b.val === 'close').map(box);
+        const cells = stageBtns.filter(b => b.val === 'go').map(box);
+        const bad = [];
+        for(const c of chips){
+          if(c.r > innerWidth + 1) bad.push('札が はみ出す');
+          if(btns.some(b => hit(c, b)))  bad.push('札が ボタンに重なる');
+          if(cells.some(b => hit(c, b))) bad.push('札が マス目に重なる');
+        }
+        return { n: chips.length, bad: [...new Set(bad)] };
+      });
+      t.eq(r.n, 3, `${w}x${h} で名前の札が3つない`);
+      t.eq(r.bad, [], `${w}x${h} で名前の札の配置がおかしい`);
+    }
+  },
+
+  '「だれが あそぶ？」の3つのボタンが、どの画面でも収まる': async t => {
+    for(const [w,h] of SIZES){
+      const p = await t.open({ width:w, height:h, keepPicker:true,
+                               storage:{ 'nbg.task.v1': JSON.stringify({ v:2, on:true }) } });
+      await p.evaluate(() => drawWhoPicker(ctx, 0));
+      const bad = await p.evaluate(() => whoBtns.filter(b =>
+        b.y < 0 || b.y + b.h > innerHeight || b.x < 0 || b.x + b.w > innerWidth).length);
+      t.eq(bad, 0, `${w}x${h} で「だれが あそぶ？」のボタンが画面からはみ出す`);
+    }
+  },
 };

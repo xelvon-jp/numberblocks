@@ -346,13 +346,15 @@ function hintReady(){
 // ひなたの記録と、パパの下見（テストプレイ）の記録を混ぜない。
 // クリア状況・てじゅん・いま何問めかを、ひとりずつ別に持つ。
 const PROFILES = [
-  { id:'hinata', name:'ひなた', color:'#3f8fd0' },
-  { id:'papa',   name:'パパ',   color:'#d9813a' }
+  { id:'hinata', name:'ひなた', color:'#3f8fd0', kid:true },
+  { id:'papa',   name:'パパ',   color:'#d9813a' },
+  { id:'mama',   name:'ママ',   color:'#d65a8e' }
 ];
 let profileIdx = 0;
 function profile(){ return PROFILES[profileIdx]; }
 function emptyRec(){ return { idx:0, cleared:{}, logs:{} }; }
-let taskStore = { hinata:emptyRec(), papa:emptyRec() };
+let taskStore = {};
+for(const pr of PROFILES) taskStore[pr.id] = emptyRec();
 
 try{
   const raw = localStorage.getItem(TASK_KEY);
@@ -409,18 +411,23 @@ function setProfile(i){
 }
 // ── ほめことば ───────────────────────────────────────────────────
 // 3つ同時には出さない。上から順に、あてはまった1つだけを出す。
-//   とってもじょうず！ … もうひとりの記録に並んだ／こえた
+//   とってもじょうず！ … ほかのだれかの記録に並んだ／こえた
 //   じょうず！         … おてほん（＋と×だけで作る最短）＋2手 いない
 //   ちぢんだ！         … まえの自分より短くできた
 const REF_SLACK = 2;
-function otherProfileId(){ return PROFILES[(profileIdx+1) % PROFILES.length].id; }
+function otherProfiles(){ return PROFILES.filter((_, i) => i !== profileIdx); }
 function recordOf(id, idx){
   const r = taskStore[id]; const lg = r && r.logs[idx];
   return lg ? lg.length : null;
 }
 function judgeClear(idx, moves, prevOwn){
   const t = TASKS[idx];
-  const other = otherProfileId(), o = recordOf(other, idx);
+  // ほかの人の記録のうち、だれか1人にでも並べば（＝いちばん手数の多い人以下なら）とってもじょうず
+  let o = null;
+  for(const pr of otherProfiles()){
+    const m = recordOf(pr.id, idx);
+    if(m !== null && (o === null || m > o)) o = m;
+  }
   if(o !== null && moves <= o)              return { text:'とってもじょうず！', color:'#c0398a', big:true };
   if(moves <= (t.ref||t.best) + REF_SLACK)  return { text:'じょうず！',        color:'#d69500' };
   if(prevOwn !== null && moves < prevOwn)   return { text:'ちぢんだ！',        color:'#2f7ac0' };
@@ -454,7 +461,7 @@ whoOpen = taskOn;
 
 // ひなたのまま放っておかれたら、そっとパパに戻して聞き直す
 function guardKidProfile(){
-  if(whoOpen || profileIdx === PAPA_IDX) return;
+  if(whoOpen || !profile().kid) return;       // 大人どうしは見張らない
   if(Date.now() - lastTouchAt < KID_IDLE_MS) return;
   setProfile(PAPA_IDX);
   whoOpen = true; setWhoOverlay(true);
@@ -466,7 +473,8 @@ function guardKidProfile(){
 const TOUCH_KEY = 'nbg.touch.v1';
 const TOUCH_BINS = 12, TOUCH_BIN_W = 2.5;   // 0〜30px を 12 に分ける
 function emptyTouch(){ return { n:0, sum:0, hist:new Array(TOUCH_BINS).fill(0) }; }
-let touchStats = { hinata:emptyTouch(), papa:emptyTouch() };
+let touchStats = {};
+for(const pr of PROFILES) touchStats[pr.id] = emptyTouch();
 try{
   const raw = localStorage.getItem(TOUCH_KEY);
   if(raw){
@@ -2464,7 +2472,7 @@ function clearedCount(){ return Object.keys(taskCleared).length; }
 function stageGrid(){
   const pad = 12, cols = 10, cgap = 4;
   const cw = (sw - pad*2 - cgap*(cols-1)) / cols;
-  const y0 = TAB_H + 52;
+  const y0 = TAB_H + 90;          // 見出し ＋ 名前の札の段 の下から
   const rowH = Math.min(74, Math.max(40, (sh - y0 - 20) / TASK_LEVELS.length));
   return { pad:pad, cols:cols, cgap:cgap, cw:cw, y0:y0, rowH:rowH,
            ch:Math.max(26, Math.min(46, rowH-24)) };
@@ -2492,8 +2500,10 @@ function drawStageSelect(ctx, t){
     }
   }
 
-  // だれの記録を見ているか。長押しするとその子に切り替わる（記録は別々）
-  const pw=74, ph=32, pgap=5, px0=g.pad+66, py=TAB_H+10;
+  // だれの記録を見ているか。長押しするとその人に切り替わる（記録は別々）。
+  // 人数がふえても押しやすいよう、見出しの下に1段つかって横いっぱいに並べる。
+  const pgap=6, ph=32, py=TAB_H+48, px0=g.pad;
+  const pw = Math.min(120, (sw - g.pad*2 - pgap*(PROFILES.length-1)) / PROFILES.length);
   PROFILES.forEach((pr,i)=>{
     const x = px0 + i*(pw+pgap), on = (i===profileIdx);
     ctx.fillStyle = on ? pr.color : 'rgba(255,255,255,0.07)';
@@ -2577,9 +2587,11 @@ function drawWhoPicker(ctx, t){
   ctx.fillStyle='#fff'; ctx.font='bold 26px sans-serif';
   ctx.fillText('だれが あそぶ？', sw/2, Math.max(90, sh*0.20));
 
-  const bw = Math.min(280, sw-56), bh = 104, gap = 20;
+  const gap = 16, top = Math.max(120, sh*0.20) + 36;
+  const bw = Math.min(280, sw-56);
+  const bh = Math.max(64, Math.min(104, (sh - top - 24 - gap*(PROFILES.length-1)) / PROFILES.length));
   const total = PROFILES.length*bh + (PROFILES.length-1)*gap;
-  const y0 = Math.max(150, (sh - total)/2);
+  const y0 = Math.max(top, (sh - total)/2);
   PROFILES.forEach((pr,i)=>{
     const x = (sw-bw)/2, y = y0 + i*(bh+gap), on = (i===profileIdx);
     ctx.save();
@@ -2625,7 +2637,9 @@ function handleWhoTap(x,y){
 function drawRecordPanel(ctx){
   const id = profile().id;
   const rowH = 30, w = Math.min(344, sw-20);
-  const h = 46 + 34 + TASK_LEVELS.length*rowH + 12 + 34 + 8 + 38 + 62 + 52;
+  const moveRows = PROFILES.length - 1;
+  const touchH = 26 + PROFILES.length*18;   // ゆびの おおきさ（1人1行）
+  const h = 46 + 34 + TASK_LEVELS.length*rowH + 12 + 34 + 8 + moveRows*rowH + 8 + touchH + 12 + 52;
   const x = (sw-w)/2, y = Math.max(TAB_H+6, (sh-h)/2);
 
   ctx.save();
@@ -2693,8 +2707,11 @@ function drawRecordPanel(ctx){
 
   row('ぜんぶ けす', clearedCountOf(id) + ' / ' + TASKS.length, 'all', -1, 'rgba(255,214,214,0.98)');
   ty += 8;
-  const other = PROFILES[(profileIdx+1) % PROFILES.length];
-  row(profile().name + ' の きろくを ' + other.name + ' へ', null, 'move', -1);
+  // うつす先は1人ずつ。たずねるときに どの行か分かるよう、lv に行き先の番号を入れる
+  PROFILES.forEach((pr, i) => {
+    if(i === profileIdx) return;
+    row(profile().name + ' の きろくを ' + pr.name + ' へ', null, 'move', i);
+  });
 
   // ゆびの おおきさ。いつか自動で見分けられるか判断するための下調べ。
   // ふたつの山が離れていれば見分けられるし、重なっていれば無理と分かる。
@@ -2745,7 +2762,7 @@ function drawStageDetail(ctx, idx){
   }
   const lh = 20;
   const w = Math.min(330, sw-32);
-  const h = 82 + lines.length*lh + 50;
+  const h = 98 + lines.length*lh + 50;
   const x = (sw-w)/2, y = Math.max(TAB_H+10, (sh-h)/2);
 
   ctx.save();
@@ -2771,15 +2788,21 @@ function drawStageDetail(ctx, idx){
     };
     put('きみ', steps.length, nice ? '#c08a20' : '#2b3a52', true);
     put('おてほん', (task.ref||task.best), '#5a6a80');
-    const oid = otherProfileId(), om = recordOf(oid, idx);
-    const oname = PROFILES.find(pr=>pr.id===oid).name;
-    if(om !== null) put(oname, om, '#5a6a80');
     ctx.fillStyle='#a8b4c4'; ctx.font='10px sans-serif';
     ctx.fillText('きかいのさいたん ' + task.best + 'て', cx, y+62);
+    // ほかの人の記録（ある人だけ）
+    cx = x+16;
+    for(const pr of otherProfiles()){
+      const m = recordOf(pr.id, idx);
+      if(m === null) continue;
+      ctx.fillStyle = pr.color; ctx.font = 'bold 11px sans-serif';
+      const tx = pr.name + ' ' + m + 'て';
+      ctx.fillText(tx, cx, y+78); cx += ctx.measureText(tx).width + 12;
+    }
   }
 
   ctx.font='15px sans-serif'; ctx.fillStyle='#2b3a52';
-  lines.forEach((ln,i)=>{ ctx.fillText(ln, x+18, y+88+i*lh); });
+  lines.forEach((ln,i)=>{ ctx.fillText(ln, x+18, y+104+i*lh); });
 
   const bh=34, by=y+h-bh-12, bw=(w-40)/2;
   drawCardBtn(ctx, x+16, by, bw, bh, 'もういちど', 'rgba(60,110,240,0.95)', '#fff');
@@ -2803,9 +2826,8 @@ function handleStageTap(x,y,pid){
         if(recConfirm){
           if(recConfirm.kind==='level')     clearLevelRecords(profile().id, recConfirm.lv);
           else if(recConfirm.kind==='all')  clearAllRecords(profile().id);
-          else if(recConfirm.kind==='move'){
-            const other = PROFILES[(profileIdx+1) % PROFILES.length];
-            moveRecords(profile().id, other.id);
+          else if(recConfirm.kind==='move' && PROFILES[recConfirm.lv]){
+            moveRecords(profile().id, PROFILES[recConfirm.lv].id);
           }
         }
         recConfirm = null;
