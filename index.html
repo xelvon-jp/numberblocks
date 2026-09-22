@@ -369,6 +369,7 @@ try{
 }catch(e){}
 
 // いま選んでいる子の記録を、遊び中に使う変数へつなぎ直す。
+// （profileIdx は上でパパに固定してある）
 // 中身は同じオブジェクトを指すので、書き込みはそのまま記録に残る。
 function loadProfileState(){
   const r = taskStore[profile().id] || (taskStore[profile().id] = emptyRec());
@@ -425,20 +426,32 @@ function isNice(idx){                 // ★をつけるかどうか（おてほ
 
 // ── だれが あそぶ？ ──────────────────────────────────────────────
 // 顔やWatchでは人を見分けられない（Face IDは本人1人ぶんしか登録できず、
-// WebからWatchを見る口も無い）ので、久しぶりに開いたときだけ1タップで聞く。
-const SEEN_KEY = 'nbg.seen.v1';
-const WHO_AFTER_MS = 30*60*1000;   // 30分あいたら、また聞く
+// WebからWatchを見る口も無い）。なので判定ではなく、既定値で守る。
+//
+//   あいまいなときは、かならずパパ側に倒す。
+//
+// パパの記録は下見なので、まちがって混ざっても失うものは無い。
+// ひなたの記録に書きこめるのは「ひなたを押してから、続けて遊んでいるあいだ」
+// だけにしておけば、パパが気づかずひなたの記録を汚すことは起きない。
+const PAPA_IDX = PROFILES.findIndex(pr => pr.id === 'papa');
+const KID_IDLE_MS = 5*60*1000;   // ひなたのまま5分ほうっておいたら、パパに戻す
 let whoOpen = false, whoBtns = [];
-let lastSeenAt = 0;
-try{ lastSeenAt = parseInt(localStorage.getItem(SEEN_KEY)||'0', 10) || 0; }catch(e){}
-let _seenWrote = 0;
-function noteSeen(){
-  const now = Date.now();
-  if(now - _seenWrote < 20000) return;        // 20秒に1回だけ書けば十分
-  _seenWrote = now;
-  try{ localStorage.setItem(SEEN_KEY, String(now)); }catch(e){}
+let lastTouchAt = Date.now();
+let askOnListClose = false;      // きろくをのぞいたら、閉じるときにまた聞く
+function noteSeen(){ lastTouchAt = Date.now(); }
+
+// 開き直したときは、前回だれだったかに関わらず、かならずパパから始める
+profileIdx = (PAPA_IDX >= 0) ? PAPA_IDX : 0;
+loadProfileState();
+whoOpen = taskOn;
+
+// ひなたのまま放っておかれたら、そっとパパに戻して聞き直す
+function guardKidProfile(){
+  if(whoOpen || profileIdx === PAPA_IDX) return;
+  if(Date.now() - lastTouchAt < KID_IDLE_MS) return;
+  setProfile(PAPA_IDX);
+  whoOpen = true; setWhoOverlay(true);
 }
-if(taskOn && lastSeenAt && Date.now() - lastSeenAt > WHO_AFTER_MS) whoOpen = true;
 
 // ── ゆびの おおきさ ──────────────────────────────────────────────
 // 大人と4歳では、ガラスに触れる面の大きさがちがうはず。
@@ -674,6 +687,13 @@ function drawTabsAndUI(ctx){
   drawSizeButtons(ctx);
   drawQuizToggle(ctx);
   drawModeTabs(ctx);
+  // おだい中は、いまだれの記録に残るのかを細い帯で常に見せる
+  if(taskActive()){
+    ctx.save();
+    ctx.fillStyle = profile().color;
+    ctx.fillRect(0, TAB_H-3, sw, 3);
+    ctx.restore();
+  }
   // ミラーはタブの位置を使って置くので、タブを並べたあとに描く。
   // 床のキャラに隠れないよう、実際の描画はメインループ側から呼ぶ。
 }
@@ -2456,7 +2476,7 @@ function drawStageSelect(ctx, t){
   if(stageHold){
     const hp = Math.min(1, (Date.now()-stageHold.t0)/STAGE_HOLD_MS);
     if(hp >= 1){
-      if(stageHold.val==='rec'){ recOpen=true; recConfirm=null; stageDetail=-1; }
+      if(stageHold.val==='rec'){ recOpen=true; recConfirm=null; stageDetail=-1; askOnListClose=true; }
       else if(stageHold.val==='prof'){ setProfile(stageHold.i); }
       stageHold = null;
     }
@@ -2766,7 +2786,7 @@ function handleStageTap(x,y,pid){
     if(!ptInRect(x,y,b.x,b.y,b.w,b.h)) continue;
     // きろくパネルを出しているあいだは、そのボタンだけ受け付ける
     if(recOpen){
-      if(b.val==='recProf'){ setProfile(b.i); recConfirm=null; }
+      if(b.val==='recProf'){ setProfile(b.i); recConfirm=null; askOnListClose=true; }
       // 消すのも移すのも取り返しがつかないので、かならず一度たずねる
       else if(b.val==='recAsk'){ recConfirm = { kind:b.kind, lv:b.lv }; }
       else if(b.val==='recYes'){
@@ -2789,7 +2809,11 @@ function handleStageTap(x,y,pid){
       stageHold = { val:b.val, i:b.i, t0:Date.now(), pid:pid,
                     rect:{x:b.x,y:b.y,w:b.w,h:b.h}, sx:x, sy:y };
     }
-    else if(b.val==='close'){ stageOpen=false; stageDetail=-1; }
+    else if(b.val==='close'){
+      stageOpen=false; stageDetail=-1;
+      // きろくをのぞいたあとは、だれの番か決め直してから遊ぶ
+      if(askOnListClose){ askOnListClose=false; whoOpen=true; setWhoOverlay(true); }
+    }
     else if(b.val==='closeDetail'){ stageDetail=-1; }
     else if(b.val==='retry'){ startTask(b.idx); }
     else if(b.val==='go'){
@@ -3138,6 +3162,7 @@ function drawLoopError(ctx){
 
 function drawFrame(ts){
   const dt=Math.min(ts-lastTime,100); lastTime=ts; walkTime+=dt;
+  guardKidProfile();
   ctx.clearRect(0,0,sw,sh); drawBG(ctx); drawTabsAndUI(ctx);
   if(mode==='clock'){
     drawClockMode(ctx, walkTime);
