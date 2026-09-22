@@ -161,7 +161,9 @@ const canvas = document.getElementById('c');
 const ctx = canvas.getContext('2d');
 let sw = 0, sh = 0;
 function resize(){ sw = canvas.width = window.innerWidth; sh = canvas.height = window.innerHeight; }
-window.addEventListener('resize', resize);
+// 画面をまわしたときは、並べ直しとオートスケールもやり直す
+// （やらないと、たてで決めた大きさのまま よこ画面で はみ出す）
+window.addEventListener('resize', ()=>{ resize(); updateTargets(); });
 resize();
 
 // ─── Constants / size ────────────────────────────────────────────────────────
@@ -208,7 +210,7 @@ function bottomPanelH(){
   if(mode==='factor') return FACTOR_H+safeBottom();
   if(mode==='quiz')   return QUIZ_H+safeBottom();
   if(mode==='clock')  return 26+safeBottom();   // とけいは文字盤を大きく見せたい
-  return getPadH();
+  return getPadH() + opBarH();                  // ＋−×÷ の段ぶんだけ高い
 }
 function calcFloor(){ return sh - GH - bottomPanelH() - 12; }
 
@@ -372,36 +374,39 @@ const TAB_DEFS = [
   {label:'けいさん', val:'calc'}, {label:'因数', val:'factor'},
   {label:'ドリル', val:'quiz'},   {label:'とけい', val:'clock'}
 ];
-let tabBtns = [], sizeBtns = [], toggleBtns = [], opRailBtns = [];
+let tabBtns = [], sizeBtns = [], toggleBtns = [], opBarBtns = [];
 
-// ─── 演算子バー（画面左）─────────────────────────────────────────────
-// 選んでいるものだけを大きく・明るくして、ひと目で分かるようにする。
-const OP_RAIL_W = 46;
+// ─── 演算子バー（数字キーのすぐ上）───────────────────────────────────
+// 数を出すキーと同じ指の届く場所に置く。選んでいるものだけを
+// 大きく・明るくして、いまどの計算をしているかがひと目で分かるようにする。
 function railOn(){ return isCalcMode(); }
-// キャラが演算子バーの上に乗らないよう、遊ぶ場所の左端をずらす
-function playLeft(){ return EDGE_MARGIN + (railOn() ? OP_RAIL_W : 0); }
-function opRailRects(){
-  const top = TAB_H + 76, bot = sh - bottomPanelH() - 8;
-  const n = CALC_OPS.length, gap = 8;
-  const h = Math.max(34, Math.min(64, (bot - top - gap*(n-1)) / n));
-  const total = h*n + gap*(n-1);
-  const y0 = top + Math.max(0, (bot - top - total)/2);
-  return CALC_OPS.map((op,i)=>({ op:op, x:7, y:y0 + i*(h+gap), w:OP_RAIL_W-11, h:h }));
+function opBarH(){ return railOn() ? (isLandscape() ? 40 : 54) : 0; }
+// 遊ぶ場所の左端（いまは演算子バーが下にあるので、ふつうの余白のまま）
+function playLeft(){ return EDGE_MARGIN; }
+function opBarRects(){
+  const h = opBarH(); if(!h) return [];
+  const y = sh - getPadH() - h;
+  const n = CALC_OPS.length, gap = 8, pad = 6;
+  const w = (sw - pad*2 - gap*(n-1)) / n;
+  return CALC_OPS.map((op,i)=>({ op:op, x:pad + i*(w+gap), y:y+4, w:w, h:h-9 }));
 }
-function drawOpRail(ctx, t){
-  opRailBtns = [];
-  if(!railOn()) return;
+function drawOpBar(ctx, t){
+  opBarBtns = [];
+  const rects = opBarRects(); if(!rects.length) return;
   const pulse = 0.5+0.5*Math.sin(t*0.005);
-  for(const r of opRailRects()){
+  ctx.save();
+  // 数字キーの帯と地続きに見えるよう、うすい下地を敷く
+  ctx.fillStyle='rgba(0,0,0,0.10)';
+  ctx.fillRect(0, rects[0].y-4, sw, opBarH());
+  for(const r of rects){
     const on = (r.op === mode);
     ctx.save();
     if(on){
-      // 選ばれているものは外側に光の輪を出して、いちばん目立たせる
       ctx.shadowColor = 'rgba(60,130,255,'+(0.55+0.3*pulse)+')';
       ctx.shadowBlur  = 14;
       ctx.fillStyle   = 'rgba(45,120,250,0.98)';
     } else {
-      ctx.fillStyle   = 'rgba(255,255,255,0.72)';
+      ctx.fillStyle   = 'rgba(255,255,255,0.80)';
     }
     ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 11); ctx.fill();
     ctx.shadowBlur = 0;
@@ -409,19 +414,22 @@ function drawOpRail(ctx, t){
     ctx.lineWidth   = on ? 3 : 1.5;
     ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 11); ctx.stroke();
     ctx.fillStyle = on ? '#fff' : '#5a6a84';
-    ctx.font = 'bold ' + (on ? 27 : 20) + 'px sans-serif';
+    ctx.font = 'bold ' + (on ? 28 : 21) + 'px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(OP_LABEL[r.op], r.x + r.w/2, r.y + r.h/2 + 1);
     ctx.restore();
-    opRailBtns.push({x:r.x-4, y:r.y-3, w:r.w+10, h:r.h+6, op:r.op});
+    opBarBtns.push({x:r.x-3, y:r.y-4, w:r.w+6, h:r.h+8, op:r.op});
   }
+  ctx.restore();
 }
 
 function drawTabsAndUI(ctx){
+  // ＋−×÷ の段を出さないモードでは、当たり判定も消しておく
+  // （残っていると、ドリル中にそこを触って計算モードへ飛んでしまう）
+  if(!railOn()) opBarBtns = [];
   drawSizeButtons(ctx);
   drawQuizToggle(ctx);
   drawModeTabs(ctx);
-  drawOpRail(ctx, walkTime);
   // ミラーはタブの位置を使って置くので、タブを並べたあとに描く。
   // 床のキャラに隠れないよう、実際の描画はメインループ側から呼ぶ。
 }
@@ -2174,7 +2182,7 @@ function getPos(e,t){
 function handleStart(x,y,pid){
   // いちらんを出しているあいだは、ほかのボタンには触れさせない
   if(stageOpen){ handleStageTap(x,y); return; }
-  for(const ob of opRailBtns){ if(ptInRect(x,y,ob.x,ob.y,ob.w,ob.h)){ setMode(ob.op); return; } }
+  for(const ob of opBarBtns){ if(ptInRect(x,y,ob.x,ob.y,ob.w,ob.h)){ setMode(ob.op); return; } }
   for(const sb of sizeBtns){ if(ptInRect(x,y,sb.x,sb.y,sb.w,sb.h)){ setBlockSize(sb.val); return; } }
   for(const tb of tabBtns){ if(ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)){ setMode(tb.val); return; } }
   for(const gb of toggleBtns){
@@ -2522,6 +2530,7 @@ function drawFrame(ts){
     puzzle.draw(ctx,walkTime);
     drawQuizScore(ctx);
   } else {
+    drawOpBar(ctx, walkTime);
     if(puzzle){
       puzzle.update(dt);
       if(puzzle.phase==='timeout'||puzzle.phase==='done'){
