@@ -226,6 +226,39 @@ function setQuizOn(v){
   try{ localStorage.setItem(QUIZ_ON_KEY, v?'1':'0'); }catch(e){}
 }
 
+// ── おだい ──────────────────────────────────────────────────────────
+// 使える数字をしばって、王道以外の道を探させる。順番に少しずつ難しくなる。
+// どのお題も、ミラー（ふやす）と ×2・÷2 と合体だけで必ず作れる。
+const TASKS = [
+  { n:5,    use:[1],    hint:'1を5こ' },
+  { n:8,    use:[1],    hint:'×2を3かい' },
+  { n:12,   use:[3],    hint:'3+3を×2' },
+  { n:20,   use:[2],    hint:'×2でふやす' },
+  { n:36,   use:[6],    hint:'6×6' },
+  { n:100,  use:[5],    hint:'5×5から×2' },
+  { n:100,  use:[3,7],  hint:'3+7は10' },
+  { n:64,   use:[2],    hint:'×2を5かい' },
+  { n:30,   use:[4,7],  hint:'7×4のあと' },
+  { n:1000, use:[10],   hint:'10を3かいかける' },
+  { n:500,  use:[5],    hint:'100をつくってから' },
+  { n:100,  use:[1],    hint:'×2でのばして たす' }
+];
+const TASK_KEY = 'nbg.task.v1';
+let taskOn = false, taskIdx = 0, taskDone = false;
+try{
+  const raw = localStorage.getItem(TASK_KEY);
+  if(raw){ const v = JSON.parse(raw); taskOn = !!v.on; taskIdx = Math.min(TASKS.length-1, v.idx|0); }
+}catch(e){}
+function saveTask(){
+  try{ localStorage.setItem(TASK_KEY, JSON.stringify({on:taskOn, idx:taskIdx})); }catch(e){}
+}
+function currentTask(){ return TASKS[Math.min(taskIdx, TASKS.length-1)]; }
+function taskActive(){ return taskOn && mode!=='factor' && mode!=='quiz' && mode!=='clock'; }
+function nextTask(){
+  taskIdx = (taskIdx + 1) % TASKS.length;
+  taskDone = false; blocks = []; opChips = null; saveTask(); updateTargets();
+}
+
 let mode = '+';
 // narrow＝正方形に近い幅にするタブ（記号なので広くなくていい）
 const TAB_DEFS = [
@@ -692,18 +725,27 @@ function drawMirror(ctx, t){
 function drawQuizToggle(ctx){
   toggleBtns = [];
   if(mode==='factor'||mode==='quiz'||mode==='clock') return;
-  const w=90, h=30, y=Math.round((TOP_ROW_H-h)/2);
-  const x=Math.round((BAR_LEFT_RESERVE + (sw - BAR_RIGHT_RESERVE))/2 - w/2);
-  ctx.save();
-  ctx.fillStyle = quizOn ? 'rgba(100,160,255,0.95)' : 'rgba(82,92,110,0.95)';
-  ctx.beginPath(); ctx.roundRect(x,y,w,h,8); ctx.fill();
-  ctx.strokeStyle='rgba(255,255,255,'+(quizOn?0.75:0.35)+')'; ctx.lineWidth=1.5;
-  ctx.beginPath(); ctx.roundRect(x,y,w,h,8); ctx.stroke();
-  ctx.fillStyle='white'; ctx.textAlign='center'; ctx.textBaseline='middle';
-  ctx.font='bold 12px sans-serif';
-  ctx.fillText('クイズ '+(quizOn?'ON':'OFF'), x+w/2, y+h/2);
-  ctx.restore();
-  toggleBtns.push({x:x,y:y,w:w,h:h,val:'quiz'});
+  const h=30, gap=6, y=Math.round((TOP_ROW_H-h)/2);
+  const left = BAR_LEFT_RESERVE, right = sw - BAR_RIGHT_RESERVE;
+  const w = Math.min(76, Math.floor((right-left-gap)/2));
+  const x0 = Math.round((left+right)/2 - w - gap/2);
+  const defs = [
+    { val:'quiz', on:quizOn, label:'クイズ '+(quizOn?'ON':'OFF') },
+    { val:'task', on:taskOn, label:'おだい '+(taskOn?'ON':'OFF') }
+  ];
+  defs.forEach((d,i)=>{
+    const x = x0 + i*(w+gap);
+    ctx.save();
+    ctx.fillStyle = d.on ? 'rgba(100,160,255,0.95)' : 'rgba(82,92,110,0.95)';
+    ctx.beginPath(); ctx.roundRect(x,y,w,h,8); ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,'+(d.on?0.75:0.35)+')'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.roundRect(x,y,w,h,8); ctx.stroke();
+    ctx.fillStyle='white'; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.font='bold 11px sans-serif';
+    ctx.fillText(d.label, x+w/2, y+h/2);
+    ctx.restore();
+    toggleBtns.push({x:x,y:y,w:w,h:h,val:d.val});
+  });
 }
 
 // 下段：モードタブ（＋ − × ÷ 因数 ドリル）。画面幅いっぱいに等分する
@@ -1228,6 +1270,18 @@ function wrapText(ctx, text, maxW){
 // ─── Numpad ───────────────────────────────────────────────────────────────────
 function getNumpadLayout(){
   const padH=getPadH(),padY=sh-padH;
+  // おだい中は、使ってよい数字と CLR だけを出す。
+  // ランダム(R)は しばりを壊すので出さない。
+  if(taskActive()){
+    const t = currentTask();
+    const items = t.use.map(d=>({label:String(d), val:d}));
+    items.push({label:'CLR', val:'CLR', color:'#c55'});
+    const btnH=40, gap=10;
+    const btnW=Math.min(72, Math.floor((sw-40-gap*(items.length-1))/items.length));
+    const total=items.length*btnW + gap*(items.length-1);
+    const x0=(sw-total)/2, y=padY+Math.round((padH-safeBottom()-btnH)/2);
+    return items.map((it,i)=>({...it, x:x0+i*(btnW+gap), y:y, w:btnW, h:btnH}));
+  }
   const items=[
     {label:'1',val:1},{label:'2',val:2},{label:'3',val:3},{label:'4',val:4},
     {label:'5',val:5},{label:'6',val:6},{label:'7',val:7},{label:'8',val:8},
@@ -1735,6 +1789,69 @@ function handleClockMove(x,y){
   }
 }
 
+// ─── おだいカード ─────────────────────────────────────────────────────────
+// ドロップ先のアイコン列の下、数式の上に置く。遊び方は変えず、お題だけ乗せる。
+let taskBtns = [];
+
+function getTaskCardRect(){
+  if(!taskActive()) return null;
+  return { x:EDGE_MARGIN, y:TAB_H+76, w:sw-EDGE_MARGIN*2, h:46 };
+}
+
+function drawTaskCard(ctx, t){
+  taskBtns = [];
+  const r = getTaskCardRect(); if(!r) return;
+  const task = currentTask();
+  const pulse = 0.5+0.5*Math.sin(t*0.006);
+
+  ctx.save();
+  ctx.fillStyle = taskDone ? 'rgba(255,205,70,0.96)' : 'rgba(255,255,255,0.88)';
+  ctx.beginPath(); ctx.roundRect(r.x,r.y,r.w,r.h,12); ctx.fill();
+  ctx.strokeStyle = taskDone ? 'rgba(220,150,20,0.95)' : 'rgba(60,80,110,0.35)';
+  ctx.lineWidth = taskDone ? 2.5+pulse : 1.5;
+  ctx.beginPath(); ctx.roundRect(r.x,r.y,r.w,r.h,12); ctx.stroke();
+
+  ctx.textBaseline='middle';
+  if(taskDone){
+    ctx.textAlign='left'; ctx.fillStyle='#6b4a00'; ctx.font='bold 20px sans-serif';
+    ctx.fillText('できた！  ' + task.n, r.x+14, r.y+r.h/2);
+    // 「つぎ」ボタン
+    const bw=66, bh=30, bx=r.x+r.w-bw-10, by=r.y+(r.h-bh)/2;
+    ctx.fillStyle='rgba(60,110,240,0.95)';
+    ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,9); ctx.fill();
+    ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif'; ctx.textAlign='center';
+    ctx.fillText('つぎ', bx+bw/2, by+bh/2+1);
+    taskBtns.push({x:bx,y:by,w:bw,h:bh,val:'next'});
+  } else {
+    ctx.textAlign='left';
+    ctx.fillStyle='#5a6a80'; ctx.font='bold 11px sans-serif';
+    ctx.fillText('おだい', r.x+14, r.y+14);
+    ctx.fillStyle='#16233a'; ctx.font='bold 25px sans-serif';
+    ctx.fillText(String(task.n), r.x+14, r.y+32);
+
+    const ux = r.x + r.w*0.42;
+    ctx.fillStyle='#5a6a80'; ctx.font='bold 11px sans-serif';
+    ctx.fillText('つかえる', ux, r.y+14);
+    ctx.fillStyle='#16233a'; ctx.font='bold 19px sans-serif';
+    ctx.fillText(task.use.join('  と  ') + ' だけ', ux, r.y+32);
+
+    // 番号（いくつめのおだいか）
+    ctx.textAlign='right'; ctx.fillStyle='#8a97a8'; ctx.font='bold 11px sans-serif';
+    ctx.fillText((taskIdx+1)+' / '+TASKS.length, r.x+r.w-12, r.y+r.h/2);
+  }
+  ctx.restore();
+}
+
+// 目標の数のキャラができたかを見る
+function checkTask(){
+  if(!taskActive() || taskDone) return;
+  const t = currentTask();
+  if(blocks.some(b=>b.num===t.n)){
+    taskDone = true;
+    for(let i=0;i<40;i++) fxParticles.push(new Particle(sw/2, TAB_H+120));
+  }
+}
+
 // ─── Background ───────────────────────────────────────────────────────────────
 function drawBG(ctx){
   const grad=ctx.createLinearGradient(0,0,0,sh);
@@ -1756,7 +1873,14 @@ function getPos(e,t){
 function handleStart(x,y,pid){
   for(const sb of sizeBtns){ if(ptInRect(x,y,sb.x,sb.y,sb.w,sb.h)){ setBlockSize(sb.val); return; } }
   for(const tb of tabBtns){ if(ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)){ setMode(tb.val); return; } }
-  for(const gb of toggleBtns){ if(ptInRect(x,y,gb.x,gb.y,gb.w,gb.h)){ setQuizOn(!quizOn); return; } }
+  for(const gb of toggleBtns){
+    if(ptInRect(x,y,gb.x,gb.y,gb.w,gb.h)){
+      if(gb.val==='quiz') setQuizOn(!quizOn);
+      else { taskOn = !taskOn; taskDone=false; blocks=[]; opChips=null; saveTask(); updateTargets(); }
+      return;
+    }
+  }
+  for(const tb of taskBtns){ if(ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)){ nextTask(); return; } }
   // 正解演出の途中なら、どこをタップしても次へ進む。見終わった子を待たせない。
   if(puzzle && puzzle.phase==='correct'){ puzzle.phase='done'; return; }
   if(mode==='factor'){ handleFactorTap(x,y); return; }
@@ -2125,6 +2249,8 @@ function drawFrame(ts){
       for(const fp of fxParticles) fp.update();
       fxParticles = fxParticles.filter(fp=>fp.life>0);
       for(const fp of fxParticles) fp.draw(ctx);
+      checkTask();
+      drawTaskCard(ctx, walkTime);
       drawFormula(ctx);
       drawNumpad(ctx);
       drawKeyInput(ctx, dt);
