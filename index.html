@@ -542,6 +542,12 @@ let mirrorReflectNum = 0; // 今どのキャラが映っているか
 // 左から「おうち（帰る）」「÷2」「×2」「ミラー（ふえる）」。
 // 減る側を左、増える側を右にまとめてあるので、押し間違えても大事にならない。
 const DROP_TARGETS = ['home','half','double','mirror'];
+// おだい中は、おだいカードを上部バーのすぐ下に置き、アイコン列はその下へ下げる。
+// 「何をつくるか」を先に読ませて、道具はそのあとに見せる並びにしてある。
+function targetRowY(){
+  const r = getTaskCardRect();
+  return r ? Math.round(r.y + r.h + 8) : TAB_H + 6;
+}
 function getTargetRect(id){
   if(mode==='factor'||mode==='quiz'||mode==='clock') return null;
   const w=51, h=60, n=DROP_TARGETS.length;
@@ -549,7 +555,7 @@ function getTargetRect(id){
   const total = n*w + (n-1)*gap;
   const x0 = (sw - total)/2;
   const i = DROP_TARGETS.indexOf(id);
-  return { id:id, i:i, gap:gap, w:w, h:h, x:Math.round(x0 + i*(w+gap)), y:TAB_H + 6 };
+  return { id:id, i:i, gap:gap, w:w, h:h, x:Math.round(x0 + i*(w+gap)), y:targetRowY() };
 }
 function getMirrorRect(){ return getTargetRect('mirror'); }
 function getHomeRect(){   return getTargetRect('home'); }
@@ -630,7 +636,7 @@ function drawHome(ctx, t){
     const cx0=m.x+m.w/2, cy0=m.y+m.h/2;
     const hw=m.w*swell/2, hh=m.h*swell/2;
     const cx=Math.min(Math.max(cx0, EDGE_MARGIN+hw), sw-EDGE_MARGIN-hw);
-    const cy=Math.max(cy0, TAB_H+6+hh);
+    const cy=Math.max(cy0, targetRowY()+hh);
     ctx.translate(cx, cy); ctx.scale(swell, swell); ctx.translate(-cx0, -cy0);
   }
   const glow = Math.max(homeFlash, show);
@@ -727,7 +733,7 @@ function drawScaleTarget(ctx, t, id){
     const cx0=m.x+m.w/2, cy0=m.y+m.h/2;
     const hw=m.w*swell/2, hh=m.h*swell/2;
     const cx=Math.min(Math.max(cx0, EDGE_MARGIN+hw), sw-EDGE_MARGIN-hw);
-    const cy=Math.max(cy0, TAB_H+6+hh);
+    const cy=Math.max(cy0, targetRowY()+hh);
     ctx.translate(cx, cy); ctx.scale(swell, swell); ctx.translate(-cx0, -cy0);
   }
   if(show>0){
@@ -885,7 +891,7 @@ function drawMirror(ctx, t){
     const cx0=m.x+m.w/2, cy0=m.y+m.h/2;
     const hw=m.w*swell/2, hh=m.h*swell/2;
     const cx=Math.min(Math.max(cx0, EDGE_MARGIN+hw), sw-EDGE_MARGIN-hw);
-    const cy=Math.max(cy0, TAB_H+6+hh);
+    const cy=Math.max(cy0, targetRowY()+hh);
     ctx.translate(cx, cy);
     ctx.scale(swell, swell);
     ctx.translate(-cx0, -cy0);
@@ -1035,7 +1041,7 @@ class NumberBlock {
       const maxW = sw - EDGE_MARGIN*2;
       // 上は「おうち・÷2・×2・ミラー」のアイコン列より下から。重ならないように。
       // さらに 400px で頭打ちにする。遊び場いっぱいに伸びると圧迫感があるため。
-      const maxH = Math.min(BIG_MAX_H, Math.max(60, calcFloor() - (TAB_H + 74)));
+      const maxH = Math.min(BIG_MAX_H, Math.max(60, calcFloor() - (targetRowY() + 68)));
       this.bs = Math.max(1.2, Math.min(BS, maxW/this.cols, maxH/this.rows));
     }
     this.width=this.cols*this.bs; this.height=this.rows*this.bs;
@@ -1400,7 +1406,7 @@ function computeAutoBS(){
   const mL = 14 + playLeft(), mR = 14 + EDGE_MARGIN; // updateTargets と同じ余白
   const gaps   = Math.max(0, blocks.length-1) * 4; // キャラ同士の最低すき間
   const availW = Math.max(20, sw - mL - mR - gaps);
-  const availH = Math.min(BIG_MAX_H, Math.max(40, calcFloor() - (TAB_H + 74)));
+  const availH = Math.min(BIG_MAX_H, Math.max(40, calcFloor() - (targetRowY() + 68)));
   return Math.max(1.5, Math.min(BS_MAP.L, availW/totalCols, availH/maxRows));
 }
 
@@ -1443,7 +1449,7 @@ function updateTargets(){
 function spawnBlock(num){
   if(blocks.length>=MAX_BLOCKS) return;
   pushUndo();
-  blocks.push(new NumberBlock(num,sw/2+(Math.random()-0.5)*100,TAB_H+76));
+  blocks.push(new NumberBlock(num,sw/2+(Math.random()-0.5)*100,targetRowY()+70));
   logStep('new', num);
   updateTargets();
 }
@@ -1472,10 +1478,8 @@ function drawFormula(ctx){
   const maxW = sw - 24;
   const lines = wrapText(ctx, formula, maxW);
   const lh = 20;
-  let ty = TAB_H + 132;   // ドロップ先のアイコン列（拡大時を含む）の下
-  // おだいカード（とヒントのふきだし）が出ているときは、その下から書く
-  const tc = getTaskCardRect();
-  if(tc) ty = tc.y + tc.h + 14 + ((hintOn && !taskDone) ? 39 : 0);
+  // ドロップ先のアイコン列（拡大時を含む）の下から書く
+  let ty = getTaskCardRect() ? targetRowY() + 88 : TAB_H + 132;
   for(const line of lines){
     ctx.strokeStyle='white'; ctx.lineWidth=4; ctx.strokeText(line, sw/2, ty);
     ctx.fillStyle='#111'; ctx.fillText(line, sw/2, ty);
@@ -2103,9 +2107,11 @@ function updateWinFx(dt){
 // ドロップ先のアイコン列の下、数式の上に置く。遊び方は変えず、お題だけ乗せる。
 let taskBtns = [];
 
+// ヒントを開いているあいだは、そのぶんカードが下にのびる（アイコン列も下がる）
+function taskCardH(){ return 50 + ((hintOn && !taskDone) ? 34 : 0); }
 function getTaskCardRect(){
   if(!taskActive()) return null;
-  return { x:playLeft(), y:TAB_H+76, w:sw-playLeft()-EDGE_MARGIN, h:58 };
+  return { x:playLeft(), y:TAB_H+6, w:sw-playLeft()-EDGE_MARGIN, h:taskCardH() };
 }
 
 // カードの中の小さなボタン
@@ -2135,10 +2141,10 @@ function drawTaskCard(ctx, t){
   ctx.textBaseline='middle';
   if(taskDone){
     ctx.textAlign='left'; ctx.fillStyle='#6b4a00'; ctx.font='bold 19px sans-serif';
-    ctx.fillText('できた！  ' + task.n, r.x+14, r.y+21);
+    ctx.fillText('できた！  ' + task.n, r.x+14, r.y+19);
     ctx.font='bold 12px sans-serif'; ctx.fillStyle='#8a6a1a';
-    ctx.fillText(taskLog.length + ' て' + (taskLog.length<=task.best ? '　さいたん！' : ''), r.x+14, r.y+41);
-    const bh=32, by=r.y+(r.h-bh)/2;
+    ctx.fillText(taskLog.length + ' て' + (taskLog.length<=task.best ? '　さいたん！' : ''), r.x+14, r.y+37);
+    const bh=32, by=r.y+9;
     const nw=58, tw=68, gap=6;
     const bx2 = r.x+r.w-10-nw, bx1 = bx2-gap-tw;
     drawCardBtn(ctx, bx1, by, tw, bh, 'てじゅん', 'rgba(255,255,255,0.95)', '#6b4a00');
@@ -2146,22 +2152,18 @@ function drawTaskCard(ctx, t){
     taskBtns.push({x:bx1,y:by,w:tw,h:bh,val:'steps'});
     taskBtns.push({x:bx2,y:by,w:nw,h:bh,val:'next'});
   } else {
-    // 左：目標の数
-    ctx.textAlign='left';
-    ctx.fillStyle='#5a6a80'; ctx.font='bold 10px sans-serif';
-    ctx.fillText('おだい', r.x+14, r.y+15);
-    ctx.fillStyle='#16233a'; ctx.font='bold 25px sans-serif';
-    ctx.fillText(String(task.n), r.x+14, r.y+35);
-
-    // 中：使ってよい数字
-    const ux = r.x + 78;
-    ctx.fillStyle='#5a6a80'; ctx.font='bold 10px sans-serif';
-    ctx.fillText('つかえる', ux, r.y+15);
-    ctx.fillStyle='#16233a'; ctx.font='bold 18px sans-serif';
-    ctx.fillText(task.use.join(' と '), ux, r.y+35);
+    // 「◯をつくろう！」。使える数字は数字キーを見れば分かるので書かない。
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    const ty0 = r.y+33;
+    ctx.fillStyle='#16233a'; ctx.font='bold 28px sans-serif';
+    ctx.fillText(String(task.n), r.x+16, ty0);
+    const nw = ctx.measureText(String(task.n)).width;
+    ctx.font='bold 18px sans-serif'; ctx.fillStyle='#2b3a52';
+    ctx.fillText(' を つくろう！', r.x+16+nw, ty0);
+    ctx.textBaseline='middle';
 
     // 右：ヒントと、ステージいちらんへ（何面めかも見せる）
-    const bh=36, by=r.y+(r.h-bh)/2;
+    const bh=36, by=r.y+7;
     const bw=64, bx=r.x+r.w-bw-10;
     ctx.fillStyle = lv.color;
     ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,9); ctx.fill();
@@ -2200,14 +2202,14 @@ function drawTaskCard(ctx, t){
   }
   ctx.restore();
 
-  // ヒントのふきだし（カードのすぐ下）
+  // ヒントのふきだし（カードの下半分にのびる）
   if(hintOn && !taskDone){
-    const hy = r.y + r.h + 7, hh = 32;
+    const hy = r.y + 50 - 4, hh = 30;
     ctx.save();
     ctx.fillStyle='rgba(255,239,190,0.97)';
-    ctx.beginPath(); ctx.roundRect(r.x+8, hy, r.w-16, hh, 10); ctx.fill();
+    ctx.beginPath(); ctx.roundRect(r.x+8, hy, r.w-16, hh, 9); ctx.fill();
     ctx.strokeStyle='rgba(215,165,40,0.8)'; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.roundRect(r.x+8, hy, r.w-16, hh, 10); ctx.stroke();
+    ctx.beginPath(); ctx.roundRect(r.x+8, hy, r.w-16, hh, 9); ctx.stroke();
     ctx.fillStyle='#6b4a00'; ctx.font='bold 15px sans-serif';
     ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.fillText('ヒント： ' + task.hint, r.x+20, hy+hh/2);
@@ -2477,7 +2479,7 @@ function fuseBlocks(a, c){
 function makeFused(na, nc, op, ans, cx, cy){
   const res = new NumberBlock(Math.max(1,Math.round(ans)), 0, 0);
   res.x = Math.min(Math.max(playLeft(), cx - res.width/2), sw-EDGE_MARGIN-res.width);
-  res.y = Math.min(Math.max(TAB_H+8, cy - res.height/2), calcFloor()-res.height);
+  res.y = Math.min(Math.max(targetRowY()+2, cy - res.height/2), calcFloor()-res.height);
   res.targetX = res.x; res.birth = 0;
   blocks.push(res);
   updateTargets();
