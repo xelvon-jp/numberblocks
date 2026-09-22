@@ -363,6 +363,24 @@ try{
   }
 }catch(e){}
 
+// ── いちどだけの引っこし ────────────────────────────────────────
+// ふたりに分ける前にたまっていた記録は、ぜんぶパパの下見（テストプレイ）
+// だった。パパ側がまだ空のときにかぎって、まるごとパパへ移し、
+// ひなたは まっさらから始められるようにする。いちど済んだら二度とやらない。
+const MOVED_KEY = 'nbg.moved.v1';
+let justMoved = false;
+try{
+  if(!localStorage.getItem(MOVED_KEY)){
+    const h = taskStore.hinata, pa = taskStore.papa;
+    if(Object.keys(pa.cleared).length === 0 && Object.keys(h.cleared).length > 0){
+      taskStore.papa   = h;
+      taskStore.hinata = emptyRec();
+      justMoved = true;
+    }
+    localStorage.setItem(MOVED_KEY, '1');
+  }
+}catch(e){}
+
 // いま選んでいる子の記録を、遊び中に使う変数へつなぎ直す。
 // 中身は同じオブジェクトを指すので、書き込みはそのまま記録に残る。
 function loadProfileState(){
@@ -421,6 +439,7 @@ function isNice(idx){                 // ★をつけるかどうか（おてほ
 function clearedCountOf(id){
   const r = taskStore[id]; return r ? Object.keys(r.cleared).length : 0;
 }
+if(justMoved) saveTask();   // 引っこした結果をしまっておく
 function currentTask(){ return TASKS[Math.min(taskIdx, TASKS.length-1)]; }
 function taskActive(){ return taskOn && mode!=='factor' && mode!=='quiz' && mode!=='clock'; }
 // そのおだいを最初から始める
