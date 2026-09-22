@@ -177,8 +177,9 @@ const BS_MAP = IS_PHONE ? { S:10, M:17, L:26 } : { S:20, M:40, L:60 };
 // 画面へ収まる大きさ」を自動で決める。カメラを引くイメージで、全員が同じ
 // 1マスの大きさのままなので、大きい数ほど大きく見える関係が保たれる。
 const SIZE_KEYS = ['S','M','L','A'];
-let bsKey = 'M';
-let BS = BS_MAP[bsKey];
+let bsKey = 'A';              // 開いたときは A（オート）から始める
+// A のときの初期値。キャラが出た時点で applyAutoScale が決め直す。
+let BS = BS_MAP.L;
 const GRAVITY  = 0.4;
 const GH       = 50;
 // 上部バーは2段。上段＝S/M/L・マジックミラー・（HTML側の）ずかん/全画面、
