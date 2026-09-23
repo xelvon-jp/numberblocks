@@ -117,4 +117,18 @@ module.exports = {
       t.eq(bad, 0, `${w}x${h} で「だれが あそぶ？」のボタンが画面からはみ出す`);
     }
   },
+
+  '背景：キャラの足もとは どの画面・どのモードでも 手前の草はらの上': async t => {
+    for(const [w,h] of SIZES){
+      const p = await t.open({ width:w, height:h });
+      for(const m of ['calc','clock']){
+        const r = await p.evaluate(mm => {
+          setMode(mm); drawBG(ctx);
+          return { floor: calcFloor(), grass: groundTopY(), panel: sh - bottomPanelH() };
+        }, m);
+        t.ok(r.floor >= r.grass && r.floor <= r.panel,
+             `${w}x${h} ${m} で キャラの足もと(${Math.round(r.floor)})が 草はら(${Math.round(r.grass)}〜${Math.round(r.panel)})の外にある`);
+      }
+    }
+  },
 };

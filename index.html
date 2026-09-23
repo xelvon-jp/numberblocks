@@ -3252,12 +3252,82 @@ function checkTask(){
 }
 
 // ─── Background ───────────────────────────────────────────────────────────────
+// 青みどりの空、ふわっとした雲、奥にかさなる なだらかな丘。
+// キャラが主役なので、色は うすく やさしく、キャラや数字より目立たないようにする。
+// 絵のファイルは使わず ぜんぶ描くので、どの画面の大きさにも そのまま合う。
+
+// 雲。x と y は空の中での位置（0〜1）、s は大きさ、v は流れる速さ（px/ミリ秒）
+const CLOUDS = [
+  { x:0.08, y:0.46, s:1.00, v:0.0045 },
+  { x:0.46, y:0.28, s:1.35, v:0.0030 },
+  { x:0.80, y:0.52, s:0.85, v:0.0055 },
+];
+// ふわふわの雲を1つ。下に うすい影をつけて まるみを出す
+function drawCloud(ctx, x, y, s){
+  const r = 24*s;
+  const puffs = [[-1.55,0.30,0.70],[-0.80,-0.10,0.98],[0.15,-0.38,1.15],[1.05,-0.08,0.95],[1.75,0.28,0.68]];
+  const blob = (dy, color) => {
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for(const [px,py,pr] of puffs){
+      ctx.moveTo(x + px*r + pr*r, y + py*r + dy);
+      ctx.arc(x + px*r, y + py*r + dy, pr*r, 0, Math.PI*2);
+    }
+    ctx.fill();
+    ctx.beginPath();                                   // そこは たいらに
+    ctx.roundRect(x - 2.1*r, y + dy - 0.05*r, 4.2*r, 0.9*r, 0.45*r);
+    ctx.fill();
+  };
+  blob(0.18*r, 'rgba(206,226,238,0.85)');
+  blob(0, 'rgba(255,255,255,0.97)');
+}
+// なだらかな丘を1まい。2つの波を重ねて、同じ形がくり返さないようにする
+function drawHill(ctx, y0, amp, len, phase, fill){
+  ctx.beginPath(); ctx.moveTo(0, sh);
+  for(let x = 0; x <= sw + 12; x += 12){
+    const y = y0 - amp*(0.62*Math.sin(x/len + phase) + 0.38*Math.sin(x/(len*0.47) + phase*1.7));
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(sw, sh); ctx.closePath();
+  ctx.fillStyle = fill; ctx.fill();
+}
+// キャラが立つ 手前の草はらの上のふち（キャラの足もとは これより下にくる）
+function groundTopY(){ return sh - GH - bottomPanelH() - 30; }
+
 function drawBG(ctx){
-  const grad=ctx.createLinearGradient(0,0,0,sh);
-  grad.addColorStop(0,'#a0d2ff'); grad.addColorStop(1,'#d2eeff');
-  ctx.fillStyle=grad; ctx.fillRect(0,0,sw,sh);
-  const groundY=sh-GH-bottomPanelH();
-  ctx.fillStyle='rgb(160,230,160)'; ctx.fillRect(0,groundY,sw,GH);
+  const groundY = sh - GH - bottomPanelH();
+  // 空：上は青みどり、地平線に近いほど白っぽく
+  const g = ctx.createLinearGradient(0, 0, 0, groundY);
+  g.addColorStop(0,    '#86cfe4');
+  g.addColorStop(0.62, '#c3e8f0');
+  g.addColorStop(1,    '#e8f6f1');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, sw, sh);
+
+  // 雲：ゆっくり右へ流れて、画面の右から出たら左から また入る
+  const skyTop = TAB_H, skyH = Math.max(60, groundY - skyTop);
+  const k = Math.min(1.3, Math.max(0.7, sw/393));
+  const span = sw + 260*k;
+  for(const c of CLOUDS){
+    const x = ((c.x*span + walkTime*c.v) % span) - 130*k;
+    drawCloud(ctx, x, skyTop + skyH*c.y, c.s*k);
+  }
+
+  // 丘：奥ほど うすく かすんだ色
+  const H = Math.max(80, groundY - TAB_H);
+  const L = Math.max(50, sw/5.5);
+  drawHill(ctx, groundY - H*0.30, 14, L*1.25, 0.8, '#d7ecc6');
+  drawHill(ctx, groundY - H*0.16, 18, L,      2.3, '#c4e4a8');
+  // 手前の草はら（キャラが立つところ）
+  const mg = ctx.createLinearGradient(0, groundY - 34, 0, sh);
+  mg.addColorStop(0, '#b3df95');
+  mg.addColorStop(1, '#97cc78');
+  drawHill(ctx, groundTopY() + 4, 4, L*0.8, 4.1, mg);
+
+  // 下の操作パネル（＋−×÷・数字キー）は景色と分けて、落ち着いた色の下地にする。
+  // 草の上に半透明のキーを置くと、ひかえめなキーが灰みどりに濁って見えるため。
+  const panelTop = sh - bottomPanelH();
+  ctx.fillStyle = '#dde9ef';
+  ctx.fillRect(0, panelTop, sw, sh - panelTop);
 }
 
 // ─── Hit test ─────────────────────────────────────────────────────────────────
