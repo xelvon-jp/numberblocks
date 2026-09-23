@@ -2316,6 +2316,9 @@ function rainbowArcPlace(){
   const R   = Math.max(90, Math.min(sw*0.46, (cy - top) * 0.95));
   return { cx: sw/2, cy: cy, R: R };
 }
+// 「できた！」のスタンプも、クリアした瞬間に位置を決めて動かさない。
+// 道具の列のすぐ下（空の上のほう）に置き、キャラより先に描いて うしろに回す。
+function stampPlace(){ return { cx: sw/2, cy: targetRowY() + 66 + 44 }; }
 function drawRainbowArc(ctx){
   if(!winFx || !winFx.arc || !(winFx.praise && winFx.praise.rainbow)) return;
   const t = winFx.t, a = winFx.arc;
@@ -2411,21 +2414,13 @@ function drawWinLines(ctx){
 
 function drawWinStamp(ctx){
   if(!winFx) return;
-  const b = winFx.block, t = winFx.t;
+  const t = winFx.t;
   const fade = Math.min(1, Math.max(0, (WIN_MS-t)/500));
   // 出るときにちょっと行き過ぎてから戻る（ぽんっと押した感じ）
   const e = Math.min(1, t/190);
   const sc = 1 + 0.55*(1-e)*(1-e) - 0.22*Math.sin(e*Math.PI);
-  const cx = b ? Math.min(Math.max(90, b.x + b.width/2), sw-90) : sw/2;
-  // 顔はいちばん上のかたまりにあるので、その下（胸のあたり）に押す。
-  // 101以上は顔が「板1まい」ぶんの大きさなので、その高さを見てずらす。
-  let faceH = b ? b.bs : 0;
-  if(b){
-    const sp = blockSpec(b.num);
-    if(sp && sp.faceBox) faceH = sp.faceBox.h * b.bs;
-  }
-  const cy = b ? Math.min(b.y + faceH + b.bs*0.7 + 22, calcFloor() - 34)
-               : (TAB_H + calcFloor())/2;
+  const at = winFx.stampAt || stampPlace();
+  const cx = at.cx, cy = at.cy;
   ctx.save();
   ctx.globalAlpha = fade;
   ctx.translate(cx, cy); ctx.scale(sc, sc); ctx.rotate(-0.06);
@@ -3223,7 +3218,7 @@ function checkTask(){
     saveTask();
     const win = blocks.find(b=>b.num===t.n);
     winFx = { block:win, num:t.n, t:0, praise:praise, moves:moves,
-              arc: rainbow ? rainbowArcPlace() : null };
+              arc: rainbow ? rainbowArcPlace() : null, stampAt: stampPlace() };
     if(win){
       win.vy = -9; win.onGround = false;              // うれしくて跳ねる
       for(let i=0;i<70;i++) fxParticles.push(new Particle(win.cx, win.y + win.height*0.35));
@@ -3583,6 +3578,7 @@ function drawFrame(ts){
       updateWinFx(dt);
       drawWinLines(ctx);
       drawRainbowArc(ctx);
+      drawWinStamp(ctx);
       for(const b of blocks){ if(b===dragBlock) continue; b.draw(ctx,walkTime,0); }
       if(dragBlock){
         let bestMerge=null,bestMergeD=Infinity;
@@ -3620,7 +3616,6 @@ function drawFrame(ts){
       for(const fp of fxParticles) fp.draw(ctx);
       checkWay();
       checkTask();
-      drawWinStamp(ctx);
       drawTaskCard(ctx, walkTime);
       drawFormula(ctx);
       drawNumpad(ctx);

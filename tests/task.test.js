@@ -136,4 +136,25 @@ module.exports = {
     });
     t.eq(await p.evaluate(() => [taskIdx, taskDone]), [TEN + 1, false], 'つぎを押しても進まない');
   },
+
+  '「できた！」は キャラのうしろに、動かない場所に出る': async t => {
+    const p = await t.open();
+    await p.evaluate(i => { taskOn = true; startTask(i); }, TEN);
+    await solveTen(p);
+    const at = () => p.evaluate(() => JSON.stringify(winFx.stampAt));
+    const a = await at();
+    await t.sleep(250);                                // キャラは跳ねている最中
+    t.eq(await at(), a, 'キャラが跳ねると「できた！」も動いてしまう');
+    // 1コマぶん描いて、スタンプがキャラより先（うしろ）に描かれているか
+    const order = await p.evaluate(() => {
+      const seen = [];
+      const origStamp = drawWinStamp, origDraw = NumberBlock.prototype.draw;
+      drawWinStamp = function(c){ seen.push('stamp'); return origStamp(c); };
+      NumberBlock.prototype.draw = function(...a){ seen.push('chara'); return origDraw.apply(this, a); };
+      try{ drawFrame(performance.now()); }
+      finally{ drawWinStamp = origStamp; NumberBlock.prototype.draw = origDraw; }
+      return seen.join(',');
+    });
+    t.ok(order.startsWith('stamp'), '「できた！」がキャラより手前に描かれている: ' + order);
+  },
 };
