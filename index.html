@@ -748,6 +748,7 @@ function checkWay(){
 
 // おだいを はじめるときに まっさらに もどすもの
 function resetTaskState(){
+  cast = cast.filter(a => a.kind !== 'run');
   drumReset(currentTask());
   taskDone = false; taskLog = []; winFx = null;
   clearedAt = 0; autoNextOff = false; lastLevelUp = 0; setMiss = 0; setShake = 0;
@@ -796,7 +797,7 @@ function noteClockAnswer(ok){
   const st = clockStats();
   if(t.clv !== st.lv) return;                 // おさらい・おためし は 数えない
   st.hist = (st.hist || []).concat([!!ok]).slice(-CLOCK_WINDOW);
-  if(clockRecentOk(st) >= CLOCK_UP && st.lv < CLOCK_MAX){ st.lv++; st.hist = []; lastLevelUp = st.lv; }
+  if(clockRecentOk(st) >= CLOCK_UP && st.lv < CLOCK_MAX){ st.lv++; st.hist = []; lastLevelUp = st.lv; castParade(); }
   saveTask();
 }
 
@@ -2361,8 +2362,12 @@ function drawClockMode(ctx, t){
   ctx.restore();
   }
 
+  // できたあとは、かけつけてくる キャラが 目立つよう、5のなかま・ドラムを うすくする
+  const dim = taskDone && taskActive() && isClockTask(currentTask());
+  if(dim){ ctx.save(); ctx.globalAlpha = 0.3; }
   if(drumActive()) drawDrum(ctx, t);
   else { drawClockParts(ctx, t, g); drawSetAnswer(ctx, g); }
+  if(dim) ctx.restore();
 }
 
 // ─── 5のなかま ───────────────────────────────────────────────────────────
@@ -2598,6 +2603,7 @@ function clockClear(){
             arc: rainbow ? rainbowArcPlace() : null, stampAt:{ cx:g.cx, cy:g.cy + g.R*0.38 },
             landedAt:null, life: rainbow ? RAINBOW_LIFE : WIN_MS };
   for(let i=0;i<70;i++) fxParticles.push(new Particle(g.cx, g.cy));
+  if(!lastLevelUp) castRun(t.c.goal);                // レベルアップのときは パレードだけにする
 }
 // おだいの しゅるいに 画面を合わせる（開いたとき・人をかえたとき など）
 function followTaskMode(){
@@ -2769,6 +2775,97 @@ function drumAnswer(){
   if(taskLog.length === 1) noteClockAnswer(ok);     // 1かいめで あたったか
   if(ok){ drum.miss = 0; clockClear(); }
   else { drum.miss++; drum.shake = 1; }
+}
+
+// ─── おいわいの キャラたち ───────────────────────────────────────
+// できたときに ナンバーブロックスが あそびに来る。
+//   ・虹の すべりだい … レインボークリアの虹を 1が すべりおりて、ぴょんと とびおりる（drawRainbowSlider）
+//   ・パレード       … とけいの レベルが上がったら 1〜10 が 行進して 画面を よこぎる
+//   ・かけつけ       … とけいが できたら こたえの数（3:47 なら 3 と 47）が 走ってきて はねる
+// どれも 見るだけ（さわれない）。キャラの ほうは いつもの描きかた（drawNumberblock）を そのまま使う。
+let cast = [];        // { kind, t0, dur, draw(ctx, age) }
+function castNow(){ return performance.now(); }
+function drawCast(ctx){
+  const now = castNow();
+  cast = cast.filter(a => now - a.t0 < a.dur);
+  for(const a of cast) a.draw(ctx, now - a.t0);
+}
+// 体の下のはし（足は そこから下に出る）が y になるよう、n を x（体の左はし）に描く
+function drawCastChar(ctx, n, x, bottom, bs, walk){
+  const spec = blockSpec(n);
+  drawNumberblock(ctx, n, x, bottom - spec.rows*bs, bs, { t: walkTime, animate: !!walk, spec });
+  return spec.cols*bs;
+}
+// かけつけ：こたえの数が 右から走ってきて、止まって 2かい はねる
+function castRun(goal){
+  cast = cast.filter(a => a.kind !== 'run');
+  const h = Math.floor(goal/60) % 24, m = goal % 60;
+  const nums = m ? [h || 12, m] : [h || 12];            // 0ふんは キャラが いないので じ だけ
+  const floor = calcFloor(), maxH = Math.min(120, (floor - TAB_H) * 0.3);
+  nums.forEach((n, i) => {
+    const spec = blockSpec(n), bs = Math.max(6, Math.min(16, maxH / spec.rows));
+    const w = spec.cols*bs;
+    const xTo = (nums.length === 1 ? sw*0.5 : (i === 0 ? sw*0.28 : sw*0.72)) - w/2;
+    const delay = i*220, RUN = 700;
+    cast.push({ kind:'run', n, t0: castNow(), dur: 3400, draw(ctx, age){
+      const a = age - delay; if(a < 0) return;
+      const e = Math.min(1, a/RUN), ease = 1 - (1-e)*(1-e);
+      const x = sw + 10 + (xTo - sw - 10)*ease;
+      const hop = e >= 1 ? Math.abs(Math.sin((a - RUN)*0.009)) * bs*1.6 * Math.max(0, 1 - (a - RUN)/1400) : 0;
+      drawCastChar(ctx, n, x, floor - hop, bs, e < 1);
+    }});
+  });
+}
+// パレード：1〜10 が 1れつで 左から右へ（1が せんとう）
+function castParade(){
+  cast = cast.filter(a => a.kind !== 'parade');
+  const floor = calcFloor(), bs = Math.max(5, Math.min(11, (floor - TAB_H) * 0.28 / 10));
+  const nums = [1,2,3,4,5,6,7,8,9,10], gap = bs*1.4;
+  const ws = nums.map(n => blockSpec(n).cols*bs);
+  const total = ws.reduce((a, b) => a + b, 0) + gap*(nums.length - 1);
+  cast.push({ kind:'parade', t0: castNow(), dur: 4200, draw(ctx, age){
+    const head = -20 + (sw + total + 40) * (age / 4200);   // せんとう（1）の 右はし
+    let x = head;
+    nums.forEach((n, i) => {
+      x -= ws[i];
+      const hop = Math.abs(Math.sin(age*0.011 + i*0.8)) * bs*0.9;
+      if(x < sw && x + ws[i] > 0) drawCastChar(ctx, n, x, floor - hop, bs, true);
+      x -= gap;
+    });
+  }});
+}
+// 虹の すべりだい。虹が かかりきったら 1が てっぺんから 右へ すべりおり、はしで とびおりる。
+const SLIDE_AT = 450, SLIDE_MS = 850, HOP_MS = 480;
+function sliderPos(){
+  if(!winFx || !winFx.arc || !(winFx.praise && winFx.praise.rainbow)) return null;
+  const rt = rainbowTime(); if(rt < SLIDE_AT) return null;
+  const a = winFx.arc, band = a.band || 9, R = a.R + band/2;   // 虹の いちばん上の ふち
+  // 虹は 画面より大きいことがあるので、とびおりる場所が 画面の中に入るところで すべりおわる
+  const th0 = -Math.PI/2 - 0.04, th1 = -Math.acos(Math.max(0.2, Math.min(0.75, (sw - 34 - a.cx)/R)));
+  const k = rt - SLIDE_AT;
+  if(k < SLIDE_MS){
+    const e = k/SLIDE_MS, th = th0 + (th1 - th0)*e*e;          // だんだん はやく
+    return { x: a.cx + Math.cos(th)*R, y: a.cy + Math.sin(th)*R, sliding:true };
+  }
+  const q = k - SLIDE_MS; if(q > HOP_MS + 500) return null;
+  const sx = a.cx + Math.cos(th1)*R, sy = a.cy + Math.sin(th1)*R;
+  const ex = Math.min(sw - 24, sx + 40), ey = calcFloor();
+  if(q < HOP_MS){
+    const e = q/HOP_MS;
+    return { x: sx + (ex - sx)*e, y: sy + (ey - sy)*e - Math.sin(e*Math.PI)*50, sliding:false };
+  }
+  const b = (q - HOP_MS)/500;                                 // ちゃくちで ちょこんと はねる
+  return { x: ex, y: ey - Math.abs(Math.sin(b*Math.PI))*10, sliding:false };
+}
+function drawRainbowSlider(ctx){
+  const p = sliderPos(); if(!p) return;
+  const bs = 16;
+  ctx.save();
+  if(p.sliding){                                              // すべっているあいだは 虹に そって かたむく
+    ctx.translate(p.x, p.y); ctx.rotate(Math.max(-0.5, Math.min(0.9, (p.x - winFx.arc.cx)/winFx.arc.R*1.2)));
+    drawCastChar(ctx, 1, -bs/2, 0, bs, false);
+  } else drawCastChar(ctx, 1, p.x - bs/2, p.y, bs, true);
+  ctx.restore();
 }
 
 // ─── クリアしたときの演出 ─────────────────────────────────────────
@@ -4399,6 +4496,8 @@ function drawFrame(ts){
     updateWinFx(dt);
     drawWinLines(ctx);
     drawClockMode(ctx, walkTime);
+    drawRainbowSlider(ctx);
+    drawCast(ctx);
     drawWinStamp(ctx);
     for(const fp of fxParticles) fp.update();
     fxParticles = fxParticles.filter(fp=>fp.life>0);
@@ -4434,6 +4533,8 @@ function drawFrame(ts){
       updateWinFx(dt);
       drawWinLines(ctx);
       drawWinStamp(ctx);
+      drawRainbowSlider(ctx);
+      drawCast(ctx);
       for(const b of blocks){ if(b===dragBlock) continue; b.draw(ctx,walkTime,0); }
       if(dragBlock){
         let bestMerge=null,bestMergeD=Infinity;

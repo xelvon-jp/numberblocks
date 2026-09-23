@@ -463,4 +463,73 @@ module.exports = {
       t.eq(r, { over:false, fits:true }, `${w}x${h} で いちらんが 重なる／はみ出す`);
     }
   },
+
+  // ── おいわいの キャラたち ──
+  'かけつけ：とけいが できたら こたえの数が 走ってきて、画面の中で とまる（0ふんは じ だけ）': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      taskOn = true;
+      const runs = () => cast.filter(a => a.kind === 'run').map(a => a.n);
+      startClockTask({ k:'clock', to:'3:47' }); clockT = 3*60 + 47; clockAnswer();
+      const a = runs();
+      startClockTask({ k:'pick', to:'15:32' }); drumSet(15, 32); drumAnswer();
+      const b = runs();
+      startClockTask({ k:'clock', to:'12:00' }); clockT = 0; clockAnswer();
+      const c = runs();
+      // とまった あとの いち（体の左はし〜右はし）が 画面の中
+      const xs = [];
+      const orig = drawCastChar;
+      drawCastChar = (ctx, n, x, bottom, bs) => { xs.push([x, x + blockSpec(n).cols*bs, bottom]); return 0; };
+      try{ for(const a of cast) a.draw(ctx, 2500); } finally { drawCastChar = orig; }
+      const inside = xs.length > 0 && xs.every(([l, r, y]) => l >= 0 && r <= sw && Math.abs(y - calcFloor()) < 30);
+      startTask(0);                                      // つぎの おだいでは かえる
+      return { a, b, c, inside, after: runs() };
+    });
+    t.eq(r, { a:[3,47], b:[15,32], c:[12], inside:true, after:[] }, 'かけつけの キャラが ちがう');
+  },
+
+  'パレード：とけいの レベルが上がったら 1〜10 が 行進する（そのときは かけつけは 出さない）': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      taskOn = true;
+      const st = clockStats(); st.lv = 2; st.hist = new Array(7).fill(true).concat([false, false]);
+      startClockTask({ k:'pick', to:'7:30', clv:2 }); drumSet(7, 30); drumAnswer();
+      const kinds = cast.map(a => a.kind);
+      const seen = [];
+      const orig = drawCastChar;
+      drawCastChar = (ctx, n) => { seen.push(n); return 0; };
+      try{ for(const k of [800, 1600, 2400, 3200, 4000]) cast.find(a => a.kind === 'parade').draw(ctx, k); } finally { drawCastChar = orig; }
+      startTask(0);
+      return { kinds, all: [...new Set(seen)].sort((a,b) => a-b), stays: cast.some(a => a.kind === 'parade') };
+    });
+    t.eq(r, { kinds:['parade'], all:[1,2,3,4,5,6,7,8,9,10], stays:true }, 'パレードが おかしい');
+  },
+
+  '虹の すべりだい：1が 虹の上を すべって、画面の中で 草はらに とびおりる': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      taskOn = true; startClockTask({ k:'clock', to:'3:47' }); clockT = 3*60 + 47; clockAnswer();
+      const a = winFx.arc, R = a.R + (a.band || 9)/2;
+      const at = rt => { winFx.landedAt = 0; winFx.t = rt; return sliderPos(); };
+      const before = at(SLIDE_AT - 50);
+      const mid = [0.2, 0.5, 0.9].map(f => at(SLIDE_AT + SLIDE_MS*f));
+      const onArc = mid.every(q => q && q.sliding && Math.abs(Math.hypot(q.x - a.cx, q.y - a.cy) - R) < 1);
+      const land = at(SLIDE_AT + SLIDE_MS + HOP_MS + 10);
+      return { before, onArc, landIn: land.x > 0 && land.x < sw, landY: Math.abs(land.y - calcFloor()) < 12,
+               endIn: mid[2].x < sw };
+    });
+    t.eq(r, { before:null, onArc:true, landIn:true, landY:true, endIn:true }, '虹の すべりだいが おかしい');
+  },
+
+  'おいわいの キャラが出ている あいだ 画面を描いても 止まらない': async t => {
+    const p = await t.open();
+    await p.evaluate(() => {
+      taskOn = true; const st = clockStats(); st.lv = 2; st.hist = new Array(7).fill(true).concat([false, false]);
+      startClockTask({ k:'clock', to:'7:30', clv:2 }); clockT = 7*60 + 30; clockAnswer();
+    });
+    await t.sleep(2500);
+    await p.evaluate(() => { setBegMode(true); setMode('+'); startTask(20); spawnBlock(10); checkTask(); });
+    await t.sleep(2500);
+    t.eq(t.errors, [], 'ページで エラー');
+  },
 };
