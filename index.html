@@ -587,7 +587,7 @@ function tickAutoNext(){
 // 画面にその数のキャラができたら、つぎの数へ進む（先の数を先に作ったら、そこまで飛ぶ）。
 let wayIdx = 0, wayFlash = 0;
 // ── しばり（ビギナー）─────────────────────────────────────────────
-// ふつうのときに使う数字のキーだけで作れたら「しばりで できた！」と虹を出す。
+// ふつうのときに使う数字のキーだけで作れたら「レインボー🌈クリア！」と虹を出す。
 // ひかえめなキーを1回でも押したら、そのおだいでは虹は出ない（CLR でやり直せば また出る）。
 let usedOther = false;
 function currentWay(){ return (begMode() && taskActive() && currentTask().way) || []; }
@@ -2307,7 +2307,7 @@ function rainbowFill(ctx, x0, x1){
   ARC_COLORS.forEach((c,i) => g.addColorStop(i/(ARC_COLORS.length-1), c));
   return g;
 }
-// しばりで できたとき、キャラの足もとから 虹のアーチが左から右へかかる
+// レインボークリアのとき、キャラの足もとから 虹のアーチが左から右へかかる
 function drawRainbowArc(ctx){
   if(!winFx || !winFx.block || !(winFx.praise && winFx.praise.rainbow)) return;
   const b = winFx.block, t = winFx.t;
@@ -2327,6 +2327,31 @@ function drawRainbowArc(ctx){
   });
   ctx.restore();
 }
+// レインボークリアのことば。🌈 は絵文字のまま、前後の字だけ虹色にする。
+const RAINBOW_TEXT = 'レインボー🌈クリア！';
+function drawRainbowWords(ctx, cx, cy, size, stroke){
+  const parts = ['レインボー', '🌈', 'クリア！'];
+  ctx.save();
+  ctx.font = 'bold ' + size + 'px sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  const ws = parts.map(t => ctx.measureText(t).width);
+  const total = ws.reduce((a,b) => a+b, 0);
+  let x = cx - total/2;
+  const fill = rainbowFill(ctx, x, x + total);
+  parts.forEach((t, i) => {
+    if(t === '🌈'){
+      ctx.fillStyle = '#000';                  // 絵文字は自分の色で出る（ふちどりはかけない）
+      ctx.fillText(t, x, cy);
+    } else {
+      if(stroke){ ctx.strokeStyle = '#fff'; ctx.lineWidth = stroke; ctx.strokeText(t, x, cy); }
+      ctx.fillStyle = fill; ctx.fillText(t, x, cy);
+    }
+    x += ws[i];
+  });
+  ctx.restore();
+  return total;
+}
+
 // ステージいちらんの小さな虹の印
 function drawMiniRainbow(ctx, cx, cy, r){
   ctx.save();
@@ -2405,14 +2430,13 @@ function drawWinStamp(ctx){
   const pr = winFx.praise;
   if(pr){
     ctx.font='bold ' + (pr.big ? 24 : 22) + 'px sans-serif';
-    ctx.strokeStyle='#fff'; ctx.lineWidth=7; ctx.strokeText(pr.text,0,32);
     if(pr.rainbow){
-      const hw = ctx.measureText(pr.text).width/2;
-      ctx.fillStyle = rainbowFill(ctx, -hw, hw);
+      drawRainbowWords(ctx, 0, 32, pr.big ? 24 : 22, 7);
     } else {
+      ctx.strokeStyle='#fff'; ctx.lineWidth=7; ctx.strokeText(pr.text,0,32);
       ctx.fillStyle = pr.color;
+      ctx.fillText(pr.text,0,32);
     }
-    ctx.fillText(pr.text,0,32);
   }
   ctx.restore();
 }
@@ -2537,14 +2561,13 @@ function drawTaskCard(ctx, t){
   if(taskDone){
     ctx.textAlign='left'; ctx.fillStyle='#6b4a00'; ctx.font='bold 19px sans-serif';
     if(begMode()){
-      // ビギナーは手数を出さない。しばりで できたときだけ 虹色でひとこと
+      // ビギナーは手数を出さない。レインボークリアのときだけ 虹色でひとこと
       const rb = winFx && winFx.praise && winFx.praise.rainbow;
       ctx.fillText('できた！  ' + task.n, r.x+14, rb ? r.y+19 : r.y+25);
       if(rb){
         ctx.font='bold 13px sans-serif';
-        const tx = 'しばりで できた！', tw = ctx.measureText(tx).width;
-        ctx.fillStyle = rainbowFill(ctx, r.x+14, r.x+14+tw);
-        ctx.fillText(tx, r.x+14, r.y+38);
+        const w = ['レインボー','🌈','クリア！'].reduce((a,t) => a + ctx.measureText(t).width, 0);
+        drawRainbowWords(ctx, r.x+14 + w/2, r.y+38, 13, 0);
       }
     } else {
       ctx.fillText('できた！  ' + task.n, r.x+14, r.y+19);
@@ -3186,7 +3209,7 @@ function checkTask(){
     const prevOwn = kept ? kept.length : null;
     const moves = taskLog.length;
     const rainbow = begMode() && !usedOther;
-    const praise = rainbow ? { text:'しばりで できた！', color:'#c0398a', big:true, rainbow:true }
+    const praise = rainbow ? { text:RAINBOW_TEXT, color:'#c0398a', big:true, rainbow:true }
                            : judgeClear(taskIdx, moves, prevOwn);
     if(rainbow){ const cr = curRec(); cr.rainbow = cr.rainbow || {}; cr.rainbow[taskIdx] = true; }
     if(!kept || moves < kept.length) taskLogs[taskIdx] = taskLog.slice();

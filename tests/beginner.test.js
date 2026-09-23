@@ -159,6 +159,7 @@ module.exports = {
       taskOn = true; setMode('+'); startTask(20);      // 10 を 3 と 7 で
       spawnBlock(3); spawnBlock(7); fuseBlocks(blocks[0], blocks[1]); checkTask();
       out.good = !!(winFx && winFx.praise && winFx.praise.rainbow);
+      out.text = winFx && winFx.praise && winFx.praise.text;
       out.goodMark = !!(curRec().rainbow && curRec().rainbow[20]);
       startTask(21); setMode('x');                    // 30 を 4 と 7 で…のところを 10×3 で
       spawnBlock(10); spawnBlock(3); fuseBlocks(blocks[0], blocks[1]); checkTask();
@@ -167,6 +168,8 @@ module.exports = {
       out.badMark = !!(curRec().rainbow && curRec().rainbow[21]);
       return out;
     });
+    t.eq(r.text, 'レインボー🌈クリア！', 'ほめことばが「レインボー🌈クリア！」になっていない');
+    delete r.text;
     t.eq(r, { good:true, goodMark:true, done2:true, bad:false, badMark:false },
          '虹の出る／出ないが ちがう');
   },
