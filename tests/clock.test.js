@@ -310,4 +310,17 @@ module.exports = {
       t.eq(r, { belowDial:true, fits:true, inside:true }, `${w}x${h} で ドラムが はみ出す／重なる`);
     }
   },
+
+  'よんで えらぶ：できたあとも、ドラムの場所に 時こくの文字を 重ねない': async t => {
+    const p = await t.open();
+    const i = await find(p, "x.k==='pick' && x.to==='2:48'");
+    const r = await p.evaluate(i => {
+      taskOn = true; startTask(i); drumSet(2, 48); drumAnswer();
+      const got = [], ft = ctx.fillText, dg = drumGeom();
+      ctx.fillText = function(s, x, y){ got.push({ s:String(s), y }); return ft.apply(this, arguments); };
+      try{ drawClockMode(ctx, 0); } finally { ctx.fillText = ft; }
+      return { done: taskDone, over: got.filter(g => /\d+:\d\d|時/.test(g.s) && g.y >= dg.top - 20 && g.y <= dg.top + dg.H + 20).map(g => g.s) };
+    }, i);
+    t.eq(r, { done:true, over:[] }, 'ドラムに 文字が かさなっている');
+  },
 };

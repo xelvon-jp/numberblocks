@@ -2344,7 +2344,8 @@ function drawClockMode(ctx, t){
     const gv = ((ctask.c.goal % 1440) + 1440) % 1440;
     digital = fmtT(gv); kanji = '(' + Math.floor(gv/60) + '時' + (gv%60) + '分)';
   }
-  if(!(ctask && !taskDone)){
+  // よんで えらぶ では ここに ドラムがあるので出さない（こたえは カードに出る）
+  if(!(ctask && !taskDone) && !drumActive()){
   ctx.save(); ctx.textAlign='left'; ctx.textBaseline='middle';
   const fBig='bold 30px sans-serif', fSmall='bold 17px sans-serif';
   ctx.font=fBig;   const wBig   = ctx.measureText(digital).width;
