@@ -137,9 +137,9 @@ module.exports = {
     const r = await p.evaluate(() => {
       setMode('calc');
       const gy = () => sh - GH - bottomPanelH();
-      const a = sceneryLayer(gy()), b = sceneryLayer(gy());
+      const a = sceneryLayers(gy()), b = sceneryLayers(gy());
       setMode('clock');                                // 下のパネルの高さが変わる
-      const c = sceneryLayer(gy());
+      const c = sceneryLayers(gy());
       return { same: a === b, redrawn: a !== c };
     });
     t.eq(r, { same:true, redrawn:true }, '景色の使いまわし／描きなおしが ねらいどおりでない');

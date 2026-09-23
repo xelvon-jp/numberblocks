@@ -2344,9 +2344,9 @@ function rainbowFill(ctx, x0, x1){
 // キャラはうれしくて跳ねるが、虹はいっしょに動かない（画面の横まん中、地面に足をつける）。
 // 位置と大きさは クリアした瞬間に決めて、そのあとは変えない。
 function rainbowArcPlace(){
-  const top = targetRowY() + 66;                 // 道具の列より下
-  const cy  = calcFloor();                       // 地面
-  const R   = Math.max(90, Math.min(sw*0.46, (cy - top) * 0.95));
+  const top = targetRowY() + 66;                 // 道具の列より下（虹のてっぺんの上限）
+  const cy  = groundTopY();                      // 草はらの上のふち（足は手前の丘にかくれる）
+  const R   = Math.max(90, Math.min(sw*0.62, cy - top));
   return { cx: sw/2, cy: cy, R: R };
 }
 // 「できた！」のスタンプも、クリアした瞬間に位置を決めて動かさない。
@@ -3385,21 +3385,26 @@ function drawFlower(g, x, y, r, petal){
   g.beginPath(); g.arc(x, y, r*0.6, 0, Math.PI*2); g.fill();
 }
 
-// 動かない景色（お山・木・茂み・草はら・花）は 一度だけ描いて おぼえておく。
-// 画面の大きさか 地面の高さが変わったときだけ 描きなおす。
+// 動かない景色は 一度だけ描いて おぼえておく。画面の大きさか 地面の高さが
+// 変わったときだけ 描きなおす。虹を はさめるよう「奥」と「手前」の2まいに分けてある。
+//   奥（far） … 遠くのお山
+//   手前（near）… 近くのお山・木・茂み・草はら・花
 let sceneryCache = null, sceneryKey = '';
-function sceneryLayer(groundY){
+function sceneryLayers(groundY){
   const key = sw + 'x' + sh + ':' + Math.round(groundY);
   if(sceneryCache && sceneryKey === key) return sceneryCache;
-  const c = document.createElement('canvas');
-  c.width = Math.max(1, sw); c.height = Math.max(1, sh);
-  const g = c.getContext('2d');
+  const mk = () => { const c = document.createElement('canvas');
+                     c.width = Math.max(1, sw); c.height = Math.max(1, sh); return c; };
+  const far = mk(), near = mk();
   const gTop = groundY - 30;                           // 草はらの上のふち
   const H = Math.max(60, gTop - TAB_H);                // 遊ぶ場所の高さ
 
-  // 奥のお山（うすい）→ 手前のお山（すこし みどり）
-  drawMounds(g, gTop + 6, [[-0.05,0.42,1.0],[0.42,0.40,0.86],[0.92,0.44,0.95]],
+  // 奥のお山（うすい）
+  drawMounds(far.getContext('2d'), gTop + 6, [[-0.05,0.42,1.0],[0.42,0.40,0.86],[0.92,0.44,0.95]],
              H*0.52, '#f1faec', '#d9eecb');
+
+  // ここから手前
+  const g = near.getContext('2d');
   drawMounds(g, gTop + 6, [[0.18,0.38,1.0],[0.72,0.40,0.82],[1.12,0.30,0.9]],
              H*0.30, '#e4f3d6', '#c8e6b1');
 
@@ -3425,8 +3430,8 @@ function sceneryLayer(groundY){
   const flowers = [[0.07,'#ff9fb8'],[0.19,'#ffffff'],[0.31,'#ffb347'],[0.63,'#ffffff'],[0.76,'#ff9fb8'],[0.91,'#ffb347']];
   flowers.forEach(([fx, col], i) => drawFlower(g, fx*sw, fy + (i%2)*9, fr, col));
 
-  sceneryCache = c; sceneryKey = key;
-  return c;
+  sceneryCache = { far, near }; sceneryKey = key;
+  return sceneryCache;
 }
 
 function drawBG(ctx){
@@ -3447,8 +3452,12 @@ function drawBG(ctx){
     drawCloud(ctx, x, skyTop + skyH*c.y, c.s*k);
   }
 
-  // お山・木・茂み・草はら・花（おぼえておいたものを貼るだけ）
-  ctx.drawImage(sceneryLayer(groundY), 0, 0);
+  // 奥のお山 → 虹 → 手前のお山・木・茂み・草はら・花（おぼえておいたものを貼るだけ）。
+  // 虹は遠くの空にかかるので、手前の丘や木のうしろに 足がかくれる。
+  const sc = sceneryLayers(groundY);
+  ctx.drawImage(sc.far, 0, 0);
+  drawRainbowArc(ctx);
+  ctx.drawImage(sc.near, 0, 0);
 
   // 下の操作パネル（＋−×÷・数字キー）は景色と分けて、落ち着いた色の下地にする。
   // 草の上に半透明のキーを置くと、ひかえめなキーが灰みどりに濁って見えるため。
@@ -3797,7 +3806,6 @@ function drawFrame(ts){
       applyPhysics();
       updateWinFx(dt);
       drawWinLines(ctx);
-      drawRainbowArc(ctx);
       drawWinStamp(ctx);
       for(const b of blocks){ if(b===dragBlock) continue; b.draw(ctx,walkTime,0); }
       if(dragBlock){

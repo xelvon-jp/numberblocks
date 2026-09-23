@@ -232,6 +232,33 @@ module.exports = {
     t.eq(await p.evaluate(() => winFx.arc.cx === sw/2), true, '虹が 画面の横まん中にない');
   },
 
+  '虹は 遠くの空にかかる：奥のお山より前、手前のお山・木より うしろ、キャラより うしろ': async t => {
+    const p = await t.open({ who:'hinata' });
+    await tapMode(p, true);
+    await p.evaluate(() => {
+      taskOn = true; setMode('+'); startTask(20);
+      spawnBlock(3); spawnBlock(7); fuseBlocks(blocks[0], blocks[1]); checkTask();
+    });
+    await p.waitForFunction(() => rainbowTime() > 100, null, { timeout: 4000 });
+    const order = await p.evaluate(() => new Promise(done => {
+      const log = [], sc = sceneryLayers(sh - GH - bottomPanelH());
+      const b0 = blocks[0], di = ctx.drawImage, ra = drawRainbowArc, rb = b0.draw;
+      ctx.drawImage = function(img){ if(img === sc.far) log.push('far'); else if(img === sc.near) log.push('near');
+                                     return di.apply(this, arguments); };
+      drawRainbowArc = function(){ log.push('rainbow'); return ra.apply(this, arguments); };
+      b0.draw = function(){ log.push('block'); return rb.apply(this, arguments); };
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        ctx.drawImage = di; drawRainbowArc = ra; b0.draw = rb;
+        done(log.slice(0, 4));
+      }));
+    }));
+    t.eq(order, ['far','rainbow','near','block'], '虹の重なり順が ちがう');
+    const r = await p.evaluate(() => ({ cy: winFx.arc.cy, grass: groundTopY(),
+                                         top: winFx.arc.cy - winFx.arc.R, tools: targetRowY() + 66 }));
+    t.ok(r.cy <= r.grass + 1, '虹の足が 草はらより手前にささっている');
+    t.ok(r.top >= r.tools - 1, '虹のてっぺんが 道具の列にかぶる');
+  },
+
   '虹は キャラが着地してから かかる': async t => {
     const p = await t.open({ who:'hinata' });
     await tapMode(p, true);
