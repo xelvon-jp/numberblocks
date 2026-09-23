@@ -114,4 +114,100 @@ module.exports = {
     });
     t.eq(n, [9], 'ひかえめなキーを押しても キャラが出ない');
   },
+
+  'ビギナーでは みちしるべが出て、作れたら つぎの数へ進む': async t => {
+    const p = await t.open({ who:'hinata' });
+    await tapMode(p, true);
+    const r = await p.evaluate(() => {
+      taskOn = true; startTask(TASKS.findIndex(x => x.n === 777));
+      const out = { way: currentWay(), h0: taskCardH(), idx0: wayIdx };
+      setMode('x'); spawnBlock(10); spawnBlock(7); fuseBlocks(blocks[0], blocks[1]);   // 70
+      checkWay();
+      out.idx1 = wayIdx;
+      return out;
+    });
+    t.eq(r.way, [70, 77, 770], '777 のみちしるべがちがう');
+    t.eq(r.h0, 80, 'みちしるべのぶん カードがのびていない');
+    t.eq([r.idx0, r.idx1], [0, 1], '70 を作っても つぎの みちしるべへ進まない');
+  },
+
+  '先の みちしるべを先に作ったら、そこまで飛ぶ': async t => {
+    const p = await t.open({ who:'hinata' });
+    await tapMode(p, true);
+    const idx = await p.evaluate(() => {
+      taskOn = true; startTask(TASKS.findIndex(x => x.n === 777));
+      spawnBlock(77); checkWay();                   // 70 をとばして 77
+      return wayIdx;
+    });
+    t.eq(idx, 2, '先の みちしるべを作っても そこまで飛ばない');
+  },
+
+  'ふつうでは みちしるべを出さない': async t => {
+    const p = await t.open({ who:'hinata' });
+    const r = await p.evaluate(() => {
+      taskOn = true; startTask(TASKS.findIndex(x => x.n === 777));
+      return { way: currentWay(), h: taskCardH() };
+    });
+    t.eq(r, { way: [], h: 50 }, 'ふつうなのに みちしるべが出ている');
+  },
+
+  'くっきりしたキーだけで作ると虹、ひかえめなキーを使うと出ない': async t => {
+    const p = await t.open({ who:'hinata' });
+    await tapMode(p, true);
+    const r = await p.evaluate(() => {
+      const out = {};
+      taskOn = true; setMode('+'); startTask(20);      // 10 を 3 と 7 で
+      spawnBlock(3); spawnBlock(7); fuseBlocks(blocks[0], blocks[1]); checkTask();
+      out.good = !!(winFx && winFx.praise && winFx.praise.rainbow);
+      out.goodMark = !!(curRec().rainbow && curRec().rainbow[20]);
+      startTask(21); setMode('x');                    // 30 を 4 と 7 で…のところを 10×3 で
+      spawnBlock(10); spawnBlock(3); fuseBlocks(blocks[0], blocks[1]); checkTask();
+      out.done2 = taskDone;
+      out.bad = !!(winFx && winFx.praise && winFx.praise.rainbow);
+      out.badMark = !!(curRec().rainbow && curRec().rainbow[21]);
+      return out;
+    });
+    t.eq(r, { good:true, goodMark:true, done2:true, bad:false, badMark:false },
+         '虹の出る／出ないが ちがう');
+  },
+
+  'ひかえめなキーを もどすで取り消せば、虹は また出る': async t => {
+    const p = await t.open({ who:'hinata' });
+    await tapMode(p, true);
+    const rb = await p.evaluate(() => {
+      taskOn = true; setMode('+'); startTask(20);
+      spawnBlock(10); doUndo();                        // 10（ひかえめ）を押して、もどす
+      spawnBlock(3); spawnBlock(7); fuseBlocks(blocks[0], blocks[1]); checkTask();
+      return !!(winFx && winFx.praise && winFx.praise.rainbow);
+    });
+    t.eq(rb, true, 'もどしたのに 虹が出ない');
+  },
+
+  'ふつうでは 虹は出ない': async t => {
+    const p = await t.open({ who:'hinata' });
+    const pr = await p.evaluate(() => {
+      taskOn = true; setMode('+'); startTask(20);
+      spawnBlock(3); spawnBlock(7); fuseBlocks(blocks[0], blocks[1]); checkTask();
+      return winFx && winFx.praise ? { text: winFx.praise.text, rainbow: !!winFx.praise.rainbow } : null;
+    });
+    t.eq(pr, { text:'じょうず！', rainbow:false }, 'ふつうのクリアで 虹が出た');
+  },
+
+  '虹の印は 開き直しても残り、きろくの せいりで消える': async t => {
+    const p = await t.open({ who:'hinata' });
+    await tapMode(p, true);
+    await p.evaluate(() => {
+      taskOn = true; setMode('+'); startTask(20);
+      spawnBlock(3); spawnBlock(7); fuseBlocks(blocks[0], blocks[1]); checkTask();
+    });
+    await p.reload();
+    await p.waitForFunction(() => typeof drawFrame === 'function');
+    const r = await p.evaluate(() => {
+      whoOpen = false; setProfile(0);
+      const kept = !!recOf('hinata', true).rainbow[20];
+      clearLevelRecords('hinata', 2);                  // 20番は レベル3
+      return { kept, after: !!recOf('hinata', true).rainbow[20] };
+    });
+    t.eq(r, { kept:true, after:false }, '虹の印が 残らない／消えない');
+  },
 };

@@ -64,14 +64,20 @@ function makeT(browser, baseUrl){
       contexts.push(ctx);
       const page = await ctx.newPage();
       page.on('pageerror', e => errors.push(String(e && e.message || e)));
+      // スクリプトが読みこめないと drawFrame ができないので、長く待たずに理由を出して止める
+      // （engine.js と同じ名前の const を置いて全部止まったことがある）
+      const ready = async () => {
+        try{ await page.waitForFunction(() => typeof drawFrame === 'function', null, { timeout: 5000 }); }
+        catch(e){ throw new Failure('ゲームが読みこめない: ' + (errors.join(' / ') || e.message.split('\n')[0])); }
+      };
       await page.goto(baseUrl + '/index.html');
-      await page.waitForFunction(() => typeof drawFrame === 'function');
+      await ready();
       await page.evaluate(s => {
         localStorage.clear();
         if(s) for(const k in s) localStorage.setItem(k, s[k]);
       }, o.storage || null);
       await page.reload();
-      await page.waitForFunction(() => typeof drawFrame === 'function');
+      await ready();
       await sleep(250);
       if(!o.keepPicker){
         await page.evaluate(who => {
