@@ -97,4 +97,39 @@ module.exports = {
       t.eq(r.btnOut, 0, `${w}x${h} で せってい のボタンが画面の外にある`);
     }
   },
+
+  'にじの ちょうせい：せっていから開いて、動かした値が 虹に使われ、のこり、もとにもどせる': async t => {
+    const p = await t.open();
+    const r0 = await p.evaluate(() => JSON.stringify(rainbowArcPlace()));
+    await p.evaluate(() => {
+      setOpen = true; drawSettings(ctx);
+      const b = setBtns.find(x => x.val === 'arc');
+      handleSettingsTap(b.x + b.w/2, b.y + b.h/2);
+    });
+    t.eq(await p.evaluate(() => [setOpen, arcTuning, !!document.getElementById('arc-tuner')]),
+         [false, true, true], 'ちょうせいパネルが開かない');
+    const slide = (k, v) => p.evaluate(([k, v]) => {
+      const i = document.querySelector('#arc-tuner input[data-k="' + k + '"]');
+      i.value = v; i.dispatchEvent(new Event('input'));
+    }, [k, v]);
+    await slide('x', 0.3); await slide('r', 0.9); await slide('foot', 0.2);
+    t.eq(await p.evaluate(() => (JSON.parse(localStorage.getItem('nb_arc_tune')) || {}).foot), 0.2,
+         'スライダーを動かしても 保存されない');
+    await p.evaluate(() => [...document.querySelectorAll('#arc-tuner button')].find(b => b.textContent === '木の前').click());
+    const r1 = await p.evaluate(() => ({ cx: rainbowArcPlace().cx / sw, R: rainbowArcPlace().R / sw,
+      up: (groundTopY() - rainbowArcPlace().cy) / arcPlayH(), layer: arcLayer(),
+      saved: JSON.parse(localStorage.getItem('nb_arc_tune')) }));
+    t.eq([+r1.cx.toFixed(2), +r1.R.toFixed(2), +r1.up.toFixed(2), r1.layer], [0.3, 0.9, 0.2, 2], '動かした値が 虹に使われていない');
+    t.eq([r1.saved.x, r1.saved.r, r1.saved.layer], [0.3, 0.9, 2], '値が保存されていない');
+    t.ok(/よこ 0\.30/.test(await p.evaluate(() => document.getElementById('arc-tune-text').textContent)),
+         '値の文字が 出ていない');
+    // 開きなおしても のこっている
+    await p.reload(); await p.waitForFunction(() => typeof drawFrame === 'function');
+    t.eq(await p.evaluate(() => arcLayer()), 2, '開きなおすと 値が消える');
+    await p.evaluate(() => { openArcTuner();
+      [...document.querySelectorAll('#arc-tuner button')].find(b => b.textContent === 'もとにもどす').click(); closeArcTuner(); });
+    t.eq(await p.evaluate(() => [JSON.stringify(rainbowArcPlace()), localStorage.getItem('nb_arc_tune'), arcTuning,
+                                 !!document.getElementById('arc-tuner')]),
+         [r0, null, false, false], 'もとにもどす／とじる が きかない');
+  },
 };
