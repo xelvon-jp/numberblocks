@@ -229,10 +229,10 @@ module.exports = {
     t.ok(a.arc && a.arc !== 'null', '虹の位置が決まっていない');
     t.ok(a.feet !== b.feet, 'キャラが跳ねていない（この確認が意味をなさない）');
     t.eq(b.arc, a.arc, 'キャラが跳ねると 虹も動いてしまう');
-    t.eq(await p.evaluate(() => winFx.arc.cx === sw/2), true, '虹が 画面の横まん中にない');
+    t.eq(await p.evaluate(() => Math.abs(winFx.arc.cx - sw*0.58) < 0.5), true, '虹が 決めた横の位置にない');
   },
 
-  '虹は 遠くの空にかかる：奥のお山より前、手前のお山・木より うしろ、キャラより うしろ': async t => {
+  '虹は 遠くの空にかかる：お山・木より うしろ、キャラより うしろ': async t => {
     const p = await t.open({ who:'hinata' });
     await tapMode(p, true);
     await p.evaluate(() => {
@@ -252,11 +252,9 @@ module.exports = {
         done(log.slice(0, 4));
       }));
     }));
-    t.eq(order, ['far','rainbow','near','block'], '虹の重なり順が ちがう');
-    const r = await p.evaluate(() => ({ cy: winFx.arc.cy, grass: groundTopY(),
-                                         top: winFx.arc.cy - winFx.arc.R, tools: targetRowY() + 66 }));
+    t.eq(order, ['rainbow','far','near','block'], '虹の重なり順が ちがう');
+    const r = await p.evaluate(() => ({ cy: winFx.arc.cy, grass: groundTopY() }));
     t.ok(r.cy <= r.grass + 1, '虹の足が 草はらより手前にささっている');
-    t.ok(r.top >= r.tools - 1, '虹のてっぺんが 道具の列にかぶる');
   },
 
   '虹は キャラが着地してから かかる': async t => {

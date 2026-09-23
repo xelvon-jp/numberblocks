@@ -2341,7 +2341,7 @@ function rainbowFill(ctx, x0, x1){
   return g;
 }
 // レインボークリアのとき、空に 虹のアーチが左から右へかかる。
-// キャラはうれしくて跳ねるが、虹はいっしょに動かない（画面の横まん中、地面に足をつける）。
+// キャラはうれしくて跳ねるが、虹はいっしょに動かない（景色の決まった場所にかかる）。
 // 位置と大きさは クリアした瞬間に決めて、そのあとは変えない。
 // せっていの「にじの ちょうせい」で 手で決めた値があれば そちらを使う。
 //   x    … 横の位置（画面の幅に対する割合、0.5 がまん中）
@@ -2361,11 +2361,10 @@ function saveArcTune(){
   }catch(e){}
 }
 function arcPlayH(){ return Math.max(60, groundTopY() - TAB_H); }
-// ちょうせいしていないときの値（ふだんの虹）
+// ちょうせいしていないときの値（ふだんの虹）。パパが ちょうせいパネルで決めた形：
+// すこし右よりで大きく、うすめ。遠くのお山のうしろから かかる。
 function arcDefaults(){
-  const top = targetRowY() + 66;                 // 道具の列より下（虹のてっぺんの上限）
-  const R   = Math.max(90, Math.min(sw*0.62, groundTopY() - top));
-  return { x:0.5, foot:0, r:R/sw, band:9, alpha:0.85, layer:1 };
+  return { x:0.58, foot:0.15, r:0.75, band:10, alpha:0.60, layer:0 };
 }
 function arcSettings(){ return Object.assign(arcDefaults(), arcTune || {}); }
 function arcLayer(){ return arcSettings().layer; }
