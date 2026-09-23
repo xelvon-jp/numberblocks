@@ -2042,6 +2042,45 @@ function handPos(g, frac, len){
   return { x: g.cx + Math.cos(a)*len, y: g.cy + Math.sin(a)*len };
 }
 
+// ── 文字盤のまわりの四角 ─────────────────────────────────────────
+// i 番め（0〜59）の四角が 何時台か。12と1のあいだ（0〜4）は12時台。
+function rimHourOf(i){ return Math.floor(i/5) || 12; }
+// その時台の四角の色。k はその時台の中で何個めか（0〜4）。
+//   1〜9 … そのキャラの色（7 は5つの四角を にじいろに ならべる）
+//   10   … 白ぬき・赤ワク（10のキャラと同じ）
+//   11・12 … 10 と同じ白ぬき・赤ワクに、まん中へ 1（赤）・2（橙）の色の点をそえる
+function rimCubeStyle(hour, k){
+  if(hour === 7)  return { fill: RAINBOW[[0,2,3,5,6][k % 5]] };
+  if(hour >= 10)  return { fill: [255,255,255], ring: DIGIT_COLORS[1],
+                           dot: hour > 10 ? DIGIT_COLORS[hour-10] : null };
+  return { fill: mainColorOf(hour) };
+}
+// 四角を1つ描く（原点が四角のまん中）。lit は光っているか、isMark は5の位置の大きい四角か
+function drawRimCube(ctx, sz, st, lit, isMark){
+  const box = () => { ctx.beginPath(); ctx.roundRect(-sz/2,-sz/2,sz,sz,sz*0.22); };
+  if(st.ring){
+    // 白ぬき・赤ワク。光っているときはワクを太く こく、光っていないときは うすく
+    ctx.fillStyle = '#fff'; box(); ctx.fill();
+    ctx.strokeStyle = rgb(lit ? st.ring : mixWhite(st.ring, isMark ? 0.45 : 0.6));
+    ctx.lineWidth = Math.max(1.2, sz*(lit ? (isMark ? 0.22 : 0.18) : (isMark ? 0.16 : 0.12)));
+    box(); ctx.stroke();
+    if(st.dot){
+      const d = sz*0.36;
+      ctx.fillStyle = rgb(lit ? st.dot : mixWhite(st.dot, 0.6));
+      ctx.beginPath(); ctx.roundRect(-d/2,-d/2,d,d,d*0.25); ctx.fill();
+    }
+    return;
+  }
+  const col = st.fill;
+  ctx.fillStyle = lit ? rgb(isMark ? col : mixWhite(col,0.22))
+                      : rgb(mixWhite(col, isMark ? 0.68 : 0.82));
+  box(); ctx.fill();
+  ctx.strokeStyle = lit ? rgb(darken(col, isMark ? 0.45 : 0.28))
+                        : rgb(mixWhite(col, isMark ? 0.28 : 0.5));
+  ctx.lineWidth = Math.max(0.9, sz*(isMark ? 0.19 : 0.12));
+  box(); ctx.stroke();
+}
+
 function drawClockMode(ctx, t){
   const g = getClockGeom();
   const min = clockMin(), hr = clockHour();
@@ -2056,10 +2095,9 @@ function drawClockMode(ctx, t){
   // まわりの60個のブロック（5個ずつのかたまり）
   const cubeR = g.R*0.845, cube = Math.max(4, g.R*0.062);
   for(let i=0;i<60;i++){
-    // かたまりは「その数字にたどり着く5個」。1〜5分が「1」の色、
-    // 6〜10分が「2」の色…と対応するので、3を指せば3かたまりぶんが光る。
-    const num = (i===0) ? 12 : Math.ceil(i/5);
-    const col = mainColorOf(num);
+    // かたまりは「時台」で色をつける。12と1のあいだが12時台、1と2のあいだが1時台（赤）…。
+    // 短い針がいる区間の色が、そのまま「いま何時台か」になる。
+    const hour = rimHourOf(i);
     // 12の位置(i=0)が出発点。そこから数えて min 個ぶんが光る。
     // 針の真下のブロックがちょうど最後の1個になる。
     const lit = (i > 0 && i <= min);
@@ -2070,13 +2108,7 @@ function drawClockMode(ctx, t){
     const a = (i/60)*Math.PI*2 - Math.PI/2;
     const x = g.cx + Math.cos(a)*cubeR, y = g.cy + Math.sin(a)*cubeR;
     ctx.save(); ctx.translate(x,y); ctx.rotate(a+Math.PI/2);
-    ctx.fillStyle = lit ? rgb(isMark ? col : mixWhite(col,0.22))
-                        : rgb(mixWhite(col, isMark ? 0.68 : 0.82));
-    ctx.beginPath(); ctx.roundRect(-sz/2,-sz/2,sz,sz,sz*0.22); ctx.fill();
-    ctx.strokeStyle = lit ? rgb(darken(col, isMark ? 0.45 : 0.28))
-                          : rgb(mixWhite(col, isMark ? 0.28 : 0.5));
-    ctx.lineWidth = Math.max(0.9, sz*(isMark ? 0.19 : 0.12));
-    ctx.beginPath(); ctx.roundRect(-sz/2,-sz/2,sz,sz,sz*0.22); ctx.stroke();
+    drawRimCube(ctx, sz, rimCubeStyle(hour, i % 5), lit, isMark);
     ctx.restore();
   }
 
