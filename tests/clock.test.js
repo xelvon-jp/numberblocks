@@ -505,20 +505,45 @@ module.exports = {
     t.eq(r, { kinds:['parade'], all:[1,2,3,4,5,6,7,8,9,10], stays:true }, 'パレードが おかしい');
   },
 
-  '虹の すべりだい：1が 虹の上を すべって、画面の中で 草はらに とびおりる': async t => {
+  '虹の すべりだい：1〜5 の だれかが 虹の上を 右の足もとまで すべる（画面の外へも そのまま）': async t => {
     const p = await t.open();
     const r = await p.evaluate(() => {
-      taskOn = true; startClockTask({ k:'clock', to:'3:47' }); clockT = 3*60 + 47; clockAnswer();
-      const a = winFx.arc, R = a.R + (a.band || 9)/2;
-      const at = rt => { winFx.landedAt = 0; winFx.t = rt; return sliderPos(); };
-      const before = at(SLIDE_AT - 50);
-      const mid = [0.2, 0.5, 0.9].map(f => at(SLIDE_AT + SLIDE_MS*f));
-      const onArc = mid.every(q => q && q.sliding && Math.abs(Math.hypot(q.x - a.cx, q.y - a.cy) - R) < 1);
-      const land = at(SLIDE_AT + SLIDE_MS + HOP_MS + 10);
-      return { before, onArc, landIn: land.x > 0 && land.x < sw, landY: Math.abs(land.y - calcFloor()) < 12,
-               endIn: mid[2].x < sw };
+      taskOn = true;
+      const ns = new Set();
+      let onArc = true, foot = true;
+      for(let k=0;k<40;k++){
+        startClockTask({ k:'clock', to:'3:47' }); clockT = 3*60 + 47; clockAnswer();
+        const a = winFx.arc, R = a.R + (a.band || 9)/2;
+        const at = rt => { winFx.landedAt = 0; winFx.t = rt; return sliderPos(); };
+        if(at(SLIDE_AT - 50) !== null) return 'はやすぎ';
+        for(const f of [0.1, 0.5, 0.9]){
+          const q = at(SLIDE_AT + SLIDE_MS*f);
+          if(!q || Math.abs(Math.hypot(q.x - a.cx, q.y - a.cy) - R) > 1) onArc = false;
+        }
+        const end = at(SLIDE_AT + SLIDE_MS - 1);
+        if(!(Math.abs(end.y - a.cy) < 3 && end.x > a.cx)) foot = false;   // 右の足もと（外でも よい）
+        ns.add(end.n);
+        if(at(SLIDE_AT + SLIDE_MS + 50) !== null) return 'おわらない';
+      }
+      return { onArc, foot, ns: [...ns].sort() };
     });
-    t.eq(r, { before:null, onArc:true, landIn:true, landY:true, endIn:true }, '虹の すべりだいが おかしい');
+    t.eq(r, { onArc:true, foot:true, ns:[1,2,3,4,5] }, '虹の すべりだいが おかしい');
+  },
+
+  '虹の すべりだい：虹と おなじ かさなりで描く（お山のうしろの虹なら 手前の お山より先に描く）': async t => {
+    const p = await t.open();
+    const order = await p.evaluate(() => new Promise(done => {
+      taskOn = true; startClockTask({ k:'clock', to:'3:47' }); clockT = 3*60 + 47; clockAnswer();
+      winFx.landedAt = 0; winFx.t = SLIDE_AT + 300;
+      const log = [], sc = sceneryLayers(sh - GH - bottomPanelH());
+      const di = ctx.drawImage, dc = drawCastChar;
+      ctx.drawImage = function(img){ if(img === sc.far) log.push('far'); else if(img === sc.near) log.push('near'); return di.apply(this, arguments); };
+      drawCastChar = function(){ log.push('slider'); return dc.apply(this, arguments); };
+      winFx.t = SLIDE_AT + 300; drawBG(ctx);
+      ctx.drawImage = di; drawCastChar = dc;
+      done(log.filter((v, i, a) => a.indexOf(v) === i));
+    }));
+    t.eq(order, ['slider', 'far', 'near'], 'すべる キャラが 虹と ちがう かさなりに いる');
   },
 
   'おいわいの キャラが出ている あいだ 画面を描いても 止まらない': async t => {

@@ -2834,37 +2834,26 @@ function castParade(){
     });
   }});
 }
-// 虹の すべりだい。虹が かかりきったら 1が てっぺんから 右へ すべりおり、はしで とびおりる。
-const SLIDE_AT = 450, SLIDE_MS = 850, HOP_MS = 480;
+// 虹の すべりだい。虹が かかりきったら 1〜5 の だれかが てっぺんから 右の足もとまで すべりおりる。
+// 虹と おなじ かさなりに描く（drawRainbowArc の中）ので、お山のうしろの虹なら 山のうしろへ きえていく。
+// 虹が 画面より大きくて 足もとが 画面の外でも、そのまま 外へ すべっていく。
+const SLIDE_AT = 450, SLIDE_MS = 1300;
 function sliderPos(){
   if(!winFx || !winFx.arc || !(winFx.praise && winFx.praise.rainbow)) return null;
   const rt = rainbowTime(); if(rt < SLIDE_AT) return null;
+  const k = rt - SLIDE_AT; if(k > SLIDE_MS) return null;
+  if(!winFx.sliderN) winFx.sliderN = 1 + Math.floor(Math.random()*5);
   const a = winFx.arc, band = a.band || 9, R = a.R + band/2;   // 虹の いちばん上の ふち
-  // 虹は 画面より大きいことがあるので、とびおりる場所が 画面の中に入るところで すべりおわる
-  const th0 = -Math.PI/2 - 0.04, th1 = -Math.acos(Math.max(0.2, Math.min(0.75, (sw - 34 - a.cx)/R)));
-  const k = rt - SLIDE_AT;
-  if(k < SLIDE_MS){
-    const e = k/SLIDE_MS, th = th0 + (th1 - th0)*e*e;          // だんだん はやく
-    return { x: a.cx + Math.cos(th)*R, y: a.cy + Math.sin(th)*R, sliding:true };
-  }
-  const q = k - SLIDE_MS; if(q > HOP_MS + 500) return null;
-  const sx = a.cx + Math.cos(th1)*R, sy = a.cy + Math.sin(th1)*R;
-  const ex = Math.min(sw - 24, sx + 40), ey = calcFloor();
-  if(q < HOP_MS){
-    const e = q/HOP_MS;
-    return { x: sx + (ex - sx)*e, y: sy + (ey - sy)*e - Math.sin(e*Math.PI)*50, sliding:false };
-  }
-  const b = (q - HOP_MS)/500;                                 // ちゃくちで ちょこんと はねる
-  return { x: ex, y: ey - Math.abs(Math.sin(b*Math.PI))*10, sliding:false };
+  const e = k/SLIDE_MS, th0 = -Math.PI/2 - 0.04, th = th0 + (0 - th0)*e*e;   // だんだん はやく
+  return { n: winFx.sliderN, x: a.cx + Math.cos(th)*R, y: a.cy + Math.sin(th)*R, th };
 }
 function drawRainbowSlider(ctx){
   const p = sliderPos(); if(!p) return;
-  const bs = 16;
+  const bs = 12;
   ctx.save();
-  if(p.sliding){                                              // すべっているあいだは 虹に そって かたむく
-    ctx.translate(p.x, p.y); ctx.rotate(Math.max(-0.5, Math.min(0.9, (p.x - winFx.arc.cx)/winFx.arc.R*1.2)));
-    drawCastChar(ctx, 1, -bs/2, 0, bs, false);
-  } else drawCastChar(ctx, 1, p.x - bs/2, p.y, bs, true);
+  ctx.beginPath(); ctx.rect(0, TAB_H, sw, sh - bottomPanelH() - TAB_H); ctx.clip();   // 虹と おなじ はんい
+  ctx.translate(p.x, p.y); ctx.rotate((p.th + Math.PI/2)*0.6);   // 虹に そって すこし かたむく
+  drawCastChar(ctx, p.n, -blockSpec(p.n).cols*bs/2, 0, bs, false);
   ctx.restore();
 }
 
@@ -2939,6 +2928,7 @@ function drawRainbowArc(ctx){
     ctx.stroke();
   });
   ctx.restore();
+  drawRainbowSlider(ctx);            // 虹と おなじ かさなりで すべる
 }
 // レインボークリアのことば。🌈 は絵文字のまま、前後の字だけ虹色にする。
 const RAINBOW_TEXT = 'レインボー🌈クリア！';
@@ -4496,7 +4486,6 @@ function drawFrame(ts){
     updateWinFx(dt);
     drawWinLines(ctx);
     drawClockMode(ctx, walkTime);
-    drawRainbowSlider(ctx);
     drawCast(ctx);
     drawWinStamp(ctx);
     for(const fp of fxParticles) fp.update();
@@ -4533,7 +4522,6 @@ function drawFrame(ts){
       updateWinFx(dt);
       drawWinLines(ctx);
       drawWinStamp(ctx);
-      drawRainbowSlider(ctx);
       drawCast(ctx);
       for(const b of blocks){ if(b===dragBlock) continue; b.draw(ctx,walkTime,0); }
       if(dragBlock){
