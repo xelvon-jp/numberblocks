@@ -231,4 +231,33 @@ module.exports = {
     t.eq(b.arc, a.arc, 'キャラが跳ねると 虹も動いてしまう');
     t.eq(await p.evaluate(() => winFx.arc.cx === sw/2), true, '虹が 画面の横まん中にない');
   },
+
+  '虹は キャラが着地してから かかる': async t => {
+    const p = await t.open({ who:'hinata' });
+    await tapMode(p, true);
+    await p.evaluate(() => {
+      taskOn = true; setMode('+'); startTask(20);
+      spawnBlock(3); spawnBlock(7);
+    });
+    await t.sleep(900);                                // キャラが地面に立つまで待つ
+    await p.evaluate(() => { fuseBlocks(blocks[0], blocks[1]); checkTask(); });
+    await t.sleep(120);
+    const air = await p.evaluate(() => ({ rt: rainbowTime(), onGround: winFx.block.onGround }));
+    t.eq(air, { rt:-1, onGround:false }, '跳ねている最中なのに 虹がかかりはじめた');
+    await t.sleep(1300);
+    const land = await p.evaluate(() => ({ rt: rainbowTime(), landedAt: winFx.landedAt }));
+    t.ok(land.rt > 0, '着地しても 虹がかからない');
+    t.ok(land.landedAt > 300, '着地をまたずに 虹がかかった（landedAt=' + Math.round(land.landedAt) + 'ms）');
+  },
+
+  '虹は つぎのおだいへ進むまで 途中で切れない': async t => {
+    const p = await t.open({ who:'hinata' });
+    await tapMode(p, true);
+    await p.evaluate(() => {
+      taskOn = true; setMode('+'); startTask(20);
+      spawnBlock(3); spawnBlock(7); fuseBlocks(blocks[0], blocks[1]); checkTask();
+    });
+    await t.sleep(2400);                               // ふつうの演出（2秒）は もう終わっている
+    t.eq(await p.evaluate(() => rainbowTime() > 0), true, '2秒すぎで 虹が消えてしまった');
+  },
 };

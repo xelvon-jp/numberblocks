@@ -590,6 +590,7 @@ let wayIdx = 0, wayFlash = 0;
 // ふつうのときに使う数字のキーだけで作れたら「レインボー🌈クリア！」と虹を出す。
 // ひかえめなキーを1回でも押したら、そのおだいでは虹は出ない（CLR でやり直せば また出る）。
 let usedOther = false;
+let lastRainbow = false;         // いまのおだいを レインボークリアしたか（カードの一言に使う）
 function currentWay(){ return (begMode() && taskActive() && currentTask().way) || []; }
 function checkWay(){
   if(!taskActive() || !begMode() || taskDone) return;
@@ -607,7 +608,7 @@ function startTask(i){
   taskIdx = Math.max(0, Math.min(TASKS.length-1, i));
   taskDone = false; taskLog = []; winFx = null;
   clearedAt = 0; autoNextOff = false;
-  wayIdx = 0; wayFlash = 0; usedOther = false;
+  wayIdx = 0; wayFlash = 0; usedOther = false; lastRainbow = false;
   hintOn = false; hintShownAt = 0; taskStartT = Date.now();
   blocks = []; puzzle = null; clearUndo();
   stageOpen = false; stageDetail = -1;
@@ -2321,9 +2322,10 @@ function rainbowArcPlace(){
 function stampPlace(){ return { cx: sw/2, cy: targetRowY() + 66 + 44 }; }
 function drawRainbowArc(ctx){
   if(!winFx || !winFx.arc || !(winFx.praise && winFx.praise.rainbow)) return;
-  const t = winFx.t, a = winFx.arc;
-  const grow = Math.min(1, t/650), e = 1 - (1-grow)*(1-grow);
-  const fade = Math.min(1, Math.max(0, (WIN_MS + 600 - t)/700));
+  const rt = rainbowTime(); if(rt < 0) return;     // 着地するまでは まだ出さない
+  const a = winFx.arc;
+  const grow = Math.min(1, rt/650), e = 1 - (1-grow)*(1-grow);
+  const fade = Math.min(1, Math.max(0, (winFx.life - winFx.t)/600));   // さいごの0.6秒で消える
   const band = 9, cx = a.cx, cy = a.cy, R = a.R;
   ctx.save();
   ctx.beginPath(); ctx.rect(0, TAB_H, sw, sh - bottomPanelH() - TAB_H); ctx.clip();
@@ -2443,11 +2445,23 @@ function drawWinStamp(ctx){
   ctx.restore();
 }
 
+const RAINBOW_LIFE = 2900;       // 虹のときの演出の長さ（AUTO_NEXT_MS より少し短く）
+const LAND_WAIT_MAX = 1500;      // 着地をまつ いちばん長い時間（つかんで持ち上げたままでも虹は出す）
 function updateWinFx(dt){
   if(!winFx) return;
   winFx.t += dt;
   if(winFx.block && !blocks.includes(winFx.block)) winFx.block = blocks.find(b=>b.num===winFx.num) || null;
-  if(winFx.t > WIN_MS) winFx = null;
+  // うれしくて跳ねたキャラが 地面にもどった時こくを おぼえる（虹はそこから かかる）
+  if(winFx.landedAt === null){
+    const b = winFx.block;
+    if(!b || b.onGround || winFx.t >= LAND_WAIT_MAX) winFx.landedAt = winFx.t;
+  }
+  if(winFx.t > (winFx.life || WIN_MS)) winFx = null;
+}
+// 虹が かかりはじめてからの時間（まだなら -1）
+function rainbowTime(){
+  if(!winFx || !(winFx.praise && winFx.praise.rainbow) || winFx.landedAt === null) return -1;
+  return winFx.t - winFx.landedAt;
 }
 
 // ─── おだいカード ─────────────────────────────────────────────────────────
@@ -2564,7 +2578,7 @@ function drawTaskCard(ctx, t){
     ctx.textAlign='left'; ctx.fillStyle='#6b4a00'; ctx.font='bold 19px sans-serif';
     if(begMode()){
       // ビギナーは手数を出さない。レインボークリアのときだけ 虹色でひとこと
-      const rb = winFx && winFx.praise && winFx.praise.rainbow;
+      const rb = lastRainbow;
       ctx.fillText('できた！  ' + task.n, r.x+14, rb ? r.y+19 : r.y+25);
       if(rb){
         ctx.font='bold 13px sans-serif';
@@ -3213,12 +3227,14 @@ function checkTask(){
     const rainbow = begMode() && !usedOther;
     const praise = rainbow ? { text:RAINBOW_TEXT, color:'#c0398a', big:true, rainbow:true }
                            : judgeClear(taskIdx, moves, prevOwn);
+    lastRainbow = rainbow;
     if(rainbow){ const cr = curRec(); cr.rainbow = cr.rainbow || {}; cr.rainbow[taskIdx] = true; }
     if(!kept || moves < kept.length) taskLogs[taskIdx] = taskLog.slice();
     saveTask();
     const win = blocks.find(b=>b.num===t.n);
     winFx = { block:win, num:t.n, t:0, praise:praise, moves:moves,
-              arc: rainbow ? rainbowArcPlace() : null, stampAt: stampPlace() };
+              arc: rainbow ? rainbowArcPlace() : null, stampAt: stampPlace(),
+              landedAt: null, life: rainbow ? RAINBOW_LIFE : WIN_MS };
     if(win){
       win.vy = -9; win.onGround = false;              // うれしくて跳ねる
       for(let i=0;i<70;i++) fxParticles.push(new Particle(win.cx, win.y + win.height*0.35));
