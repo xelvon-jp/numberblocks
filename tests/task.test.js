@@ -90,4 +90,50 @@ module.exports = {
     await p.evaluate(() => { taskStartT = Date.now() - 61000; });
     t.eq(await p.evaluate(() => hintReady()), true, '60秒たってもヒントが出ない');
   },
+
+  'クリアすると、3秒ほどで 自動で つぎのおだいへ進む': async t => {
+    const p = await t.open();
+    await p.evaluate(i => { taskOn = true; startTask(i); }, TEN);
+    await solveTen(p);
+    await t.sleep(1500);
+    t.eq(await p.evaluate(() => [taskIdx, taskDone]), [TEN, true], '演出の途中で進んでしまった');
+    await t.sleep(2000);
+    t.eq(await p.evaluate(() => [taskIdx, taskDone]), [TEN + 1, false], '3秒すぎても つぎへ進まない');
+    t.eq(await p.evaluate(i => !!taskCleared[i], TEN), true, '進んだら まえのクリア印が消えた');
+  },
+
+  '「てじゅん」を押したら、自動では進まない': async t => {
+    const p = await t.open();
+    await p.evaluate(i => { taskOn = true; startTask(i); }, TEN);
+    await solveTen(p);
+    await p.evaluate(() => {
+      drawTaskCard(ctx, 0);
+      const b = taskBtns.find(x => x.val === 'steps');
+      handleStart(b.x + b.w/2, b.y + b.h/2, 'n');
+      stageOpen = false; stageDetail = -1;           // てじゅんを見て、とじた
+      clearedAt = Date.now() - 5000; tickAutoNext();
+    });
+    t.eq(await p.evaluate(() => taskIdx), TEN, 'てじゅんを見たのに 勝手に進んだ');
+  },
+
+  'もどすで クリアを取り消したら、進まない': async t => {
+    const p = await t.open();
+    await p.evaluate(i => { taskOn = true; startTask(i); }, TEN);
+    await solveTen(p);
+    await p.evaluate(() => { doUndo(); tickAutoNext(); });
+    await t.sleep(3300);
+    t.eq(await p.evaluate(() => [taskIdx, taskDone]), [TEN, false], 'もどしたのに つぎへ進んだ');
+  },
+
+  '「つぎ」を押せば、待たずに すぐ進む': async t => {
+    const p = await t.open();
+    await p.evaluate(i => { taskOn = true; startTask(i); }, TEN);
+    await solveTen(p);
+    await p.evaluate(() => {
+      drawTaskCard(ctx, 0);
+      const b = taskBtns.find(x => x.val === 'next');
+      handleStart(b.x + b.w/2, b.y + b.h/2, 'n');
+    });
+    t.eq(await p.evaluate(() => [taskIdx, taskDone]), [TEN + 1, false], 'つぎを押しても進まない');
+  },
 };

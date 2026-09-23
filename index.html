@@ -566,9 +566,25 @@ function afterRecordEdit(){
 function currentTask(){ return TASKS[Math.min(taskIdx, TASKS.length-1)]; }
 function taskActive(){ return taskOn && mode!=='factor' && mode!=='quiz' && mode!=='clock'; }
 // そのおだいを最初から始める
+// クリアしたら、演出（約2秒）のあと ひと息おいて 自動で つぎのおだいへ進む。
+// 「てじゅん」を押したら、見ているあいだに進んでしまわないよう取りやめる。
+// もどすで クリアを取り消したときも進まない（taskDone が外れるので）。
+const AUTO_NEXT_MS = 3000;
+let clearedAt = 0, autoNextOff = false;
+function autoNextProgress(){
+  if(!taskDone || !clearedAt || autoNextOff) return 0;
+  return Math.min(1, (Date.now() - clearedAt) / AUTO_NEXT_MS);
+}
+function tickAutoNext(){
+  if(!taskActive() || !taskDone || !clearedAt || autoNextOff) return;
+  if(stageOpen || setOpen || whoOpen) return;     // ほかの画面を出しているあいだは待つ
+  if(Date.now() - clearedAt >= AUTO_NEXT_MS) nextTask();
+}
+
 function startTask(i){
   taskIdx = Math.max(0, Math.min(TASKS.length-1, i));
   taskDone = false; taskLog = []; winFx = null;
+  clearedAt = 0; autoNextOff = false;
   hintOn = false; hintShownAt = 0; taskStartT = Date.now();
   blocks = []; puzzle = null; clearUndo();
   stageOpen = false; stageDetail = -1;
@@ -632,6 +648,7 @@ function doUndo(){
   });
   if(taskLog.length > snap.logLen) taskLog.length = snap.logLen;
   taskDone = snap.done;
+  if(!taskDone) clearedAt = 0;
   puzzle = null; dragBlock = null; dragPtr = null; dragPointers = {};
   for(let i=0;i<12;i++) fxParticles.push(new Particle(sw/2, calcFloor()-40));
   updateTargets();
@@ -2386,6 +2403,14 @@ function drawTaskCard(ctx, t){
     const bx2 = r.x+r.w-10-nw, bx1 = bx2-gap-tw;
     drawCardBtn(ctx, bx1, by, tw, bh, 'てじゅん', 'rgba(255,255,255,0.95)', '#6b4a00');
     drawCardBtn(ctx, bx2, by, nw, bh, 'つぎ',     'rgba(60,110,240,0.95)', '#fff');
+    const ap = autoNextProgress();
+    if(ap > 0){
+      ctx.save();
+      ctx.beginPath(); ctx.roundRect(bx2,by,nw,bh,9); ctx.clip();
+      ctx.fillStyle='rgba(255,255,255,0.38)';
+      ctx.fillRect(bx2, by, nw*ap, bh);
+      ctx.restore();
+    }
     taskBtns.push({x:bx1,y:by,w:tw,h:bh,val:'steps'});
     taskBtns.push({x:bx2,y:by,w:nw,h:bh,val:'next'});
   } else {
@@ -2997,6 +3022,7 @@ function checkTask(){
   const t = currentTask();
   if(blocks.some(b=>b.num===t.n)){
     taskDone = true;
+    clearedAt = Date.now(); autoNextOff = false;
     taskCleared[taskIdx] = true;
     const kept = taskLogs[taskIdx];
     const prevOwn = kept ? kept.length : null;
@@ -3061,7 +3087,7 @@ function handleStart(x,y,pid){
     if(tb.val==='hint')        hintOn = !hintOn;
     else if(tb.val==='next')   nextTask();
     else if(tb.val==='stages'){ stageOpen=true; stageDetail=-1; recOpen=false; }
-    else if(tb.val==='steps'){  stageOpen=true; stageDetail=taskIdx; recOpen=false; }
+    else if(tb.val==='steps'){  stageOpen=true; stageDetail=taskIdx; recOpen=false; autoNextOff=true; }
     return;
   }
   // 正解演出の途中なら、どこをタップしても次へ進む。見終わった子を待たせない。
@@ -3328,6 +3354,7 @@ function drawLoopError(ctx){
 function drawFrame(ts){
   const dt=Math.min(ts-lastTime,100); lastTime=ts; walkTime+=dt;
   guardKidProfile();
+  tickAutoNext();
   ctx.clearRect(0,0,sw,sh); drawBG(ctx); drawTabsAndUI(ctx);
   if(mode==='clock'){
     drawClockMode(ctx, walkTime);
