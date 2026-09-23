@@ -99,4 +99,19 @@ module.exports = {
     t.eq(r.b, [2, 0, 0, 2], 'ビギナーの記録が ママのビギナーへ移っていない');
     t.eq(r.c, [0, 1],       'ふつうを ぜんぶ消したら ビギナーの記録まで消えた');
   },
+
+  'ビギナーでは、ふつうで使う数字以外のキーは ひかえめだが、押せば ふつうに出る': async t => {
+    const p = await t.open();
+    await tapMode(p, true);
+    await p.evaluate(() => { taskOn = true; startTask(20); });     // ふつうなら 3 と 7 だけ
+    const dim = await p.evaluate(() =>
+      getNumpadLayout().filter(b => b.dim).map(b => b.label));
+    t.eq(dim, ['1','2','4','5','6','8','9','10'], 'ひかえめにするキーがちがう（3 と 7 と CLR 以外）');
+    const n = await p.evaluate(() => {
+      const k = getNumpadLayout().find(b => b.val === 9);     // ひかえめなキー
+      handleStart(k.x + k.w/2, k.y + k.h/2, 'k'); handleEnd(k.x + k.w/2, k.y + k.h/2, 'k');
+      return blocks.map(b => b.num);
+    });
+    t.eq(n, [9], 'ひかえめなキーを押しても キャラが出ない');
+  },
 };

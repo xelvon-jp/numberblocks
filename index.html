@@ -1734,9 +1734,11 @@ function getNumpadLayout(){
   // おだい中は、使ってよい数字と CLR だけを出す。
   // ランダム(R)は しばりを壊すので出さない。
   // ビギナーは しばりなしで 1〜10 をぜんぶ出す（R は運で当たってしまうので出さない）。
+  // ふつうのときに使う数字はそのまま、それ以外は ひかえめな色にして、
+  // 「この数字でやってみて」とそっと示す。ひかえめなキーも ふつうに押せる。
   if(taskActive() && begMode()){
-    const items = [];
-    for(let d=1; d<=10; d++) items.push({label:String(d), val:d});
+    const use = currentTask().use, items = [];
+    for(let d=1; d<=10; d++) items.push({label:String(d), val:d, dim: use.indexOf(d) < 0});
     items.push({label:'CLR', val:'CLR', color:'#c55'});
     if(isLandscape()){
       const btnH=padH-12-safeBottom(), btnW=Math.min(Math.floor((sw-10)/items.length)-2,70);
@@ -1787,7 +1789,7 @@ function drawNumpad(ctx){
   for(const b of getNumpadLayout()){
     const holding = (b.val==='CLR' && clrProg>0);
     ctx.save();
-    ctx.fillStyle=b.color||'rgba(80,80,180,0.9)';
+    ctx.fillStyle = b.color || (b.dim ? 'rgba(80,80,180,0.32)' : 'rgba(80,80,180,0.9)');
     ctx.beginPath(); ctx.roundRect(b.x,b.y,b.w,b.h,8); ctx.fill();
     if(holding){
       // 下から溜まっていくゲージ。どこまで進んだかが一目で分かる
@@ -1799,7 +1801,8 @@ function drawNumpad(ctx){
       ctx.strokeStyle='white'; ctx.lineWidth=2.5;
       ctx.beginPath(); ctx.roundRect(b.x-2,b.y-2,b.w+4,b.h+4,10); ctx.stroke();
     }
-    ctx.fillStyle='white'; ctx.font='bold 15px sans-serif';
+    ctx.fillStyle = b.dim ? 'rgba(255,255,255,0.62)' : 'white';
+    ctx.font = (b.dim ? '' : 'bold ') + '15px sans-serif';
     ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(b.label,b.x+b.w/2,b.y+b.h/2);
     ctx.restore();
   }
