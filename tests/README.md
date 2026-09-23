@@ -18,6 +18,7 @@ Claude Code on the web の環境なら、そのまま動きます。
 | `layout.test.js`  | どの画面サイズでも はみ出さない・重ならない |
 | `task.test.js`    | おだいの手数・クリア判定・ほめことば・ヒント |
 | `undo.test.js`    | もどす（3手まで） |
+| `beginner.test.js`| ビギナー（1〜10のキー・記録は別・手数は見ない） |
 | `profile.test.js` | ひなた と パパ の記録を混ぜない |
 | `settings.test.js`| 歯車の「せってい」（大きさ・クイズ・おだい）が効く |
 | `smoke.test.js`   | ひととおり動かして止まらない |

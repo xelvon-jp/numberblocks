@@ -84,10 +84,17 @@ module.exports = {
         taskOn = true; stageOpen = true; drawStageSelect(ctx, 0);
         const box = b => ({ l:b.x, r:b.x + b.w, t:b.y, b:b.y + b.h });
         const hit = (a, c) => a.l < c.r && c.l < a.r && a.t < c.b && c.t < a.b;
-        const chips = stageBtns.filter(b => b.val === 'prof').map(box);
-        const btns  = stageBtns.filter(b => b.val === 'rec' || b.val === 'close').map(box);
-        const cells = stageBtns.filter(b => b.val === 'go').map(box);
         const bad = [];
+        const chips = stageBtns.filter(b => b.val === 'prof').map(box);
+        const btns  = stageBtns.filter(b => b.val === 'rec' || b.val === 'close' || b.val === 'mode').map(box);
+        const modes = stageBtns.filter(b => b.val === 'mode').map(box);
+        const keys2 = stageBtns.filter(b => b.val === 'rec' || b.val === 'close').map(box);
+        if(modes.length !== 2) bad.push('ふつう／ビギナー の切りかえが2つない');
+        for(const m of modes){
+          if(keys2.some(b => hit(m, b))) bad.push('ふつう／ビギナー が きろく・とじる に重なる');
+          if(m.l < 0) bad.push('ふつう／ビギナー が はみ出す');
+        }
+        const cells = stageBtns.filter(b => b.val === 'go').map(box);
         for(const c of chips){
           if(c.r > innerWidth + 1) bad.push('札が はみ出す');
           if(btns.some(b => hit(c, b)))  bad.push('札が ボタンに重なる');

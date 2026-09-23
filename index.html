@@ -315,6 +315,7 @@ const HINT_AFTER_MS = 60000;
 const HINT_AFTER_MOVES = 4;
 function hintReady(){
   if(!taskActive() || taskDone) return false;
+  if(begMode()) return false;    // ビギナーは好きな数字を使えるので、しばり用のヒントは出さない
   if(hintShownAt) return true;   // 一度出したら、そのおだいのあいだは引っこめない
   const t = currentTask();
   if(taskLog.length >= (t.best||0) + HINT_AFTER_MOVES) return true;
@@ -342,7 +343,11 @@ try{
     if(v.v === 2 && v.p){
       for(const pr of PROFILES){
         const r = v.p[pr.id];
-        if(r) taskStore[pr.id] = { idx:r.idx|0, cleared:r.cleared||{}, logs:r.logs||{} };
+        if(!r) continue;
+        const b = r.beg || {};
+        taskStore[pr.id] = { idx:r.idx|0, cleared:r.cleared||{}, logs:r.logs||{},
+                             useBeg: !!r.useBeg,
+                             beg: { idx:b.idx|0, cleared:b.cleared||{}, logs:b.logs||{} } };
       }
       const i = PROFILES.findIndex(pr=>pr.id === v.cur);
       if(i >= 0) profileIdx = i;
@@ -358,8 +363,23 @@ try{
 // いま選んでいる子の記録を、遊び中に使う変数へつなぎ直す。
 // （profileIdx は上でパパに固定してある）
 // 中身は同じオブジェクトを指すので、書き込みはそのまま記録に残る。
+// ── ビギナー ─────────────────────────────────────────────────────
+// 使える数字のしばりをなくし、1〜10 のキーをぜんぶ出して同じおだいを遊ぶ。
+// 手数は見ない（ほめことば・★・ヒントは出さない）。
+// 記録は人ごとに「ふつう」と「ビギナー」を別々に持つ。どちらで遊ぶかも人ごとに覚える。
+const BEG_COLOR = '#3f9f4a';   // 若葉マークのみどり
+function begOf(id){ const r = taskStore[id]; return !!(r && r.useBeg); }
+function begMode(){ return begOf(profile().id); }
+// その人の、ふつう（beg=false）かビギナー（beg=true）の記録
+function recOf(id, beg){
+  const r = taskStore[id] || (taskStore[id] = emptyRec());
+  if(!beg) return r;
+  return r.beg || (r.beg = emptyRec());
+}
+function curRec(){ return recOf(profile().id, begMode()); }
+
 function loadProfileState(){
-  const r = taskStore[profile().id] || (taskStore[profile().id] = emptyRec());
+  const r = curRec();
   taskIdx = Math.min(TASKS.length-1, r.idx|0);
   taskCleared = r.cleared;
   taskLogs    = r.logs;
@@ -367,13 +387,26 @@ function loadProfileState(){
 loadProfileState();
 
 function saveTask(){
-  const r = taskStore[profile().id];
+  const r = curRec();
   r.idx = taskIdx; r.cleared = taskCleared; r.logs = taskLogs;
   try{
     localStorage.setItem(TASK_KEY, JSON.stringify({
       v:2, on:taskOn, cur:profile().id, p:taskStore
     }));
   }catch(e){}
+}
+
+function setBegMode(v){
+  const r = recOf(profile().id, false);
+  if(!!r.useBeg === !!v) return;
+  saveTask();                 // いまのモードの記録をしまってから
+  r.useBeg = !!v;
+  loadProfileState();
+  taskDone = false; taskLog = []; winFx = null;
+  hintOn = false; hintShownAt = 0; taskStartT = Date.now();
+  blocks = []; puzzle = null; clearUndo();
+  stageDetail = -1;
+  saveTask(); updateTargets();
 }
 
 function setProfile(i){
@@ -399,6 +432,7 @@ function recordOf(id, idx){
   return lg ? lg.length : null;
 }
 function judgeClear(idx, moves, prevOwn){
+  if(begMode()) return null;          // ビギナーは手数を見ない（「できた！」だけ）
   const t = TASKS[idx];
   // ほかの人の記録のうち、だれか1人にでも並べば（＝いちばん手数の多い人以下なら）とってもじょうず
   let o = null;
@@ -412,6 +446,7 @@ function judgeClear(idx, moves, prevOwn){
   return null;
 }
 function isNice(idx){                 // ★をつけるかどうか（おてほん基準）
+  if(begMode()) return false;         // ビギナーは手数を見ない
   const lg = taskLogs[idx], t = TASKS[idx];
   return !!lg && lg.length <= (t.ref||t.best) + REF_SLACK;
 }
@@ -474,12 +509,13 @@ function noteTouchSize(r){
   if(st.n % 10 === 0) saveTouchStats();
 }
 
-function clearedCountOf(id){
-  const r = taskStore[id]; return r ? Object.keys(r.cleared).length : 0;
+function clearedCountOf(id, beg){
+  const r = taskStore[id]; return r ? Object.keys(recOf(id, !!beg).cleared).length : 0;
 }
 // そのレベルを何問クリアしているか
-function levelCountOf(id, lv){
-  const r = taskStore[id]; if(!r) return 0;
+function levelCountOf(id, lv, beg){
+  if(!taskStore[id]) return 0;
+  const r = recOf(id, !!beg);
   let k = 0;
   TASKS.forEach((t,i)=>{ if(t.lv===lv && r.cleared[i]) k++; });
   return k;
@@ -489,8 +525,11 @@ function levelSize(lv){ return TASKS.filter(t=>t.lv===lv).length; }
 // ── 記録の整理 ───────────────────────────────────────────────────
 // レベルごとに消す／ぜんぶ消す／もうひとりへ移す。
 // 消すのは取り返しがつかないので、かならず一度たずねてから実行する。
+// どれも、その人が いま遊んでいるモード（ふつう／ビギナー）の記録だけにさわる。
+function resetRec(r){ r.idx = 0; r.cleared = {}; r.logs = {}; }
 function clearLevelRecords(id, lv){
-  const r = taskStore[id]; if(!r) return;
+  if(!taskStore[id]) return;
+  const r = recOf(id, begOf(id));
   TASKS.forEach((t,i)=>{
     if(t.lv===lv){ delete r.cleared[i]; delete r.logs[i]; }
   });
@@ -498,21 +537,22 @@ function clearLevelRecords(id, lv){
 }
 function clearAllRecords(id){
   if(!taskStore[id]) return;
-  taskStore[id] = emptyRec();
+  resetRec(recOf(id, begOf(id)));       // もう片方のモードの記録は残す
   afterRecordEdit();
 }
 // from の記録を to へ移して、from はまっさらにする。
 // 同じおだいが両方にあるときは、手数の短いほうを残す。
 function moveRecords(from, to){
-  const a = taskStore[from], b = taskStore[to];
-  if(!a || !b) return;
+  if(!taskStore[from] || !taskStore[to]) return;
+  const beg = begOf(from);                // 移し元のモードどうしで移す
+  const a = recOf(from, beg), b = recOf(to, beg);
   for(const k in a.cleared){
     b.cleared[k] = true;
     const la = a.logs[k], lb = b.logs[k];
     if(la && (!lb || la.length < lb.length)) b.logs[k] = la;
   }
   if(a.idx && !b.idx) b.idx = a.idx;
-  taskStore[from] = emptyRec();
+  resetRec(a);
   afterRecordEdit();
 }
 function afterRecordEdit(){
@@ -1676,6 +1716,21 @@ function getNumpadLayout(){
   const padH=getPadH(),padY=sh-padH;
   // おだい中は、使ってよい数字と CLR だけを出す。
   // ランダム(R)は しばりを壊すので出さない。
+  // ビギナーは しばりなしで 1〜10 をぜんぶ出す（R は運で当たってしまうので出さない）。
+  if(taskActive() && begMode()){
+    const items = [];
+    for(let d=1; d<=10; d++) items.push({label:String(d), val:d});
+    items.push({label:'CLR', val:'CLR', color:'#c55'});
+    if(isLandscape()){
+      const btnH=padH-12-safeBottom(), btnW=Math.min(Math.floor((sw-10)/items.length)-2,70);
+      return items.map((it,i)=>({...it, x:5+i*(btnW+2), y:padY+6, w:btnW, h:btnH}));
+    }
+    const btnH=36, colW=Math.min(Math.floor((sw-10)/6)-2,58);
+    return [
+      ...items.slice(0,6).map((it,i)=>({...it, x:5+i*(colW+2), y:padY+8,  w:colW, h:btnH})),
+      ...items.slice(6).map((it,i)=>({...it,  x:5+i*(colW+2), y:padY+52, w:colW, h:btnH}))
+    ];
+  }
   if(taskActive()){
     const t = currentTask();
     const items = t.use.map(d=>({label:String(d), val:d}));
@@ -2318,10 +2373,14 @@ function drawTaskCard(ctx, t){
   ctx.textBaseline='middle';
   if(taskDone){
     ctx.textAlign='left'; ctx.fillStyle='#6b4a00'; ctx.font='bold 19px sans-serif';
-    ctx.fillText('できた！  ' + task.n, r.x+14, r.y+19);
-    ctx.font='bold 12px sans-serif'; ctx.fillStyle='#8a6a1a';
-    const pz = winFx && winFx.praise;
-    ctx.fillText(taskLog.length + ' て' + (pz ? '　' + pz.text : ''), r.x+14, r.y+37);
+    if(begMode()){
+      ctx.fillText('できた！  ' + task.n, r.x+14, r.y+25);   // ビギナーは手数を出さない
+    } else {
+      ctx.fillText('できた！  ' + task.n, r.x+14, r.y+19);
+      ctx.font='bold 12px sans-serif'; ctx.fillStyle='#8a6a1a';
+      const pz = winFx && winFx.praise;
+      ctx.fillText(taskLog.length + ' て' + (pz ? '　' + pz.text : ''), r.x+14, r.y+37);
+    }
     const bh=32, by=r.y+9;
     const nw=58, tw=68, gap=6;
     const bx2 = r.x+r.w-10-nw, bx1 = bx2-gap-tw;
@@ -2334,13 +2393,14 @@ function drawTaskCard(ctx, t){
     // 右：あそんでいる子・ヒント・ステージいちらん
     const bh=36, by=r.y+7;
     const bw=64, bx=r.x+r.w-bw-10;
-    ctx.fillStyle = lv.color;
+    // ビギナーのときは若葉の色にして、下の段にも「ビギナー」と書く
+    ctx.fillStyle = begMode() ? BEG_COLOR : lv.color;
     ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,9); ctx.fill();
     ctx.fillStyle='#fff'; ctx.textAlign='center';
     ctx.font='bold 14px sans-serif';
     ctx.fillText(stageLabel(taskIdx), bx+bw/2, by+13);
     ctx.font='bold 10px sans-serif';
-    ctx.fillText('いちらん', bx+bw/2, by+27);
+    ctx.fillText(begMode() ? 'ビギナー' : 'いちらん', bx+bw/2, by+27);
     taskBtns.push({x:bx,y:by,w:bw,h:bh,val:'stages'});
     let leftOfBtns = bx;   // 右に並べたボタンの、いちばん左のふち
 
@@ -2443,10 +2503,21 @@ function drawStageSelect(ctx, t){
   ctx.save();
   ctx.fillStyle='rgba(14,24,40,0.97)'; ctx.fillRect(0,TAB_H,sw,sh-TAB_H);
 
-  // 見出し
+  // 見出し：ふつう／ビギナー の切りかえ。ひなたが自分で選べるよう、ふつうに押すだけで効く
   ctx.textBaseline='middle'; ctx.textAlign='left';
-  ctx.fillStyle='#fff'; ctx.font='bold 15px sans-serif';
-  ctx.fillText('ステージ', g.pad, TAB_H+26);
+  {
+    const kx = sw - g.pad - 58 - 6 - 54;             // 「きろく」ボタンの左はし
+    const mw = Math.min(190, kx - 8 - g.pad), mh = 30, my = TAB_H+11;
+    const segs = [{ text:'ふつう', v:false, col:'rgba(60,110,240,0.95)' },
+                  { text:'ビギナー', v:true, col:BEG_COLOR }];
+    const sw2 = (mw - 4) / 2;
+    segs.forEach((sg, i) => {
+      const x = g.pad + i*(sw2+4), on = (begMode() === sg.v);
+      drawCardBtn(ctx, x, my, sw2, mh, sg.text,
+                  on ? sg.col : 'rgba(255,255,255,0.10)', on ? '#fff' : '#9fb0c8');
+      stageBtns.push({ x:x, y:my, w:sw2, h:mh, val:'mode', v:sg.v });
+    });
+  }
 
   // 長押しが一周したら実行する（ボタンを押した瞬間には何もしない）
   if(stageHold){
@@ -2474,7 +2545,7 @@ function drawStageSelect(ctx, t){
     ctx.font='bold 12px sans-serif'; ctx.fillText(pr.name, x+pw/2, py+11);
     ctx.font='bold 10px sans-serif';
     ctx.fillStyle = on ? 'rgba(255,255,255,0.85)' : '#8fa2bb';
-    ctx.fillText(clearedCountOf(pr.id) + ' / ' + TASKS.length, x+pw/2, py+24);
+    ctx.fillText(clearedCountOf(pr.id, begMode()) + ' / ' + TASKS.length, x+pw/2, py+24);
     stageBtns.push({x:x,y:py,w:pw,h:ph,val:'prof',i:i});
   });
   ctx.textAlign='left';
@@ -2674,7 +2745,8 @@ function drawWhoPicker(ctx, t){
     ctx.fillText(pr.name, x+bw/2, y+bh/2-10);
     ctx.font='bold 13px sans-serif';
     ctx.fillStyle='rgba(255,255,255,0.85)';
-    ctx.fillText('クリア ' + clearedCountOf(pr.id) + ' / ' + TASKS.length, x+bw/2, y+bh/2+24);
+    ctx.fillText((begOf(pr.id) ? 'ビギナー ' : 'クリア ') + clearedCountOf(pr.id, begOf(pr.id)) + ' / ' + TASKS.length,
+                 x+bw/2, y+bh/2+24);
     ctx.restore();
     whoBtns.push({x:x,y:y,w:bw,h:bh,i:i});
   });
@@ -2710,7 +2782,7 @@ function drawRecordPanel(ctx){
 
   ctx.textBaseline='middle'; ctx.textAlign='left';
   ctx.fillStyle='#16233a'; ctx.font='bold 18px sans-serif';
-  ctx.fillText('きろくの せいり', x+16, y+26);
+  ctx.fillText('きろくの せいり' + (begOf(id) ? '（ビギナー）' : ''), x+16, y+26);
 
   // どちらの子の記録をいじるか
   let ty = y+46;
@@ -2721,7 +2793,7 @@ function drawRecordPanel(ctx){
     ctx.beginPath(); ctx.roundRect(bx,ty,tw,th,8); ctx.fill();
     ctx.fillStyle = on ? '#fff' : '#66748a';
     ctx.font='bold 12px sans-serif'; ctx.textAlign='center';
-    ctx.fillText(pr.name + ' ' + clearedCountOf(pr.id), bx+tw/2, ty+th/2);
+    ctx.fillText(pr.name + ' ' + clearedCountOf(pr.id, begOf(pr.id)), bx+tw/2, ty+th/2);
     stageBtns.push({x:bx,y:ty,w:tw,h:th,val:'recProf',i:i});
   });
   ctx.textAlign='left';
@@ -2757,14 +2829,14 @@ function drawRecordPanel(ctx){
 
   for(let lv=0; lv<TASK_LEVELS.length; lv++){
     row('レベル' + (lv+1) + '  ' + TASK_LEVELS[lv].name,
-        levelCountOf(id,lv) + ' / ' + levelSize(lv), 'level', lv);
+        levelCountOf(id, lv, begOf(id)) + ' / ' + levelSize(lv), 'level', lv);
   }
 
   ctx.strokeStyle='rgba(60,80,110,0.18)'; ctx.lineWidth=1;
   ctx.beginPath(); ctx.moveTo(x+16,ty-4); ctx.lineTo(x+w-16,ty-4); ctx.stroke();
   ty += 8;
 
-  row('ぜんぶ けす', clearedCountOf(id) + ' / ' + TASKS.length, 'all', -1, 'rgba(255,214,214,0.98)');
+  row('ぜんぶ けす', clearedCountOf(id, begOf(id)) + ' / ' + TASKS.length, 'all', -1, 'rgba(255,214,214,0.98)');
   ty += 8;
   // うつす先は1人ずつ。たずねるときに どの行か分かるよう、lv に行き先の番号を入れる
   PROFILES.forEach((pr, i) => {
@@ -2833,11 +2905,11 @@ function drawStageDetail(ctx, idx){
 
   ctx.textBaseline='middle'; ctx.textAlign='left';
   ctx.fillStyle='#5a6a80'; ctx.font='bold 11px sans-serif';
-  ctx.fillText(stageLabel(idx) + '　つかえる ' + task.use.join(' と '), x+16, y+20);
+  ctx.fillText(stageLabel(idx) + (begMode() ? '　ビギナー' : '　つかえる ' + task.use.join(' と ')), x+16, y+20);
   ctx.fillStyle='#16233a'; ctx.font='bold 21px sans-serif';
   ctx.fillText(task.n + ' の てじゅん', x+16, y+44);
   // 手数くらべ。ここは「振り返る場所」なので、ならべて見せてよい。
-  if(steps.length){
+  if(steps.length && !begMode()){
     const nice = steps.length <= (task.ref||task.best) + REF_SLACK;
     let cx = x+16;
     const put = (label, val, col, bold) => {
@@ -2896,6 +2968,7 @@ function handleStageTap(x,y,pid){
       return true;
     }
     // 記録にさわるボタンは長押しでだけ開く。押した瞬間には何もしない。
+    if(b.val==='mode'){ if(stageDetail < 0) setBegMode(b.v); return true; }
     if(b.val==='prof' || b.val==='rec'){
       stageHold = { val:b.val, i:b.i, t0:Date.now(), pid:pid,
                     rect:{x:b.x,y:b.y,w:b.w,h:b.h}, sx:x, sy:y };
