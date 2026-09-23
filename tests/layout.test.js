@@ -131,4 +131,17 @@ module.exports = {
       }
     }
   },
+
+  '背景：動かない景色は 一度だけ描いて使いまわし、地面の高さが変わったら描きなおす': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      setMode('calc');
+      const gy = () => sh - GH - bottomPanelH();
+      const a = sceneryLayer(gy()), b = sceneryLayer(gy());
+      setMode('clock');                                // 下のパネルの高さが変わる
+      const c = sceneryLayer(gy());
+      return { same: a === b, redrawn: a !== c };
+    });
+    t.eq(r, { same:true, redrawn:true }, '景色の使いまわし／描きなおしが ねらいどおりでない');
+  },
 };

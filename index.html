@@ -3252,15 +3252,17 @@ function checkTask(){
 }
 
 // ─── Background ───────────────────────────────────────────────────────────────
-// 青みどりの空、ふわっとした雲、奥にかさなる なだらかな丘。
-// キャラが主役なので、色は うすく やさしく、キャラや数字より目立たないようにする。
+// 青みどりの空、流れる雲、奥にかさなる まるいお山、はしっこの木と茂み、草はらの花。
+// キャラと数字が主役なので、景色は ぜんぶキャラのうしろに置き、色は うすく やさしく、
+// 木や茂みは 画面の左右に寄せて まん中（キャラが並ぶところ）を空けておく。
 // 絵のファイルは使わず ぜんぶ描くので、どの画面の大きさにも そのまま合う。
 
-// 雲。x と y は空の中での位置（0〜1）、s は大きさ、v は流れる速さ（px/ミリ秒）
+// 雲。x と y は空の中での位置（0〜1）、s は大きさ、v は流れる速さ（px/ミリ秒）。
+// お山のうしろから少しのぞく高さにも置く。
 const CLOUDS = [
-  { x:0.08, y:0.46, s:1.00, v:0.0045 },
-  { x:0.46, y:0.28, s:1.35, v:0.0030 },
-  { x:0.80, y:0.52, s:0.85, v:0.0055 },
+  { x:0.08, y:0.50, s:1.00, v:0.0045 },
+  { x:0.46, y:0.26, s:1.35, v:0.0030 },
+  { x:0.80, y:0.58, s:0.90, v:0.0055 },
 ];
 // ふわふわの雲を1つ。下に うすい影をつけて まるみを出す
 function drawCloud(ctx, x, y, s){
@@ -3281,29 +3283,130 @@ function drawCloud(ctx, x, y, s){
   blob(0.18*r, 'rgba(206,226,238,0.85)');
   blob(0, 'rgba(255,255,255,0.97)');
 }
-// なだらかな丘を1まい。2つの波を重ねて、同じ形がくり返さないようにする
-function drawHill(ctx, y0, amp, len, phase, fill){
-  ctx.beginPath(); ctx.moveTo(0, sh);
-  for(let x = 0; x <= sw + 12; x += 12){
-    const y = y0 - amp*(0.62*Math.sin(x/len + phase) + 0.38*Math.sin(x/(len*0.47) + phase*1.7));
-    ctx.lineTo(x, y);
-  }
-  ctx.lineTo(sw, sh); ctx.closePath();
-  ctx.fillStyle = fill; ctx.fill();
-}
+
 // キャラが立つ 手前の草はらの上のふち（キャラの足もとは これより下にくる）
 function groundTopY(){ return sh - GH - bottomPanelH() - 30; }
 
+// まるいお山を横にならべた1まい。cx は横の位置（画面幅に対する割合）
+function drawMounds(g, base, list, h, top, bottom){
+  const grad = g.createLinearGradient(0, base - h, 0, base);
+  grad.addColorStop(0, top); grad.addColorStop(1, bottom);
+  g.fillStyle = grad;
+  g.beginPath();
+  for(const [cx, rx, k] of list){
+    const x = cx*sw, rX = rx*sw, rY = h*k;
+    g.moveTo(x - rX, base);
+    g.ellipse(x, base, rX, rY, 0, Math.PI, 0);
+  }
+  g.rect(0, base - 1, sw, sh - base + 1);
+  g.fill();
+}
+
+// まるい木。幹のうえに 葉っぱのかたまりを いくつか重ねる
+function drawTree(g, x, base, H){
+  const r = H*0.30;
+  // 幹
+  g.fillStyle = '#b07a4a';
+  g.beginPath();
+  g.moveTo(x - r*0.16, base);
+  g.quadraticCurveTo(x - r*0.10, base - H*0.35, x - r*0.05, base - H*0.60);
+  g.lineTo(x + r*0.12, base - H*0.60);
+  g.quadraticCurveTo(x + r*0.10, base - H*0.30, x + r*0.22, base);
+  g.closePath(); g.fill();
+  // 葉っぱ：こい色 → ふつう → あかるい色 の順に重ねて、まるみを出す
+  const cy = base - H*0.66;
+  const layer = (color, list) => {
+    g.fillStyle = color; g.beginPath();
+    for(const [dx, dy, k] of list){
+      g.moveTo(x + dx*r + k*r, cy + dy*r);
+      g.arc(x + dx*r, cy + dy*r, k*r, 0, Math.PI*2);
+    }
+    g.fill();
+  };
+  layer('#3f8a4c', [[-0.75,0.25,0.62],[0.75,0.25,0.62],[0,0.35,0.70],[-0.35,-0.45,0.70],[0.45,-0.40,0.68]]);
+  layer('#58a55a', [[-0.55,0.05,0.55],[0.55,0.00,0.55],[0,-0.30,0.66],[0,0.15,0.55]]);
+  layer('#72bd6b', [[-0.30,-0.45,0.34],[0.25,-0.55,0.30],[-0.60,-0.10,0.24]]);
+}
+
+// まるい茂み
+function drawBush(g, x, base, r){
+  const layer = (color, list) => {
+    g.fillStyle = color; g.beginPath();
+    for(const [dx, dy, k] of list){
+      g.moveTo(x + dx*r + k*r, base + dy*r);
+      g.arc(x + dx*r, base + dy*r, k*r, 0, Math.PI*2);
+    }
+    g.fill();
+  };
+  layer('#4d9e50', [[-0.7,-0.25,0.55],[0.7,-0.25,0.55],[0,-0.45,0.72],[0,0,0.6]]);
+  layer('#69b965', [[-0.35,-0.55,0.42],[0.35,-0.50,0.40]]);
+}
+
+// 草はらの小さな花
+function drawFlower(g, x, y, r, petal){
+  g.fillStyle = petal;
+  for(let i=0;i<5;i++){
+    const a = i/5*Math.PI*2 - Math.PI/2;
+    g.beginPath(); g.arc(x + Math.cos(a)*r, y + Math.sin(a)*r, r*0.72, 0, Math.PI*2); g.fill();
+  }
+  g.fillStyle = '#ffd84a';
+  g.beginPath(); g.arc(x, y, r*0.6, 0, Math.PI*2); g.fill();
+}
+
+// 動かない景色（お山・木・茂み・草はら・花）は 一度だけ描いて おぼえておく。
+// 画面の大きさか 地面の高さが変わったときだけ 描きなおす。
+let sceneryCache = null, sceneryKey = '';
+function sceneryLayer(groundY){
+  const key = sw + 'x' + sh + ':' + Math.round(groundY);
+  if(sceneryCache && sceneryKey === key) return sceneryCache;
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, sw); c.height = Math.max(1, sh);
+  const g = c.getContext('2d');
+  const gTop = groundY - 30;                           // 草はらの上のふち
+  const H = Math.max(60, gTop - TAB_H);                // 遊ぶ場所の高さ
+
+  // 奥のお山（うすい）→ 手前のお山（すこし みどり）
+  drawMounds(g, gTop + 6, [[-0.05,0.42,1.0],[0.42,0.40,0.86],[0.92,0.44,0.95]],
+             H*0.52, '#f1faec', '#d9eecb');
+  drawMounds(g, gTop + 6, [[0.18,0.38,1.0],[0.72,0.40,0.82],[1.12,0.30,0.9]],
+             H*0.30, '#e4f3d6', '#c8e6b1');
+
+  // はしっこの木と茂み（まん中は空けておく）
+  const treeH = Math.min(260, H*0.46);
+  drawTree(g, sw*0.88, gTop + 8, treeH);
+  drawBush(g, sw*0.03, gTop + 10, Math.min(46, H*0.11));
+  drawBush(g, sw*0.97, gTop + 12, Math.min(38, H*0.09));
+
+  // 手前の草はら：上はかすんだ色、下ほど あざやか
+  const mg = g.createLinearGradient(0, gTop, 0, groundY + GH);
+  mg.addColorStop(0, '#bfe6a2'); mg.addColorStop(1, '#94ce6d');
+  g.fillStyle = mg;
+  g.beginPath(); g.moveTo(0, sh);
+  const L = Math.max(50, sw/4.4);
+  for(let x = 0; x <= sw + 12; x += 12){
+    g.lineTo(x, gTop + 4 - 4*Math.sin(x/L + 4.1));
+  }
+  g.lineTo(sw, sh); g.closePath(); g.fill();
+
+  // 花：キャラの足もとより下の すき間に、ぽつぽつと
+  const fy = groundY + 6, fr = Math.max(2.4, Math.min(3.6, sw/130));
+  const flowers = [[0.07,'#ff9fb8'],[0.19,'#ffffff'],[0.31,'#ffb347'],[0.63,'#ffffff'],[0.76,'#ff9fb8'],[0.91,'#ffb347']];
+  flowers.forEach(([fx, col], i) => drawFlower(g, fx*sw, fy + (i%2)*9, fr, col));
+
+  sceneryCache = c; sceneryKey = key;
+  return c;
+}
+
 function drawBG(ctx){
   const groundY = sh - GH - bottomPanelH();
-  // 空：上は青みどり、地平線に近いほど白っぽく
+  // 空：上は あざやかな青みどり、地平線に近いほど白っぽく
   const g = ctx.createLinearGradient(0, 0, 0, groundY);
-  g.addColorStop(0,    '#86cfe4');
-  g.addColorStop(0.62, '#c3e8f0');
-  g.addColorStop(1,    '#e8f6f1');
+  g.addColorStop(0,    '#6fd0e2');
+  g.addColorStop(0.55, '#bde9f0');
+  g.addColorStop(1,    '#eaf8f2');
   ctx.fillStyle = g; ctx.fillRect(0, 0, sw, sh);
 
-  // 雲：ゆっくり右へ流れて、画面の右から出たら左から また入る
+  // 雲：ゆっくり右へ流れて、画面の右から出たら左から また入る（お山のうしろを通る）
   const skyTop = TAB_H, skyH = Math.max(60, groundY - skyTop);
   const k = Math.min(1.3, Math.max(0.7, sw/393));
   const span = sw + 260*k;
@@ -3312,16 +3415,8 @@ function drawBG(ctx){
     drawCloud(ctx, x, skyTop + skyH*c.y, c.s*k);
   }
 
-  // 丘：奥ほど うすく かすんだ色
-  const H = Math.max(80, groundY - TAB_H);
-  const L = Math.max(50, sw/5.5);
-  drawHill(ctx, groundY - H*0.30, 14, L*1.25, 0.8, '#d7ecc6');
-  drawHill(ctx, groundY - H*0.16, 18, L,      2.3, '#c4e4a8');
-  // 手前の草はら（キャラが立つところ）
-  const mg = ctx.createLinearGradient(0, groundY - 34, 0, sh);
-  mg.addColorStop(0, '#b3df95');
-  mg.addColorStop(1, '#97cc78');
-  drawHill(ctx, groundTopY() + 4, 4, L*0.8, 4.1, mg);
+  // お山・木・茂み・草はら・花（おぼえておいたものを貼るだけ）
+  ctx.drawImage(sceneryLayer(groundY), 0, 0);
 
   // 下の操作パネル（＋−×÷・数字キー）は景色と分けて、落ち着いた色の下地にする。
   // 草の上に半透明のキーを置くと、ひかえめなキーが灰みどりに濁って見えるため。
