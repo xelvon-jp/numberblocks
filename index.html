@@ -229,17 +229,13 @@ const TASK_LEVELS = [
   { name:'100のかべ',    color:'#c0558a', cat:'calc' },
   { name:'1000へ',       color:'#7a5ad0', cat:'calc' },
   { name:'なぞとき',     color:'#d0553f', cat:'calc' },
-  { name:'はんぱな じこく',   color:'#2f9a8a', cat:'clock' },
-  { name:'24じかんの とけい', color:'#3f7fc0', cat:'clock' },
-  { name:'5ふんずつ ずらす',  color:'#c08a20', cat:'clock' },
-  { name:'はんぱに ずらす',   color:'#c0558a', cat:'clock' },
-  { name:'じを またぐ',       color:'#7a5ad0', cat:'clock' },
-  { name:'1じかんより ながく', color:'#d0553f', cat:'clock' },
+  { name:'よんで えらぶ',   color:'#2f9a8a', cat:'clock' },
+  { name:'はりを あわせる', color:'#c08a20', cat:'clock' },
+  { name:'ごごを よむ',     color:'#3f7fc0', cat:'clock' },
+  { name:'ごごに あわせる', color:'#c0558a', cat:'clock' },
   { name:'まぜまぜ1',   color:'#4a9a55', cat:'mix' },
   { name:'まぜまぜ2',   color:'#c08a20', cat:'mix' },
-  { name:'まぜまぜ3',   color:'#d0553f', cat:'mix' },
-  { name:'よんで えらぶ',   color:'#2f9a8a', cat:'clock' },
-  { name:'ごごの じこく',   color:'#3f7fc0', cat:'clock' }
+  { name:'まぜまぜ3',   color:'#d0553f', cat:'mix' }
 ];
 const TASK_CATS = [
   { id:'calc',  name:'けいさん' },
@@ -314,196 +310,116 @@ const TASKS = [
   { lv:5, n:99,   use:[10], best:7, ref:7, way:[100,1],     hint:'100から1をひく' },
   { lv:5, n:101,  use:[10], best:7, ref:7, way:[1,100],     hint:'100のつぎ' },
   // ── とけい ─────────────────────────────────────────────
-  // to …「その時こくに あわせる」。はりは 12:00 から はじまる。
-  // from と d …「from の d ぷん あと（－なら まえ）」。はりは from から はじまる。
-  // best … いちばん少ない「指をはなす回数」。ここまでで あわせたら レインボー。
-  // とけい1：はんぱな じこく
-  { lv:6, k:'clock', to:'3:47',  best:2 },
-  { lv:6, k:'clock', to:'8:13',  best:2 },
-  { lv:6, k:'clock', to:'5:28',  best:2 },
-  { lv:6, k:'clock', to:'11:52', best:2 },
-  { lv:6, k:'clock', to:'1:09',  best:2 },
-  { lv:6, k:'clock', to:'6:34',  best:2 },
-  { lv:6, k:'clock', to:'9:41',  best:2 },
-  { lv:6, k:'clock', to:'2:56',  best:2 },
-  { lv:6, k:'clock', to:'7:18',  best:2 },
-  { lv:6, k:'clock', to:'4:03',  best:2 },
-  // とけい2：24じかんの とけい
-  { lv:7, k:'clock', to:'15:45', best:2 },
-  { lv:7, k:'clock', to:'13:20', best:2 },
-  { lv:7, k:'clock', to:'18:07', best:2 },
-  { lv:7, k:'clock', to:'20:38', best:2 },
-  { lv:7, k:'clock', to:'14:51', best:2 },
-  { lv:7, k:'clock', to:'16:12', best:2 },
-  { lv:7, k:'clock', to:'22:26', best:2 },
-  { lv:7, k:'clock', to:'19:59', best:2 },
-  { lv:7, k:'clock', to:'17:44', best:2 },
-  { lv:7, k:'clock', to:'23:15', best:2 },
-  // とけい3：5ふんずつ ずらす（時は かわらない）
-  { lv:8, k:'clock', from:'3:20',  d:10,  best:1 },
-  { lv:8, k:'clock', from:'4:45',  d:-15, best:1 },
-  { lv:8, k:'clock', from:'7:05',  d:20,  best:1 },
-  { lv:8, k:'clock', from:'9:50',  d:-25, best:1 },
-  { lv:8, k:'clock', from:'1:10',  d:30,  best:1 },
-  { lv:8, k:'clock', from:'15:35', d:-15, best:1 },
-  { lv:8, k:'clock', from:'18:15', d:35,  best:1 },
-  { lv:8, k:'clock', from:'10:55', d:-40, best:1 },
-  { lv:8, k:'clock', from:'13:00', d:45,  best:1 },
-  { lv:8, k:'clock', from:'20:30', d:-25, best:1 },
-  // とけい4：はんぱに ずらす（5のかたまり ＋ のこり）
-  { lv:9, k:'clock', from:'15:45', d:-13, best:1 },
-  { lv:9, k:'clock', from:'3:20',  d:7,   best:1 },
-  { lv:9, k:'clock', from:'8:40',  d:-12, best:1 },
-  { lv:9, k:'clock', from:'5:05',  d:18,  best:1 },
-  { lv:9, k:'clock', from:'14:50', d:-26, best:1 },
-  { lv:9, k:'clock', from:'11:15', d:-9,  best:1 },
-  { lv:9, k:'clock', from:'19:23', d:14,  best:1 },
-  { lv:9, k:'clock', from:'6:58',  d:-21, best:1 },
-  { lv:9, k:'clock', from:'21:31', d:17,  best:1 },
-  { lv:9, k:'clock', from:'16:44', d:-33, best:1 },
-  // とけい5：じを またぐ
-  { lv:10, k:'clock', from:'10:50', d:25,  best:1 },
-  { lv:10, k:'clock', from:'3:10',  d:-15, best:1 },
-  { lv:10, k:'clock', from:'14:45', d:30,  best:1 },
-  { lv:10, k:'clock', from:'7:05',  d:-12, best:1 },
-  { lv:10, k:'clock', from:'11:40', d:35,  best:1 },
-  { lv:10, k:'clock', from:'18:20', d:-45, best:1 },
-  { lv:10, k:'clock', from:'12:55', d:8,   best:1 },
-  { lv:10, k:'clock', from:'21:03', d:-19, best:1 },
-  { lv:10, k:'clock', from:'5:48',  d:27,  best:1 },
-  { lv:10, k:'clock', from:'23:30', d:50,  best:1 },
-  // とけい6：1じかんより ながく
-  { lv:11, k:'clock', from:'9:20',  d:60,   best:2 },
-  { lv:11, k:'clock', from:'15:45', d:-73,  best:2 },
-  { lv:11, k:'clock', from:'4:50',  d:135,  best:2 },
-  { lv:11, k:'clock', from:'13:10', d:-90,  best:2 },
-  { lv:11, k:'clock', from:'20:05', d:85,   best:2 },
-  { lv:11, k:'clock', from:'8:40',  d:-180, best:2 },
-  { lv:11, k:'clock', from:'17:55', d:77,   best:2 },
-  { lv:11, k:'clock', from:'11:25', d:-160, best:2 },
-  { lv:11, k:'clock', from:'6:33',  d:108,  best:2 },
-  { lv:11, k:'clock', from:'22:15', d:-110, best:2 },
+  // pick  … アナログの とけいを見て、デジタルの時こくを ドラムロールで えらんで「これ！」。
+  //         13:00 より あとの時こくは、じの ドラムが 0〜23 になる（「ごご」の よみかえ）。
+  // clock … デジタルの時こくを見て、とけいの はりを あわせる（はりは 12:00 から）。
+  // best  … こたえる／指をはなす 回数の目安。ここまでで できたら レインボー。
+  // とけい1：よんで えらぶ
+  { lv:6, k:'pick', to:'4:37', best:1 },
+  { lv:6, k:'pick', to:'9:12', best:1 },
+  { lv:6, k:'pick', to:'2:48', best:1 },
+  { lv:6, k:'pick', to:'7:03', best:1 },
+  { lv:6, k:'pick', to:'11:26', best:1 },
+  { lv:6, k:'pick', to:'5:59', best:1 },
+  { lv:6, k:'pick', to:'1:44', best:1 },
+  { lv:6, k:'pick', to:'8:21', best:1 },
+  { lv:6, k:'pick', to:'10:09', best:1 },
+  { lv:6, k:'pick', to:'6:33', best:1 },
+  // とけい2：はりを あわせる
+  { lv:7, k:'clock', to:'3:47', best:2 },
+  { lv:7, k:'clock', to:'8:13', best:2 },
+  { lv:7, k:'clock', to:'5:28', best:2 },
+  { lv:7, k:'clock', to:'11:52', best:2 },
+  { lv:7, k:'clock', to:'1:09', best:2 },
+  { lv:7, k:'clock', to:'6:34', best:2 },
+  { lv:7, k:'clock', to:'9:41', best:2 },
+  { lv:7, k:'clock', to:'2:56', best:2 },
+  { lv:7, k:'clock', to:'7:18', best:2 },
+  { lv:7, k:'clock', to:'4:03', best:2 },
+  // とけい3：ごごを よむ
+  { lv:8, k:'pick', to:'13:18', best:1 },
+  { lv:8, k:'pick', to:'15:52', best:1 },
+  { lv:8, k:'pick', to:'14:07', best:1 },
+  { lv:8, k:'pick', to:'18:36', best:1 },
+  { lv:8, k:'pick', to:'20:41', best:1 },
+  { lv:8, k:'pick', to:'16:24', best:1 },
+  { lv:8, k:'pick', to:'22:13', best:1 },
+  { lv:8, k:'pick', to:'17:08', best:1 },
+  { lv:8, k:'pick', to:'19:57', best:1 },
+  { lv:8, k:'pick', to:'23:29', best:1 },
+  // とけい4：ごごに あわせる
+  { lv:9, k:'clock', to:'15:45', best:2 },
+  { lv:9, k:'clock', to:'13:20', best:2 },
+  { lv:9, k:'clock', to:'18:07', best:2 },
+  { lv:9, k:'clock', to:'20:38', best:2 },
+  { lv:9, k:'clock', to:'14:51', best:2 },
+  { lv:9, k:'clock', to:'16:12', best:2 },
+  { lv:9, k:'clock', to:'22:26', best:2 },
+  { lv:9, k:'clock', to:'19:59', best:2 },
+  { lv:9, k:'clock', to:'17:44', best:2 },
+  { lv:9, k:'clock', to:'23:15', best:2 },
   // ── まぜまぜ ───────────────────────────────────────────
-  // けいさん・とけい・「とけいを よんで つくる」（k:'read'）が まざって出る。
-  // read は けいさんの おだいで、ねらいの数が とけいの中に かくれている。
-  //   show … その とけいを見て「なんぷん？」   from/to … そのあいだは「なんぷん？」
+  // けいさん・とけいを よむ・はりを あわせる が まざって出る。
   // まぜまぜ1
-  { lv:12, n:12,   use:[3], best:3, ref:3, way:[6],      hint:'3+3を×2' },
-  { lv:12, k:'clock', to:'4:37', best:2 },
-  { lv:12, k:'read', show:'2:35', n:35,   use:[5], best:6, ref:6, way:[25,10],      hint:'5が7こ' },
-  { lv:12, n:20,   use:[2], best:6, ref:6, way:[4,8,10],      hint:'×2でふやす' },
-  { lv:12, k:'clock', from:'9:15', d:10, best:1 },
-  { lv:12, k:'read', from:'3:20', to:'3:45', n:25,   use:[5], best:3, ref:3, way:[],      hint:'5が5こ' },
-  { lv:12, n:10,   use:[3,7], best:3, ref:3, way:[],    hint:'3+7' },
-  { lv:12, k:'clock', to:'17:22', best:2 },
-  { lv:12, k:'read', show:'7:40', n:40,   use:[5], best:4, ref:4, way:[10,20],      hint:'5が8こ' },
-  { lv:12, k:'clock', from:'15:45', d:-13, best:1 },
+  { lv:10, n:12,   use:[3], best:3, ref:3, way:[6],      hint:'3+3を×2' },
+  { lv:10, k:'pick', to:'3:27', best:1 },
+  { lv:10, n:20,   use:[2], best:6, ref:6, way:[4,8,10],      hint:'×2でふやす' },
+  { lv:10, k:'clock', to:'6:52', best:2 },
+  { lv:10, n:10,   use:[3,7], best:3, ref:3, way:[],      hint:'3+7' },
+  { lv:10, k:'pick', to:'8:14', best:1 },
+  { lv:10, n:15,   use:[5], best:4, ref:4, way:[10],      hint:'5を3こ' },
+  { lv:10, k:'clock', to:'2:38', best:2 },
+  { lv:10, n:9,   use:[3], best:3, ref:3, way:[6],      hint:'3を3こ' },
+  { lv:10, k:'pick', to:'12:46', best:1 },
   // まぜまぜ2
-  { lv:13, n:30,   use:[4,7], best:5, ref:5, way:[28,2],    hint:'7×4のあと' },
-  { lv:13, k:'clock', from:'10:50', d:25, best:1 },
-  { lv:13, k:'read', show:'6:42', n:42,   use:[5,2], best:6, ref:6, way:[10,20,40],      hint:'5が8こと2' },
-  { lv:13, n:48,   use:[6], best:4, ref:4, way:[12,24],      hint:'6を×2で3かい' },
-  { lv:13, k:'read', from:'8:35', to:'9:00', n:25,   use:[5], best:3, ref:3, way:[],      hint:'9じまで 5が5こ' },
-  { lv:13, k:'clock', from:'14:05', d:-17, best:1 },
-  { lv:13, n:35,   use:[7,5], best:3, ref:3, way:[],    hint:'7×5' },
-  { lv:13, k:'read', from:'11:48', to:'12:15', n:27,   use:[5,2], best:5, ref:5, way:[25],      hint:'12じまでと そのあと' },
-  { lv:13, k:'clock', to:'19:53', best:2 },
-  { lv:13, n:60,   use:[8,2], best:6, ref:8, way:[10,30],    hint:'8+2から' },
+  { lv:11, n:30,   use:[4,7], best:5, ref:5, way:[28,2],      hint:'7×4のあと' },
+  { lv:11, k:'pick', to:'16:43', best:1 },
+  { lv:11, n:48,   use:[6], best:4, ref:4, way:[12,24],      hint:'6を×2で3かい' },
+  { lv:11, k:'clock', to:'17:05', best:2 },
+  { lv:11, n:35,   use:[7,5], best:3, ref:3, way:[],      hint:'7×5' },
+  { lv:11, k:'pick', to:'10:58', best:1 },
+  { lv:11, n:60,   use:[8,2], best:6, ref:8, way:[10,30],      hint:'8+2から' },
+  { lv:11, k:'clock', to:'21:34', best:2 },
+  { lv:11, n:25,   use:[5], best:3, ref:3, way:[],      hint:'5×5' },
+  { lv:11, k:'pick', to:'19:21', best:1 },
   // まぜまぜ3
-  { lv:14, k:'clock', from:'15:45', d:-73, best:2 },
-  { lv:14, k:'read', show:'9:58', n:58,   use:[5,2], best:7, ref:7, way:[25,4,29],      hint:'60より2すくない' },
-  { lv:14, n:100,  use:[5], best:4, ref:4, way:[25,50],      hint:'5×5から×2' },
-  { lv:14, k:'read', from:'10:35', to:'11:20', n:45,   use:[9,5], best:3, ref:3, way:[],      hint:'9×5' },
-  { lv:14, k:'clock', from:'23:50', d:35, best:1 },
-  { lv:14, n:144,  use:[6], best:4, ref:4, way:[36,72],      hint:'36を×2で2かい' },
-  { lv:14, k:'read', from:'7:15', to:'8:45', n:90,   use:[9,10], best:3, ref:3, way:[],      hint:'1じかんは60ぷん' },
-  { lv:14, k:'clock', from:'6:20', d:-45, best:1 },
-  { lv:14, k:'read', show:'12:17', n:17,   use:[5,2], best:6, ref:6, way:[7,10],      hint:'5が3こと2' },
-  { lv:14, k:'clock', from:'13:37', d:148, best:2 },
-  // ── とけいを よんで、ドラムロールで えらぶ ─────────────────────
-  // pick … アナログの とけいを見て、デジタルの時こくを ドラムロールで えらんで「これ！」。
-  // 13:00 より あとの時こくは、じの ドラムが 0〜23 になる（「ごご」の よみかえ）。
-  // とけい7：よんで えらぶ
-  { lv:15, k:'pick', to:'4:37',  best:1 },
-  { lv:15, k:'pick', to:'9:12',  best:1 },
-  { lv:15, k:'pick', to:'2:48',  best:1 },
-  { lv:15, k:'pick', to:'7:03',  best:1 },
-  { lv:15, k:'pick', to:'11:26', best:1 },
-  { lv:15, k:'pick', to:'5:59',  best:1 },
-  { lv:15, k:'pick', to:'1:44',  best:1 },
-  { lv:15, k:'pick', to:'8:21',  best:1 },
-  { lv:15, k:'pick', to:'10:09', best:1 },
-  { lv:15, k:'pick', to:'6:33',  best:1 },
-  // とけい8：ごごの じこく
-  { lv:16, k:'pick', to:'13:18', best:1 },
-  { lv:16, k:'pick', to:'15:52', best:1 },
-  { lv:16, k:'pick', to:'14:07', best:1 },
-  { lv:16, k:'pick', to:'18:36', best:1 },
-  { lv:16, k:'pick', to:'20:41', best:1 },
-  { lv:16, k:'pick', to:'16:24', best:1 },
-  { lv:16, k:'pick', to:'22:13', best:1 },
-  { lv:16, k:'pick', to:'17:08', best:1 },
-  { lv:16, k:'pick', to:'19:57', best:1 },
-  { lv:16, k:'pick', to:'23:29', best:1 }
+  { lv:12, n:100,   use:[5], best:4, ref:4, way:[25,50],      hint:'5×5から×2' },
+  { lv:12, k:'clock', to:'23:47', best:2 },
+  { lv:12, k:'pick', to:'14:39', best:1 },
+  { lv:12, n:144,   use:[6], best:4, ref:4, way:[36,72],      hint:'36を×2で2かい' },
+  { lv:12, k:'clock', to:'9:16', best:2 },
+  { lv:12, n:120,   use:[3], best:8, ref:8, way:[6,12,24,48,96],      hint:'24をならべる' },
+  { lv:12, k:'pick', to:'21:52', best:1 },
+  { lv:12, n:250,   use:[5], best:6, ref:6, way:[10,100,500],      hint:'500のはんぶん' },
+  { lv:12, k:'clock', to:'12:28', best:2 },
+  { lv:12, k:'pick', to:'18:03', best:1 }
 ];
 const TASK_KEY = 'nbg.task.v1';
+// おだいの ならびの版。60番より うしろを 入れかえたら 1つ上げる（読みこむときに 古い記録を けす）
+//   2 … とけい・まぜまぜ を はじめて足した   3 … とけいを「よむ」と「あわせる」だけにした
+const TASK_VER = 3, CALC_TASKS = 60;
 
 // ── とけいの おだい ─────────────────────────────────────────────
 // 時こくは「0時からの ふん」で持つ（15:45 → 945）。はりは12時間で1周なので、
-// あっているかは 720 でわった あまりで くらべる。
+// はりが あっているかは 720 でわった あまりで くらべる。
 function tmin(s){ const m = /^(\d+):(\d\d)$/.exec(s); return m ? (+m[1])*60 + (+m[2]) : 0; }
 function fmtT(v){ v = ((v % 1440) + 1440) % 1440; return Math.floor(v/60) + ':' + String(v%60).padStart(2,'0'); }
-// 「ふん／ぷん」は さいごの けたで きまる（いっぷん・にふん・さんぷん…じゅっぷん）
-function funWord(m){ return m + ('ぷぷふぷぷふぷふぷふ'[m % 10]) + 'ん'; }
-function durWord(d){
-  const a = Math.abs(d), h = Math.floor(a/60), m = a%60;
-  return (h ? h + 'じかん' : '') + (m ? funWord(m) : '');
-}
 // とけいの おだいの中身を 先に計算して t.c に入れておく。
-//   start … はりの はじめの位置   goal … あわせる時こく   way … みちしるべ（とちゅうの時こく）
+//   start … はりの はじめの位置   goal … こたえの時こく   title・tail … カードの ことば
+// ヒントや みちしるべは出さない（ビギナーでも。自分で よむ・あわせる れんしゅう なので）。
 function buildClockTask(t){
-  if(t.to){
-    const goal = tmin(t.to), h = Math.floor(goal/60), m = goal%60;
-    const way = [h*60];                                  // まず みじかいはりを その時へ
-    if(m % 5 && m > 5) way.push(h*60 + m - m%5);          // 5のかたまりまで ながいはりを すすめる
-    const h12 = (h % 12) || 12;
-    const hint = 'みじかいはり ' + h12 + 'と' + ((h12 % 12) + 1) + 'のあいだ、ながいはり ' +
-                 (m >= 5 ? '5が' + Math.floor(m/5) + 'こ' + (m%5 ? 'と' + (m%5) : '') : '12から' + m);
-    t.c = { start:0, goal:goal, way:way.filter(v => v !== goal), hint:hint, title:t.to, tail:' に あわせよう！' };
-    return;
+  const goal = tmin(t.to);
+  if(t.k === 'pick'){
+    // よんで えらぶ：はりは こたえの時こくに止めておき、ドラムロールで えらぶ
+    const h24 = goal >= 13*60;
+    t.c = { start:goal, goal, h24, title:'',
+            tail: h24 ? 'ごごの とけい。デジタルで なんじ？' : 'とけいを よんで えらぼう！' };
+  } else {
+    // はりを あわせる：はりは 12:00 から
+    t.c = { start:0, goal, title:t.to, tail:' に あわせよう！' };
   }
-  const from = tmin(t.from), dir = t.d > 0 ? 1 : -1;
-  let pos = from, rem = Math.abs(t.d);
-  const way = [];
-  if(rem >= 60){                                         // まず 1じかんずつ
-    const h = Math.floor(rem/60); pos += dir*h*60; rem -= h*60;
-    if(rem) way.push(pos);
-  }
-  if(rem){
-    const m = ((pos % 60) + 60) % 60;
-    const edge = dir > 0 ? (60 - m) % 60 : m;              // つぎの「ちょうど」まで
-    if(edge > 0 && rem > edge){ pos += dir*edge; rem -= edge; way.push(pos); }
-    if(rem > 5 && rem % 5){                                // 5のかたまりで 大きく
-      const big = rem - rem % 5; pos += dir*big; rem -= big; way.push(pos);
-    }
-  }
-  const goal = pos + dir*rem;
-  const word = dir > 0 ? 'すすめる' : 'もどす';
-  const hint = way.length ? 'とちゅう ' + way.map(fmtT).join(' → ')
-             : (Math.abs(t.d) % 60 === 0) ? 'みじかいはりを ' + (Math.abs(t.d)/60) + 'つ ' + word
-             : 'ながいはりを 5が' + (Math.abs(t.d)/5) + 'こぶん ' + word;
-  t.c = { start:from, goal:goal, way:way, hint:hint,
-          title:t.from, tail:' の ' + durWord(t.d) + (dir > 0 ? ' あと' : ' まえ') };
 }
-// よんで えらぶ（pick）：はりは こたえの時こくに止めておき、ドラムロールで えらぶ
-function buildPickTask(t){
-  buildClockTask(t);
-  const h24 = t.c.goal >= 13*60;
-  t.c.start = t.c.goal; t.c.way = []; t.c.h24 = h24;
-  t.c.title = ''; t.c.tail = h24 ? 'ごごの とけい。デジタルで なんじ？' : 'とけいを よんで えらぼう！';
-  if(h24) t.c.hint += '、ごごは じに 12を たす';
-}
-for(const t of TASKS){ if(t.k === 'clock') buildClockTask(t); else if(t.k === 'pick') buildPickTask(t); }
+for(const t of TASKS) if(t.k === 'clock' || t.k === 'pick') buildClockTask(t);
 // とけいの画面で遊ぶ おだい（はりを あわせる clock と、よんで えらぶ pick）
 function isClockTask(t){ return !!(t && (t.k === 'clock' || t.k === 'pick')); }
 function isPickTask(t){ return !!(t && t.k === 'pick'); }
@@ -517,14 +433,10 @@ function lvNum(lv){
 function catLevels(cat){ const out = []; TASK_LEVELS.forEach((L,i) => { if(L.cat === cat) out.push(i); }); return out; }
 function catTasks(cat){ const out = []; TASKS.forEach((t,i) => { if(TASK_LEVELS[t.lv].cat === cat) out.push(i); }); return out; }
 // いちらんの小さなマスや「できた！」に出す ことば
-function taskGoalLabel(t){
-  if(isClockTask(t)) return fmtT(t.c.goal);
-  return String(t.n);
-}
+function taskGoalLabel(t){ return isClockTask(t) ? fmtT(t.c.goal) : String(t.n); }
 function taskCellLabel(t){
   if(isPickTask(t)) return 'よむ';
-  if(isClockTask(t)) return t.to ? t.to : ((t.d > 0 ? '+' : '−') + (Math.abs(t.d) >= 60 ? fmtT(Math.abs(t.d)) : Math.abs(t.d)));
-  if(t.k === 'read') return '?';
+  if(isClockTask(t)) return t.to;
   return String(t.n);
 }
 let taskOn = false, taskIdx = 0, taskDone = false;
@@ -549,8 +461,9 @@ const HINT_AFTER_MOVES = 4;
 function hintReady(){
   if(!taskActive() || taskDone) return false;
   if(begMode()) return false;    // ビギナーは好きな数字を使えるので、しばり用のヒントは出さない
-  if(hintShownAt) return true;   // 一度出したら、そのおだいのあいだは引っこめない
   const t = currentTask();
+  if(isClockTask(t)) return false; // とけいは ヒントなし（自分で よむ・あわせる れんしゅう）
+  if(hintShownAt) return true;   // 一度出したら、そのおだいのあいだは引っこめない
   if(taskLog.length >= (t.best||0) + HINT_AFTER_MOVES) return true;
   return taskStartT > 0 && (Date.now() - taskStartT) > HINT_AFTER_MS;
 }
@@ -578,12 +491,26 @@ try{
         const r = v.p[pr.id];
         if(!r) continue;
         const b = r.beg || {};
-        taskStore[pr.id] = { idx:r.idx|0, cleared:r.cleared||{}, logs:r.logs||{},
+        taskStore[pr.id] = { idx:r.idx|0, cleared:r.cleared||{}, logs:r.logs||{}, rainbow:r.rainbow||{},
                              useBeg: !!r.useBeg,
                              beg: { idx:b.idx|0, cleared:b.cleared||{}, logs:b.logs||{}, rainbow:b.rainbow||{} } };
       }
       const i = PROFILES.findIndex(pr=>pr.id === v.cur);
       if(i >= 0) profileIdx = i;
+      // おだいの ならびが かわったときの 引っこし。けいさん（0〜59番）は そのまま。
+      // 60番より うしろ（とけい・まぜまぜ）は 中身が入れかわったので、古い記録を けす
+      // （のこすと ちがう おだいに クリア印が ついてしまう）。
+      if((v.tv|0) < TASK_VER) for(const pr of PROFILES){
+        const r = taskStore[pr.id];
+        for(const rec of [r, r.beg]){
+          if(!rec) continue;
+          for(const box of [rec.cleared, rec.logs, rec.rainbow]){
+            if(!box) continue;
+            for(const k in box) if(+k >= CALC_TASKS) delete box[k];
+          }
+          if(rec.idx >= CALC_TASKS) rec.idx = 0;
+        }
+      }
     } else {
       // ひとりぶんしか無かったころの記録。ひなたのものとして引き継ぐ。
       const cl = {};
@@ -624,7 +551,7 @@ function saveTask(){
   r.idx = taskIdx; r.cleared = taskCleared; r.logs = taskLogs;
   try{
     localStorage.setItem(TASK_KEY, JSON.stringify({
-      v:2, on:taskOn, cur:profile().id, p:taskStore
+      v:2, tv:TASK_VER, on:taskOn, cur:profile().id, p:taskStore
     }));
   }catch(e){}
 }
@@ -831,14 +758,15 @@ let wayIdx = 0, wayFlash = 0;
 // ひかえめなキーを1回でも押したら、そのおだいでは虹は出ない（CLR でやり直せば また出る）。
 let usedOther = false;
 let lastRainbow = false;         // いまのおだいを レインボークリアしたか（カードの一言に使う）
+// とけいの おだいには みちしるべを出さない（ビギナーでも）
 function currentWay(){
   if(!begMode() || !taskActive()) return [];
   const t = currentTask();
-  return (isClockTask(t) ? t.c.way : t.way) || [];
+  return isClockTask(t) ? [] : (t.way || []);
 }
 function checkWay(){
   if(!taskActive() || !begMode() || taskDone) return;
-  if(isClockTask(currentTask())) return;          // とけいは 指をはなしたときに見る（clockRelease）
+  if(isClockTask(currentTask())) return;
   const way = currentTask().way || [];
   for(let i = way.length-1; i >= wayIdx; i--){
     const b = blocks.find(x => x.num === way[i]);
@@ -856,7 +784,6 @@ function startTask(i){
   if(isClockTask(nt)){ if(mode !== 'clock') setMode('clock'); clockT = ((nt.c.start % 720) + 720) % 720; clockMerged = false; }
   else if(!isCalcMode()) setMode('calc');
   drumReset(nt);
-  clockHintUsed = false;
   taskDone = false; taskLog = []; winFx = null;
   clearedAt = 0; autoNextOff = false;
   wayIdx = 0; wayFlash = 0; usedOther = false; lastRainbow = false;
@@ -900,7 +827,10 @@ const CALC_OPS  = ['+','-','x','div'];
 const OP_LABEL  = {'+':'＋','-':'−','x':'×','div':'÷'};
 function isCalcMode(m){ return CALC_OPS.indexOf(m || mode) >= 0; }
 let lastOp = '+';   // けいさんタブに戻ったときに選び直す演算子
+// 「おだい」は ひとつの タブ。中の画面（キャラ／文字盤）は おだいに合わせて かわるが、
+// 上のタブは「おだい」のまま。ほかのタブは おだいなしの じゆうあそび。
 const TAB_DEFS = [
+  {label:'おだい', val:'task'},
   {label:'けいさん', val:'calc'}, {label:'因数', val:'factor'},
   {label:'ドリル', val:'quiz'},   {label:'とけい', val:'clock'}
 ];
@@ -1474,7 +1404,8 @@ function drawModeTabs(ctx){
   for(let i=0;i<TAB_DEFS.length;i++){
     const td=TAB_DEFS[i];
     const ty=TOP_ROW_H;
-    const active = (td.val==='calc') ? isCalcMode() : (td.val===mode);
+    const active = (td.val==='task') ? taskOn
+                 : !taskOn && ((td.val==='calc') ? isCalcMode() : (td.val===mode));
     ctx.save();
     // 選んでいないタブが「押せない」ように見えないよう、はっきり明るくする
     ctx.fillStyle = active?'rgba(100,160,255,0.95)':'rgba(82,92,110,0.95)';
@@ -2285,7 +2216,6 @@ for(const btn of document.querySelectorAll('.opBtn')){
 let clockT = 3*60 + 0;        // 0時ちょうどからの分（0〜719）
 let clockDrag = null;         // 'hour' | 'min'
 let clockDragFrom = 0;        // つかんだときの時こく（はなしたときに「1かい」と数える）
-let clockHintUsed = false;    // このおだいで ヒントを開いたか（開いたら虹は出ない）
 
 function clockHour(){ return Math.floor(clockT/60)%12; }
 function clockMin(){  return clockT%60; }
@@ -2345,23 +2275,6 @@ function drawRimCube(ctx, sz, st, lit, isMark){
 
 // とけいの おだいを といている最中（まだ できていない）か
 function clockTaskLive(){ return taskActive() && isClockTask(currentTask()) && !taskDone; }
-// みちしるべの印。つぎに めざす時こくに、ながいはりの場所（みどりの輪）と
-// みじかいはりの場所（赤い点）を 文字盤の上に うすく出す。ビギナーだけ。
-function drawClockWayMark(ctx, g, t){
-  if(!clockTaskLive()) return;
-  const way = currentWay(); if(wayIdx >= way.length) return;
-  const v = ((way[wayIdx] % 720) + 720) % 720;
-  const pulse = 0.5 + 0.5*Math.sin(t*0.006);
-  const mp = handPos(g, (v % 60)/60, g.R*0.845);
-  ctx.save();
-  ctx.strokeStyle = BEG_COLOR; ctx.globalAlpha = 0.55 + 0.4*pulse;
-  ctx.lineWidth = Math.max(3, g.R*0.03);
-  ctx.beginPath(); ctx.arc(mp.x, mp.y, g.R*0.085 + 2*pulse, 0, Math.PI*2); ctx.stroke();
-  const hp = handPos(g, v/720, g.R*0.48);
-  ctx.fillStyle = '#e0403f'; ctx.globalAlpha = 0.28 + 0.25*pulse;
-  ctx.beginPath(); ctx.arc(hp.x, hp.y, Math.max(6, g.R*0.07), 0, Math.PI*2); ctx.fill();
-  ctx.restore();
-}
 function drawClockMode(ctx, t){
   const g = getClockGeom();
   const min = clockMin(), hr = clockHour();
@@ -2409,7 +2322,6 @@ function drawClockMode(ctx, t){
   }
 
   // 針（短針は時、長針は分）
-  drawClockWayMark(ctx, g, t);
   const hFrac = (clockT/720), mFrac = (min/60);
   const hp = handPos(g, hFrac, g.R*0.48), mp = handPos(g, mFrac, g.R*0.80);
   // 短針＝赤（みじかくて太い）／長針＝青（ながくて細い）
@@ -2492,7 +2404,7 @@ function drawClockParts(ctx, t, g){
     const spec = clockPartSpec(min);
     const bs = Math.max(3, Math.min(26, a.w/spec.cols, availH/spec.rows));
     const x = sw/2 - spec.cols*bs/2, y = a.bottom - spec.rows*bs;
-    drawClockFormula(ctx, (clockTaskLive() && !begMode()) ? '？' : String(min), a.top);
+    drawClockFormula(ctx, clockTaskLive() ? '？' : String(min), a.top);
     drawNumberblock(ctx, min, x, y, bs, { t:t, animate:false, numberling:false, spec:spec });
     return;
   }
@@ -2518,7 +2430,7 @@ function drawClockParts(ctx, t, g){
   const bs = Math.max(3, Math.min(24, a.w/(totalCols+gapUnits), (availH-labelH)/maxRows));
   const baseY = a.bottom - labelH;
 
-  const hideSum = clockTaskLive() && !begMode();
+  const hideSum = clockTaskLive();
   drawClockFormula(ctx, items.join(' + ') + ' = ' + (hideSum ? '？' : min), a.top);
 
   // 位置を先に決めてから描く（ペアの下に線を引くため）
@@ -2627,21 +2539,12 @@ function handleClockMove(x,y){
 
 // ─── とけいの おだいの判定 ─────────────────────────────────────────
 // 指をはなしたときだけ見る（まわしている とちゅうで 通りすぎただけでは できたにしない）。
-// 1回はなすごとに「1かい」。おだいの best 回いないで あわせたら レインボー🌈クリア
-// （ふつうでは ヒントを開かなかったときだけ）。
+// 1回はなすごとに「1かい」。おだいの best 回いないで あわせたら レインボー🌈クリア。
 function clockRelease(){
   if(!clockTaskLive()) return;
   if(clockT === clockDragFrom) return;              // さわっただけ（はりが動いていない）
   const t = currentTask();
   logStep('clock', clockDragFrom, null, clockT);
-  const way = t.c.way;
-  for(let i = way.length-1; i >= wayIdx; i--){
-    if(((way[i] % 720) + 720) % 720 !== clockT) continue;
-    wayIdx = i + 1; wayFlash = 1;
-    const g = getClockGeom(), mp = handPos(g, clockMin()/60, g.R*0.8);
-    for(let k=0;k<18;k++) fxParticles.push(new Particle(mp.x, mp.y));
-    break;
-  }
   if(clockT === ((t.c.goal % 720) + 720) % 720) clockClear();
 }
 function clockClear(){
@@ -2652,7 +2555,7 @@ function clockClear(){
   const kept = taskLogs[taskIdx];
   const prevOwn = kept ? kept.length : null;
   const moves = taskLog.length;
-  const rainbow = moves <= (t.best || 1) && (begMode() || !clockHintUsed);
+  const rainbow = moves <= (t.best || 1);
   const praise = rainbow ? { text:RAINBOW_TEXT, color:'#c0398a', big:true, rainbow:true }
                          : judgeClear(taskIdx, moves, prevOwn);
   lastRainbow = rainbow;
@@ -2766,13 +2669,12 @@ function drawDrum(ctx, t){
     ctx.font = 'bold 22px sans-serif'; ctx.fillText('これ！', b.x + b.w/2, b.y + b.h/2 + 1);
     ctx.restore();
   }
-  // ビギナーは よみかたの ヒントを いつも出す。ふつうは ちがったときに「ちがうよ」だけ
-  const line = (begMode() && !taskDone) ? currentTask().c.hint
-             : (drum.miss && !taskDone) ? 'ちがうよ。もういちど よんでみよう' : '';
+  // ヒントは出さない（ビギナーでも）。ちがったときに「ちがうよ」だけ
+  const line = (drum.miss && !taskDone) ? 'ちがうよ。もういちど よんでみよう' : '';
   if(line){
     ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.font = 'bold 13px sans-serif';
-    // 入りきらないときは「、」のところで 2行に わける
+    // 入りきらないときは「、」のところで 2行に わける（画面が せまいとき）
     const lines = [];
     let cur = '';
     for(const seg of line.split('、')){
@@ -2781,7 +2683,7 @@ function drawDrum(ctx, t){
     }
     lines.push(cur);
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.lineJoin = 'round';
-    ctx.fillStyle = (drum.miss && !begMode()) ? '#c0392b' : BEG_COLOR;
+    ctx.fillStyle = '#c0392b';
     lines.slice(0, 2).forEach((ln, k) => {
       const y = dg.top + dg.H + 28 + k*17;
       ctx.strokeText(ln, sw/2, y); ctx.fillText(ln, sw/2, y);
@@ -3241,13 +3143,9 @@ function drawTaskCard(ctx, t){
     //  とけい …「15:45 の 13ぷん まえ」「3:47 に あわせよう！」
     //  よんでつくる …「(とけいの絵) は なんぷん？」「3:20→3:45 は なんぷん？」
     // 右のボタンにぶつかりそうなら、ひと回り小さくして収める。
-    let big = String(task.n), tail = ' を つくろう！', pre = 0;
+    let big = String(task.n), tail = ' を つくろう！';
     if(isClockTask(task)){ big = task.c.title; tail = task.c.tail; }
-    else if(task.k === 'read'){
-      if(task.show){ big = ''; pre = 42; tail = ' は なんぷん？'; }
-      else { big = task.from + '→' + task.to; tail = ' は なんぷん？'; }
-    }
-    const titleMax = nx - r.x - 22 - pre;
+    const titleMax = nx - r.x - 22;
     ctx.textAlign='left'; ctx.textBaseline='alphabetic';
     let f1 = 28, f2 = 18;
     for(let k=0;k<4;k++){
@@ -3257,8 +3155,7 @@ function drawTaskCard(ctx, t){
       if(w1 + ctx.measureText(tail).width <= titleMax) break;
       f1 -= 4; f2 -= 2;
     }
-    if(pre) drawMiniClock(ctx, r.x+14+19, r.y+25, 19, tmin(task.show));
-    const ty0 = r.y+33, tx0 = r.x+16+pre;
+    const ty0 = r.y+33, tx0 = r.x+16;
     ctx.fillStyle='#16233a'; ctx.font='bold '+f1+'px sans-serif';
     ctx.fillText(big, tx0, ty0);
     const nw = ctx.measureText(big).width;
@@ -3280,7 +3177,7 @@ function drawTaskCard(ctx, t){
     ctx.beginPath(); ctx.roundRect(r.x+8, hy, r.w-16, hh, 9); ctx.stroke();
     ctx.fillStyle='#6b4a00'; ctx.font='bold 15px sans-serif';
     ctx.textAlign='left'; ctx.textBaseline='middle';
-    const ht = 'ヒント： ' + (isClockTask(task) ? task.c.hint : task.hint);
+    const ht = 'ヒント： ' + task.hint;
     ctx.font = 'bold ' + (ctx.measureText(ht).width > r.w - 40 ? 12 : 15) + 'px sans-serif';
     ctx.fillText(ht, r.x+20, hy+hh/2);
     ctx.restore();
@@ -3295,73 +3192,9 @@ function stageLabel(i){
   for(let k=0;k<TASKS.length;k++){ if(TASKS[k].lv===t.lv){ first=k; break; } }
   return lvNum(t.lv) + '-' + (i-first+1);
 }
-// 「この とけいは なんぷん？」の おだいでは、空の あいているところに 大きな とけいを出す。
-// カードの中の とけいは 小さくて 4さいには読みにくいので。キャラより うしろに描く。
-function drawReadClock(ctx){
-  if(!taskActive()) return;
-  const t = currentTask(); if(t.k !== 'read' || !t.show) return;
-  const top = targetRowY() + 66, bottom = groundTopY();
-  const R = Math.min(90, (bottom - top)/2 - 24, sw*0.3);
-  if(R < 40) return;
-  ctx.save();
-  ctx.globalAlpha = taskDone ? 0.55 : 1;
-  ctx.shadowColor = 'rgba(30,50,80,0.18)'; ctx.shadowBlur = 10;
-  drawMiniClock(ctx, sw/2, top + R + 8, R, tmin(t.show));
-  ctx.restore();
-}
 // カードの右の札の下に出す、しゅるいの名前
 function catName(cat){ const c = TASK_CATS.find(x => x.id === cat); return c ? c.name : ''; }
 
-// 小さな とけい（「なんぷん？」の おだいに使う）。v は 0時からの ふん。
-// 大きく描くときは、とけいモードと同じ色で 1〜12 の数字も入れる。
-function drawMiniClock(ctx, cx, cy, r, v){
-  ctx.save();
-  ctx.fillStyle = '#fff'; ctx.strokeStyle = '#3a4a63'; ctx.lineWidth = r >= 40 ? Math.max(3, r*0.04) : 2;
-  ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-  if(r >= 40){
-    // 1ぷんごとの目もり（5ごとに太く）
-    for(let i=0;i<60;i++){
-      const a = i/60*Math.PI*2 - Math.PI/2, five = (i % 5 === 0);
-      ctx.strokeStyle = five ? '#3a4a63' : '#b4bfcc'; ctx.lineWidth = five ? 2.4 : 1.2;
-      const r0 = r*(five ? 0.86 : 0.90);
-      ctx.beginPath(); ctx.moveTo(cx + Math.cos(a)*r0, cy + Math.sin(a)*r0);
-      ctx.lineTo(cx + Math.cos(a)*r*0.95, cy + Math.sin(a)*r*0.95); ctx.stroke();
-    }
-    ctx.font = 'bold ' + Math.round(r*0.2) + 'px sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for(let n=1;n<=12;n++){
-      const a = n/12*Math.PI*2 - Math.PI/2;
-      ctx.fillStyle = rgb(darken(mainColorOf(n), 0.12));
-      ctx.fillText(String(n), cx + Math.cos(a)*r*0.68, cy + Math.sin(a)*r*0.68);
-    }
-    const hand = (frac, len, w, col) => {
-      const a = frac*Math.PI*2 - Math.PI/2;
-      ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a)*len, cy + Math.sin(a)*len); ctx.stroke();
-    };
-    hand((v % 720)/720, r*0.48, Math.max(5, r*0.075), '#e0403f');
-    hand((v % 60)/60,   r*0.80, Math.max(3, r*0.042), '#1f6fd8');
-    ctx.fillStyle = '#2b3a52'; ctx.beginPath(); ctx.arc(cx, cy, Math.max(4, r*0.055), 0, Math.PI*2); ctx.fill();
-    ctx.restore();
-    return;
-  }
-  for(let i=0;i<12;i++){
-    const a = i/12*Math.PI*2 - Math.PI/2, big = (i % 3 === 0);
-    const r0 = r*(big ? 0.70 : 0.80);
-    ctx.strokeStyle = big ? '#3a4a63' : '#9aa6b6'; ctx.lineWidth = big ? 2 : 1.2;
-    ctx.beginPath(); ctx.moveTo(cx + Math.cos(a)*r0, cy + Math.sin(a)*r0);
-    ctx.lineTo(cx + Math.cos(a)*r*0.92, cy + Math.sin(a)*r*0.92); ctx.stroke();
-  }
-  const hand = (frac, len, w, col) => {
-    const a = frac*Math.PI*2 - Math.PI/2;
-    ctx.strokeStyle = col; ctx.lineWidth = w; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx + Math.cos(a)*len, cy + Math.sin(a)*len); ctx.stroke();
-  };
-  hand((v % 720)/720, r*0.50, 3.2, '#e0403f');     // みじかいはり（とけいモードと同じ色）
-  hand((v % 60)/60,   r*0.80, 2,   '#1f6fd8');     // ながいはり
-  ctx.fillStyle = '#2b3a52'; ctx.beginPath(); ctx.arc(cx, cy, 2.2, 0, Math.PI*2); ctx.fill();
-  ctx.restore();
-}
 function clearedCount(){ return Object.keys(taskCleared).length; }
 
 // いちらんで見ている しゅるい（けいさん／とけい／まぜまぜ）。開くたびに いまのおだいの しゅるいに合わせる。
@@ -3537,11 +3370,11 @@ function toggleFullscreen(){
   }
 }
 
-// おだいを入れたり切ったりする。入れるときは、だれの記録にするかを先に聞く
+// おだいタブに 入る／出る。入るときは 毎回、だれの記録にするかを先に聞く
 // （パパやママが気づかず ひなたの記録で遊んでしまわないように）。
 function setTaskOn(v){
   if(taskOn === v) return;
-  taskOn = v; taskDone = false; taskLog = []; clearUndo();
+  taskOn = v; taskDone = false; taskLog = []; clearUndo(); winFx = null; drum = null;
   stageOpen = false; stageDetail = -1;
   hintOn = false; hintShownAt = 0; taskStartT = Date.now();
   blocks = []; saveTask(); updateTargets();
@@ -3555,8 +3388,6 @@ function drawSettings(ctx){
       opts: SIZE_KEYS.map(k => ({ text:k, v:k, on: bsKey === k })) },
     { label:'クイズ（がったいで もんだい）', key:'quiz',
       opts: [{ text:'ON', v:true, on:quizOn }, { text:'OFF', v:false, on:!quizOn }] },
-    { label:'おだい', key:'task',
-      opts: [{ text:'ON', v:true, on:taskOn }, { text:'OFF', v:false, on:!taskOn }] },
   ];
   // 横向きなど高さが足りないときは、行とボタンを詰めて収める
   const avail = sh - TAB_H - 16;
@@ -3628,7 +3459,6 @@ function handleSettingsTap(x, y){
     if(!ptInRect(x,y,b.x,b.y,b.w,b.h)) continue;
     if(b.val==='size')       setBlockSize(b.v);
     else if(b.val==='quiz')  setQuizOn(b.v);
-    else if(b.val==='task')  setTaskOn(b.v);
     else if(b.val==='zukan') location.href = 'zukan.html';
     else if(b.val==='fs')    toggleFullscreen();
     else if(b.val==='arc')   { setOpen = false; openArcTuner(); }
@@ -3926,8 +3756,7 @@ function drawStageDetail(ctx, idx){
                (begMode() ? '　ビギナー' : ck ? '' : '　つかえる ' + task.use.join(' と ')), x+16, y+20);
   ctx.fillStyle='#16233a'; ctx.font='bold 21px sans-serif';
   const title = isPickTask(task) ? 'とけいを よむ → ' + fmtT(task.c.goal)
-              : ck ? task.c.title + task.c.tail.replace(' に あわせよう！', '') + ' → ' + fmtT(task.c.goal)
-              : task.k === 'read' ? (task.show ? task.show : task.from + '→' + task.to) + ' → ' + task.n
+              : ck ? task.c.title + ' に あわせる'
               : task.n + ' の てじゅん';
   ctx.font = 'bold ' + (title.length > 16 ? 16 : 21) + 'px sans-serif';
   ctx.fillText(title, x+16, y+44);
@@ -4261,12 +4090,14 @@ function handleStart(x,y,pid){
   for(const tb of tabBtns){
     if(!ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)) continue;
     if(tb.val==='settings'){ setOpen = true; stageOpen = false; }
-    else setMode(tb.val);
+    // おだいに入るときは、かならず「だれが あそぶ？」を聞く（setTaskOn）
+    else if(tb.val==='task'){ if(!taskOn) setTaskOn(true); }
+    else { if(taskOn) setTaskOn(false); setMode(tb.val); }
     return;
   }
   for(const tb of taskBtns){
     if(!ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)) continue;
-    if(tb.val==='hint'){       hintOn = !hintOn; if(hintOn) clockHintUsed = true; }
+    if(tb.val==='hint')        hintOn = !hintOn;
     else if(tb.val==='next')   nextTask();
     else if(tb.val==='stages'){ openStages(); }
     else if(tb.val==='steps'){  openStages(taskIdx); autoNextOff=true; }
@@ -4575,7 +4406,6 @@ function drawFrame(ts){
     } else {
       applyPhysics();
       updateWinFx(dt);
-      drawReadClock(ctx);
       drawWinLines(ctx);
       drawWinStamp(ctx);
       for(const b of blocks){ if(b===dragBlock) continue; b.draw(ctx,walkTime,0); }

@@ -33,7 +33,7 @@ module.exports = {
                  html: !!(document.getElementById('zukan-btn') || document.getElementById('fs-btn')) };
       });
       t.eq(r.tabH, 44, `${w}x${h} で上部バーの高さが 44 ではない`);
-      t.eq(r.vals, ['calc','factor','quiz','clock','settings'], `${w}x${h} でタブの並びがちがう`);
+      t.eq(r.vals, ['task','calc','factor','quiz','clock','settings'], `${w}x${h} でタブの並びがちがう`);
       t.ok(!r.overlap, `${w}x${h} でタブどうしが重なる`);
       t.ok(!r.out, `${w}x${h} でタブが画面からはみ出す`);
       t.ok(!r.html, 'HTML の ずかん・全画面ボタンが残っている');
@@ -72,17 +72,31 @@ module.exports = {
     t.eq(await p.evaluate(() => quizOn), false, 'クイズ OFF にならない');
   },
 
-  'おだいを ON にすると、だれが遊ぶか聞かれる': async t => {
+  'おだい は タブ。入るたびに だれが遊ぶか聞かれ、ほかのタブへ行くと おだいは おわる。せっていには もう無い': async t => {
     const p = await t.open({ who:'papa' });
-    await p.evaluate(() => { taskOn = false; });
+    const tap = v => p.evaluate(v => { drawTabsAndUI(ctx); const b = tabBtns.find(x => x.val === v);
+                                       handleStart(b.x+b.w/2, b.y+b.h/2, 's'); handleEnd(b.x+b.w/2, b.y+b.h/2, 's'); }, v);
+    const pick = () => p.evaluate(() => { drawWhoPicker(ctx, 0); const w = whoBtns[1]; handleStart(w.x+w.w/2, w.y+w.h/2, 's'); });
+    await p.evaluate(() => { taskOn = false; whoOpen = false; });
+    await tap('task');
+    t.eq(await p.evaluate(() => [taskOn, whoOpen]), [true, true], 'おだいタブで「だれが あそぶ？」が出ない');
+    await pick();
+    await tap('task');                                   // おだいの中で もう一度 押しても 聞かない
+    t.eq(await p.evaluate(() => whoOpen), false, 'おだいの中で おだいタブを押したら また聞かれた');
+    await tap('clock');
+    t.eq(await p.evaluate(() => [taskOn, mode, taskActive(), whoOpen]), [false, 'clock', false, false],
+         'とけいタブで おだいが おわらない');
+    await tap('task');
+    t.eq(await p.evaluate(() => [taskOn, whoOpen]), [true, true], 'もどってきたときに また聞かれない（毎回聞く）');
+    await pick();
+    await tap('calc');
+    t.eq(await p.evaluate(() => [taskOn, isCalcMode()]), [false, true], 'けいさんタブで おだいが おわらない');
+    // タブの光りかたは おだい中は「おだい」だけ
+    const lit = await p.evaluate(() => { taskOn = true; startTask(catTasks('clock')[0]); return mode; });
+    t.eq(lit, 'clock', 'とけいの おだいで 画面が とけいに ならない');
+    // せっていに おだいの ON/OFF は もう無い
     await tapGear(p);
-    await tapSetting(p, 'task', true);
-    t.eq(await p.evaluate(() => [taskOn, setOpen, whoOpen]), [true, false, true],
-         'おだい ON のあと「だれが あそぶ？」が出ない');
-    await p.evaluate(() => { const w = whoBtns[0]; drawWhoPicker(ctx, 0); handleStart(w.x+w.w/2, w.y+w.h/2, 's'); });
-    await tapGear(p);
-    await tapSetting(p, 'task', false);
-    t.eq(await p.evaluate(() => [taskOn, whoOpen]), [false, false], 'おだい OFF にしても聞かれてしまう');
+    t.eq(await p.evaluate(() => { drawSettings(ctx); return setBtns.some(b => b.val === 'task'); }), false, 'せっていに おだいが 残っている');
   },
 
   'せってい が どの画面でも収まる': async t => {
