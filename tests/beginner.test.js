@@ -213,4 +213,22 @@ module.exports = {
     });
     t.eq(r, { kept:true, after:false }, '虹の印が 残らない／消えない');
   },
+
+  '虹は キャラのジャンプといっしょに動かず、画面の同じ場所にかかる': async t => {
+    const p = await t.open({ who:'hinata' });
+    await tapMode(p, true);
+    await p.evaluate(() => {
+      taskOn = true; setMode('+'); startTask(20);
+      spawnBlock(3); spawnBlock(7); fuseBlocks(blocks[0], blocks[1]); checkTask();
+    });
+    const at = () => p.evaluate(() => ({ arc: JSON.stringify(winFx && winFx.arc),
+                                        feet: winFx && winFx.block ? Math.round(winFx.block.y + winFx.block.height) : null }));
+    const a = await at();
+    await t.sleep(250);                                // 跳ねている最中
+    const b = await at();
+    t.ok(a.arc && a.arc !== 'null', '虹の位置が決まっていない');
+    t.ok(a.feet !== b.feet, 'キャラが跳ねていない（この確認が意味をなさない）');
+    t.eq(b.arc, a.arc, 'キャラが跳ねると 虹も動いてしまう');
+    t.eq(await p.evaluate(() => winFx.arc.cx === sw/2), true, '虹が 画面の横まん中にない');
+  },
 };

@@ -2307,14 +2307,21 @@ function rainbowFill(ctx, x0, x1){
   ARC_COLORS.forEach((c,i) => g.addColorStop(i/(ARC_COLORS.length-1), c));
   return g;
 }
-// レインボークリアのとき、キャラの足もとから 虹のアーチが左から右へかかる
+// レインボークリアのとき、空に 虹のアーチが左から右へかかる。
+// キャラはうれしくて跳ねるが、虹はいっしょに動かない（画面の横まん中、地面に足をつける）。
+// 位置と大きさは クリアした瞬間に決めて、そのあとは変えない。
+function rainbowArcPlace(){
+  const top = targetRowY() + 66;                 // 道具の列より下
+  const cy  = calcFloor();                       // 地面
+  const R   = Math.max(90, Math.min(sw*0.46, (cy - top) * 0.95));
+  return { cx: sw/2, cy: cy, R: R };
+}
 function drawRainbowArc(ctx){
-  if(!winFx || !winFx.block || !(winFx.praise && winFx.praise.rainbow)) return;
-  const b = winFx.block, t = winFx.t;
+  if(!winFx || !winFx.arc || !(winFx.praise && winFx.praise.rainbow)) return;
+  const t = winFx.t, a = winFx.arc;
   const grow = Math.min(1, t/650), e = 1 - (1-grow)*(1-grow);
   const fade = Math.min(1, Math.max(0, (WIN_MS + 600 - t)/700));
-  const band = 9, cx = b.x + b.width/2, cy = b.y + b.height;
-  const R = Math.max(110, Math.min(sw*0.47, Math.max(b.height, b.width)*0.75 + 60));
+  const band = 9, cx = a.cx, cy = a.cy, R = a.R;
   ctx.save();
   ctx.beginPath(); ctx.rect(0, TAB_H, sw, sh - bottomPanelH() - TAB_H); ctx.clip();
   ctx.globalAlpha = 0.85 * fade;
@@ -3215,7 +3222,8 @@ function checkTask(){
     if(!kept || moves < kept.length) taskLogs[taskIdx] = taskLog.slice();
     saveTask();
     const win = blocks.find(b=>b.num===t.n);
-    winFx = { block:win, num:t.n, t:0, praise:praise, moves:moves };
+    winFx = { block:win, num:t.n, t:0, praise:praise, moves:moves,
+              arc: rainbow ? rainbowArcPlace() : null };
     if(win){
       win.vy = -9; win.onGround = false;              // うれしくて跳ねる
       for(let i=0;i<70;i++) fxParticles.push(new Particle(win.cx, win.y + win.height*0.35));
