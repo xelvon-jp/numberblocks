@@ -17,20 +17,25 @@ async function solveTen(p, detour){
 
 module.exports = {
 
-  '60問すべての best/ref が、ソルバーの計算と一致する': async t => {
+  'けいさん・よんでつくる の best/ref が、ソルバーの計算と一致する': async t => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
     const bad = checkHtml(html);
     t.eq(bad.map(b => `${b.n}(${b.use})`), [],
          'index.html の best/ref が計算と食いちがう（node tools/solver.js --write で直せる）');
   },
 
-  'おだいは6レベルに10問ずつあり、おてほんは最短以上': async t => {
+  'おだいは けいさん6・とけい6・まぜまぜ3 レベルに10問ずつあり、おてほんは最短以上': async t => {
     const p = await t.open();
     const r = await p.evaluate(() => ({
       perLv: TASK_LEVELS.map((_, lv) => TASKS.filter(x => x.lv === lv).length),
-      badRef: TASKS.filter(x => !(x.ref >= x.best)).map(x => x.n)
+      cats: TASK_CATS.map(c => catLevels(c.id).length),
+      // けいさんの 60問は 番号が かわっていない（記録は番号で持っているので）
+      calc60: TASKS.slice(0, 60).every(x => TASK_LEVELS[x.lv].cat === 'calc' && x.n > 0),
+      badRef: TASKS.filter(x => !isClockTask(x) && !(x.ref >= x.best)).map(x => x.n)
     }));
-    t.eq(r.perLv, [10,10,10,10,10,10], 'レベルごとの問題数がずれている');
+    t.eq(r.perLv, new Array(15).fill(10), 'レベルごとの問題数がずれている');
+    t.eq(r.cats, [6, 6, 3], 'しゅるいごとの レベルの数が ずれている');
+    t.eq(r.calc60, true, 'けいさんの60問の番号が ずれている（記録がこわれる）');
     t.eq(r.badRef, [], 'おてほん手数が最短より少ないおだいがある');
   },
 
