@@ -367,7 +367,7 @@ function makeClockTask(st, rnd, avoid){
   let v, k = 0;
   do { v = clockGenTime(lv, rnd); } while(v === avoid && ++k < 20);
   const t = { k: rnd() < 0.5 ? 'pick' : 'clock', to: fmtT(v), clv: lv };
-  t.best = t.k === 'pick' ? 1 : 2;
+  t.best = 1;                                         // 1かいめの「これ！」で あたれば 虹
   buildClockTask(t);
   return t;
 }
@@ -750,7 +750,7 @@ function checkWay(){
 function resetTaskState(){
   drumReset(currentTask());
   taskDone = false; taskLog = []; winFx = null;
-  clearedAt = 0; autoNextOff = false; lastLevelUp = 0;
+  clearedAt = 0; autoNextOff = false; lastLevelUp = 0; setMiss = 0; setShake = 0;
   wayIdx = 0; wayFlash = 0; usedOther = false; lastRainbow = false;
   hintOn = false; hintShownAt = 0; taskStartT = Date.now();
   blocks = []; puzzle = null; clearUndo();
@@ -766,7 +766,7 @@ function startTask(i){
 }
 // とけいの おだいを はじめる（spec を わたせば その おだい。テスト用）
 function startClockTask(spec){
-  if(spec){ genTask = Object.assign({ best: spec.k === 'pick' ? 1 : 2, clv: clockStats().lv }, spec); buildClockTask(genTask); }
+  if(spec){ genTask = Object.assign({ best:1, clv: clockStats().lv }, spec); buildClockTask(genTask); }
   else genTask = makeClockTask(clockStats(), Math.random, lastClockGoal);
   lastClockGoal = genTask.c.goal;
   if(mode !== 'clock') setMode('clock');
@@ -2214,7 +2214,6 @@ for(const btn of document.querySelectorAll('.opBtn')){
 // 数字1〜12はそのキャラの色で描くので、知っている顔と地続きになる。
 let clockT = 3*60 + 0;        // 0時ちょうどからの分（0〜719）
 let clockDrag = null;         // 'hour' | 'min'
-let clockDragFrom = 0;        // つかんだときの時こく（はなしたときに「1かい」と数える）
 
 function clockHour(){ return Math.floor(clockT/60)%12; }
 function clockMin(){  return clockT%60; }
@@ -2363,7 +2362,7 @@ function drawClockMode(ctx, t){
   }
 
   if(drumActive()) drawDrum(ctx, t);
-  else drawClockParts(ctx, t, g);
+  else { drawClockParts(ctx, t, g); drawSetAnswer(ctx, g); }
 }
 
 // ─── 5のなかま ───────────────────────────────────────────────────────────
@@ -2378,7 +2377,18 @@ let clockPopAt = 0, clockPrevGroups = 0;
 function clockPartSpec(n){ return n < 10 ? columnSpec(n) : blockSpec(n); }
 
 function clockPartsArea(g){
-  return { top: g.textY + 18, bottom: calcFloor(), w: sw - EDGE_MARGIN*2 };
+  const top = g.textY + 18, bottom = calcFloor();
+  if(setTaskLive()){
+    const b = setBtnRect(g), left = EDGE_MARGIN, right = b.x - 12;
+    return { top, bottom, w: right - left, cx: (left + right)/2 };
+  }
+  return { top, bottom, w: sw - EDGE_MARGIN*2, cx: sw/2 };
+}
+// はりを あわせる おだいの「これ！」。5のなかまの 右がわ
+function setBtnRect(g){
+  const top = g.textY - 16, bottom = calcFloor();
+  const w = Math.min(100, sw*0.24), h = Math.max(44, Math.min(64, (bottom - top)*0.6));
+  return { x: sw - EDGE_MARGIN - w - 4, y: top + (bottom - top - h)/2, w, h };
 }
 
 function drawClockParts(ctx, t, g){
@@ -2393,8 +2403,8 @@ function drawClockParts(ctx, t, g){
   if(min === 0){
     // 背の高さは One と同じ＝1マスぶん。ほかのキャラと同じ物差しで並ぶ。
     const bs = Math.max(6, Math.min(24, a.w, (a.bottom - a.top - 26)/1.7));
-    drawClockFormula(ctx, '0', a.top);
-    drawZero(ctx, sw/2, a.bottom - zeroHeight(bs), bs, t, true);
+    drawClockFormula(ctx, '0', a.top, a.cx);
+    drawZero(ctx, a.cx, a.bottom - zeroHeight(bs), bs, t, true);
     return;
   }
 
@@ -2403,8 +2413,8 @@ function drawClockParts(ctx, t, g){
   if(clockMerged){
     const spec = clockPartSpec(min);
     const bs = Math.max(3, Math.min(26, a.w/spec.cols, availH/spec.rows));
-    const x = sw/2 - spec.cols*bs/2, y = a.bottom - spec.rows*bs;
-    drawClockFormula(ctx, clockTaskLive() ? '？' : String(min), a.top);
+    const x = a.cx - spec.cols*bs/2, y = a.bottom - spec.rows*bs;
+    drawClockFormula(ctx, clockTaskLive() ? '？' : String(min), a.top, a.cx);
     drawNumberblock(ctx, min, x, y, bs, { t:t, animate:false, numberling:false, spec:spec });
     return;
   }
@@ -2431,11 +2441,11 @@ function drawClockParts(ctx, t, g){
   const baseY = a.bottom - labelH;
 
   const hideSum = clockTaskLive();
-  drawClockFormula(ctx, items.join(' + ') + ' = ' + (hideSum ? '？' : min), a.top);
+  drawClockFormula(ctx, items.join(' + ') + ' = ' + (hideSum ? '？' : min), a.top, a.cx);
 
   // 位置を先に決めてから描く（ペアの下に線を引くため）
   const place = [];
-  let x = sw/2 - (totalCols*bs + gapUnits*bs)/2;
+  let x = a.cx - (totalCols*bs + gapUnits*bs)/2;
   for(let i=0;i<items.length;i++){
     if(i>0) x += gapUnitAt(i)*bs;
     const sp = clockPartSpec(items[i]);
@@ -2486,10 +2496,11 @@ function drawClockParts(ctx, t, g){
   ctx.restore();
 }
 
-function drawClockFormula(ctx, txt, y){
+function drawClockFormula(ctx, txt, y, cx){
+  cx = cx === undefined ? sw/2 : cx;
   ctx.save(); ctx.font='bold 15px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='top';
   ctx.strokeStyle='white'; ctx.lineWidth=4; ctx.lineJoin='round';
-  ctx.strokeText(txt, sw/2, y); ctx.fillStyle='#233'; ctx.fillText(txt, sw/2, y);
+  ctx.strokeText(txt, cx, y); ctx.fillStyle='#233'; ctx.fillText(txt, cx, y);
   ctx.restore();
 }
 
@@ -2504,6 +2515,10 @@ function handleClockStart(x,y){
   // よんで えらぶ おだいでは、はりは さわれない（こたえの時こくで止めてある）。ドラムだけ。
   if(drumActive()){ drumStart(x, y); return; }
   const g = getClockGeom();
+  if(setTaskLive()){
+    const b = setBtnRect(g);
+    if(ptInRect(x, y, b.x, b.y, b.w, b.h)){ clockAnswer(); return; }
+  }
   // 文字盤より下＝5のなかまの場所。タップで合体／もとに戻す。
   if(y > g.textY && clockMin() > 0){
     clockMerged = !clockMerged;
@@ -2518,7 +2533,6 @@ function handleClockStart(x,y){
   const dm = Math.min(Math.abs(f-clockMin()/60), 1-Math.abs(f-clockMin()/60));
   const dh = Math.min(Math.abs(f-clockT/720),    1-Math.abs(f-clockT/720));
   clockDrag = (d > g.R*0.55) ? 'min' : (dm < dh ? 'min' : 'hour');
-  clockDragFrom = clockT;
   handleClockMove(x,y);
 }
 function handleClockMove(x,y){
@@ -2538,16 +2552,35 @@ function handleClockMove(x,y){
 }
 
 // ─── とけいの おだいの判定 ─────────────────────────────────────────
-// 指をはなしたときだけ見る（まわしている とちゅうで 通りすぎただけでは できたにしない）。
-// 1回はなすごとに「1かい」。おだいの best 回いないで あわせたら レインボー🌈クリア。
-function clockRelease(){
-  if(!clockTaskLive()) return;
-  if(clockT === clockDragFrom) return;              // さわっただけ（はりが動いていない）
+// はりを あわせる：はりは なんかい うごかしても よい。「これ！」を押したときに見る
+// （よむ の ドラムロールと おなじ こたえかた）。1かいめの「これ！」で あたれば レインボー🌈クリア。
+let setMiss = 0, setShake = 0;
+function setTaskLive(){ return clockTaskLive() && !isPickTask(currentTask()); }
+function clockAnswer(){
+  if(!setTaskLive()) return;
   const t = currentTask();
-  logStep('clock', clockDragFrom, null, clockT);
+  logStep('clock', null, null, clockT);
   const ok = clockT === ((t.c.goal % 720) + 720) % 720;
   if(taskLog.length === 1) noteClockAnswer(ok);     // 1かいめで あたったか
-  if(ok) clockClear();
+  if(ok){ setMiss = 0; clockClear(); }
+  else { setMiss++; setShake = 1; }
+}
+// 「これ！」と、ちがったときの ひとこと
+function drawSetAnswer(ctx, g){
+  if(!setTaskLive()) return;
+  const b = setBtnRect(g);
+  const sx = setShake > 0 ? Math.sin(setShake*40)*8*setShake : 0;
+  if(setShake > 0) setShake = Math.max(0, setShake - 0.035);
+  drawCardBtn(ctx, b.x + sx, b.y, b.w, b.h, '', 'rgba(60,110,240,0.95)', '#fff');
+  ctx.save(); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 22px sans-serif'; ctx.fillText('これ！', b.x + sx + b.w/2, b.y + b.h/2 + 1);
+  if(setMiss){
+    ctx.font = 'bold 13px sans-serif'; ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
+    ctx.strokeText('ちがうよ。もういちど あわせてみよう', sw/2, g.textY);
+    ctx.fillStyle = '#c0392b'; ctx.fillText('ちがうよ。もういちど あわせてみよう', sw/2, g.textY);
+  }
+  ctx.restore();
 }
 // とけいの おだいが できた。とけいは その場で作る おだいなので、ステージの記録には 残さない
 // （レベルと 直近の正解だけ 残す。noteClockAnswer）。best 回いないなら レインボー。
@@ -4199,7 +4232,7 @@ function handleMove(x,y,pid){
 
 function handleEnd(x,y,pid){
   if(stageHold && stageHold.pid===pid){ stageHold = null; return; }   // 途中で離した＝中止
-  if(mode==='clock'){ if(drum && drum.drag) drumEnd(x, y); if(clockDrag) clockRelease(); clockDrag=null; return; }
+  if(mode==='clock'){ if(drum && drum.drag) drumEnd(x, y); clockDrag=null; return; }
   if(clrHold && clrHold.pid===pid){ clrHold=null; return; }   // 途中で離した＝中止
   const ptr=dragPointers[pid]; if(!ptr){ dragBlock=null; dragPtr=null; return; }
   const b=ptr.block; delete dragPointers[pid]; dragBlock=null; dragPtr=null;

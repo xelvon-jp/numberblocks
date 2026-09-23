@@ -20,11 +20,13 @@ async function dragMinute(p, m, steps){
     handleEnd(e.x, e.y, 'm');
   }, [m, steps || 12]);
 }
-// はりを v（0時からの ふん）に じかに置いて はなす（1かい と数える）
+// はりを v（0時からの ふん）に じかに置いて「これ！」を押す
 const setHands = (p, v) => p.evaluate(v => {
-  clockDrag = 'min'; clockDragFrom = clockT; clockT = ((v % 720) + 720) % 720;
-  handleEnd(0, 0, 'm');
+  clockT = ((v % 720) + 720) % 720;
+  const b = setBtnRect(getClockGeom()); handleStart(b.x + b.w/2, b.y + b.h/2, 'm'); handleEnd(b.x + b.w/2, b.y + b.h/2, 'm');
 }, v);
+// はりを あわせる おだいの「これ！」を押す
+const pressSet = p => p.evaluate(() => { const b = setBtnRect(getClockGeom()); handleStart(b.x + b.w/2, b.y + b.h/2, 'm'); handleEnd(b.x + b.w/2, b.y + b.h/2, 'm'); });
 // 「これ！」を押す
 const press = p => p.evaluate(() => { const b = drumGeom().btn; handleStart(b.x + b.w/2, b.y + b.h/2, 'm'); handleEnd(b.x + b.w/2, b.y + b.h/2, 'm'); });
 
@@ -82,7 +84,7 @@ module.exports = {
         if(q.k === 'pick') pick++;
         if(q.c.goal === prev) same++;
         prev = q.c.goal;
-        if((q.k === 'pick' ? 1 : 2) !== q.best) return 'best';
+        if(q.best !== 1) return 'best';
       }
       return { pick: pick/600, same };
     });
@@ -123,7 +125,7 @@ module.exports = {
     t.eq(r, { lv:3, text:'とけい レベル3「5ふんきざみ」に アップ！' }, 'レベルアップが カードに出ない');
   },
 
-  '1かいめの こたえだけを 数える（よむ：最初の「これ！」／あわせる：最初に はなしたとき）': async t => {
+  '1かいめの こたえだけを 数える（よむ も あわせる も 最初の「これ！」）': async t => {
     const p = await t.open();
     const r = await p.evaluate(() => {
       taskOn = true;
@@ -131,10 +133,9 @@ module.exports = {
       startClockTask({ k:'pick', to:'2:48', clv:4 }); drumSet(8, 12); drumAnswer(); drumSet(2, 48); drumAnswer();
       startClockTask({ k:'pick', to:'9:03', clv:4 }); drumSet(9, 3); drumAnswer();
       startClockTask({ k:'clock', to:'4:17', clv:4 });
-      clockDrag = 'min'; clockDragFrom = clockT; clockT = 4*60 + 17; handleEnd(0, 0, 'm');
+      clockT = 4*60 + 10; clockT = 4*60 + 17; clockAnswer();       // はりは なんかい うごかしても よい
       startClockTask({ k:'clock', to:'5:41', clv:4 });
-      clockDrag = 'min'; clockDragFrom = clockT; clockT = 5*60 + 40; handleEnd(0, 0, 'm');
-      clockDrag = 'min'; clockDragFrom = clockT; clockT = 5*60 + 41; handleEnd(0, 0, 'm');
+      clockT = 5*60 + 40; clockAnswer(); clockT = 5*60 + 41; clockAnswer();
       return st.hist;
     });
     t.eq(r, [false, true, true, false], '1かいめの 正解の 数えかたが ちがう');
@@ -153,7 +154,7 @@ module.exports = {
           const h = Math.floor(c.c.goal/60);
           drumSet(c.c.h24 ? h : (h % 12) || 12, c.c.goal % 60); drumAnswer();
         } else if(isClockTask(c)){
-          clockDrag = 'min'; clockDragFrom = clockT; clockT = c.c.goal % 720; handleEnd(0,0,'m');
+          clockT = c.c.goal % 720; clockAnswer();
         } else { spawnBlock(c.n); checkTask(); }
         if(!taskDone) return 'できない ' + out.join(',');
         nextTask();
@@ -250,30 +251,48 @@ module.exports = {
     t.eq(r, { mode:'clock', clockT:0, active:true, below:true, tab:true }, 'はりを あわせる おだいの はじまりが おかしい');
   },
 
-  'ながいはりを まわして はなしたら できた。best 回いないなら レインボー': async t => {
+  'はりを あわせる：はなしただけでは 見ない。「これ！」で こたえ、1かいめで あたれば レインボー': async t => {
     const p = await t.open();
     await start(p, { k:'clock', to:'4:03' });
     await p.evaluate(() => { clockT = 4*60; });
-    await dragMinute(p, 3);
-    const r = await p.evaluate(() => ({ clockT, done: taskDone, moves: taskLog.length,
-                                        rainbow: !!(winFx && winFx.praise && winFx.praise.rainbow) }));
-    t.eq(r, { clockT:243, done:true, moves:1, rainbow:true }, '4:03 に あわせても できたにならない');
-  },
-
-  'とちゅうで こたえを 通りすぎても できたにしない。さわっただけは 数えない。best をこえたら 虹なし': async t => {
-    const p = await t.open();
-    await start(p, { k:'clock', to:'4:03' });
-    await p.evaluate(() => { clockT = 4*60; });
-    await dragMinute(p, 10, 20);                           // 4:03 を 通りすぎて 4:10 で はなす
-    t.eq(await p.evaluate(() => [clockT, taskDone, taskLog.length]), [250, false, 1], '通りすぎただけで できたになった');
-    await p.evaluate(() => { const g = getClockGeom(); const s = handPos(g, clockMin()/60, g.R*0.78);
-                             handleStart(s.x, s.y, 'm'); handleEnd(s.x, s.y, 'm'); });
-    t.eq(await p.evaluate(() => taskLog.length), 1, 'さわっただけ（はりが動かない）なのに 1かい と数えた');
-    await dragMinute(p, 5);
-    await dragMinute(p, 3);
+    await dragMinute(p, 3);                                // こたえの 4:03 で はなしても
+    t.eq(await p.evaluate(() => [clockT, taskDone, taskLog.length]), [243, false, 0], 'はなしただけで できたになった');
+    await dragMinute(p, 10); await dragMinute(p, 3);         // なんかい うごかしても よい
+    await pressSet(p);
     const r = await p.evaluate(() => ({ done: taskDone, moves: taskLog.length,
                                         rainbow: !!(winFx && winFx.praise && winFx.praise.rainbow) }));
-    t.eq(r, { done:true, moves:3, rainbow:false }, '3かいめで できた／虹は出ない のはず');
+    t.eq(r, { done:true, moves:1, rainbow:true }, '「これ！」で できたにならない／虹が出ない');
+  },
+
+  'はりを あわせる：ちがうと「これ！」が ゆれて「ちがうよ」。あわせなおして あたれば できた（虹なし）': async t => {
+    const p = await t.open();
+    await start(p, { k:'clock', to:'4:03' });
+    await p.evaluate(() => { clockT = 3*60 + 20; });         // みじかいはり と ながいはり を とりちがえた
+    await pressSet(p);
+    const miss = await p.evaluate(() => {
+      const got = [], ft = ctx.fillText;
+      ctx.fillText = function(s){ got.push(String(s)); return ft.apply(this, arguments); };
+      try{ drawClockMode(ctx, 0); } finally { ctx.fillText = ft; }
+      return [taskDone, setMiss, setShake > 0, got.some(s => /ちがうよ/.test(s))];
+    });
+    t.eq(miss, [false, 1, true, true], 'ちがうのに できたになった／ゆれない');
+    await setHands(p, 4*60 + 3);
+    t.eq(await p.evaluate(() => [taskDone, taskLog.length, !!(winFx.praise && winFx.praise.rainbow)]), [true, 2, false],
+         '2かいめで できた／虹は出ない のはず');
+  },
+
+  'はりを あわせる：「これ！」は 文字盤と 5のなかまに 重ならず、画面に収まる': async t => {
+    for(const [w, h] of [[393, 780], [375, 667], [430, 932], [780, 393]]){
+      const p = await t.open({ width:w, height:h });
+      await start(p, { k:'clock', to:'3:47' });
+      const r = await p.evaluate(() => {
+        clockT = 3*60 + 47;
+        const g = getClockGeom(), b = setBtnRect(g), a = clockPartsArea(g);
+        return { belowDial: b.y >= g.cy + g.R - 2, fits: b.y + b.h <= sh - bottomPanelH() && b.x + b.w <= sw,
+                 parts: a.cx + a.w/2 <= b.x };
+      });
+      t.eq(r, { belowDial:true, fits:true, parts:true }, `${w}x${h} で「これ！」が 重なる／はみ出す`);
+    }
   },
 
   'ごごに あわせる：12じかんの とけいで あっていれば できた': async t => {
@@ -282,8 +301,11 @@ module.exports = {
     await setHands(p, 3*60);
     t.eq(await p.evaluate(() => taskDone), false, '3:00 で できたになった');
     await setHands(p, 3*60 + 45);
-    t.eq(await p.evaluate(() => [taskDone, winFx.praise && winFx.praise.rainbow]), [true, true],
-         '3:45（＝15:45）で できたにならない');
+    t.eq(await p.evaluate(() => taskDone), true, '3:45（＝15:45）で できたにならない');
+    await start(p, { k:'clock', to:'15:45' });
+    await setHands(p, 3*60 + 45);
+    t.eq(await p.evaluate(() => [taskDone, !!(winFx.praise && winFx.praise.rainbow)]), [true, true],
+         '1かいめの 3:45（＝15:45）で 虹が出ない');
   },
 
   'とけいの おだいは ふつうでも ビギナーでも ヒント・みちしるべを 出さない': async t => {
