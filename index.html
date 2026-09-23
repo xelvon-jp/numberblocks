@@ -2847,14 +2847,28 @@ function sliderPos(){
   const e = k/SLIDE_MS, th0 = -Math.PI/2 - 0.04, th = th0 + (0 - th0)*e*e;   // だんだん はやく
   return { n: winFx.sliderN, x: a.cx + Math.cos(th)*R, y: a.cy + Math.sin(th)*R, th };
 }
+// すべる ときの かたむき。足を 虹の中心に むけると 前に たおれて見えるので、体は ほぼ まっすぐ 立てて、
+// 坂が きゅうに なるほど すこし うしろ（左まわり）に もたれる。すべりだいに すわって すべる かんじ。
+function sliderTilt(th){ return -0.35 * (th + Math.PI/2) / (Math.PI/2); }
 function drawRainbowSlider(ctx){
   const p = sliderPos(); if(!p) return;
   const bs = 12;
   ctx.save();
   ctx.beginPath(); ctx.rect(0, TAB_H, sw, sh - bottomPanelH() - TAB_H); ctx.clip();   // 虹と おなじ はんい
-  ctx.translate(p.x, p.y); ctx.rotate((p.th + Math.PI/2)*0.6);   // 虹に そって すこし かたむく
+  ctx.translate(p.x, p.y); ctx.rotate(sliderTilt(p.th));
   drawCastChar(ctx, p.n, -blockSpec(p.n).cols*bs/2, 0, bs, false);
   ctx.restore();
+}
+
+// おいわいの プレビュー。すべりだいは 虹ごと出す（「できた！」の文字は 出さない）
+function previewFx(kind){
+  if(kind === 'parade') castParade();
+  else if(kind === 'run') castRun(clockGenTime(4, Math.random));
+  else if(kind === 'slide'){
+    winFx = { block:null, num:null, t:0, preview:true, moves:0,
+              praise:{ text:RAINBOW_TEXT, color:'#c0398a', big:true, rainbow:true },
+              arc: rainbowArcPlace(), landedAt:0, life: RAINBOW_LIFE };
+  }
 }
 
 // ─── クリアしたときの演出 ─────────────────────────────────────────
@@ -3008,7 +3022,7 @@ function drawWinLines(ctx){
 }
 
 function drawWinStamp(ctx){
-  if(!winFx) return;
+  if(!winFx || winFx.preview) return;
   const t = winFx.t;
   const fade = Math.min(1, Math.max(0, ((winFx.life || WIN_MS) - t)/500));
   // 出るときにちょっと行き過ぎてから戻る（ぽんっと押した感じ）
@@ -3508,10 +3522,11 @@ function drawSettings(ctx){
   ];
   // 横向きなど高さが足りないときは、行とボタンを詰めて収める
   const avail = sh - TAB_H - 16;
-  const fullH = 54 + rows.length*54 + 14 + (44 + 12)*2 + 44 + 16;
+  const fullH = 54 + rows.length*54 + 14 + (44 + 12)*3 + 16 + 44 + 16;
   const tight = fullH > avail;
   const rowH = tight ? 44 : 54, bigH = tight ? 38 : 44, w = Math.min(360, sw-20);
-  const h = 54 + rows.length*rowH + 14 + (bigH + (tight ? 8 : 12))*2 + bigH + (tight ? 10 : 16);
+  // 高さが足りないときは「にじ」と おいわいの プレビューを 1れつに まとめる
+  const h = 54 + rows.length*rowH + 14 + (bigH + (tight ? 8 : 12))*(tight ? 2 : 3) + (tight ? 0 : 16) + bigH + (tight ? 10 : 16);
   const x = (sw-w)/2, y = TAB_H + 8 + Math.max(0, (avail - h)/2);
 
   ctx.save();
@@ -3561,9 +3576,32 @@ function drawSettings(ctx){
   }
   ty += bigH + (tight ? 8 : 12);
 
-  drawCardBtn(ctx, x+16, ty, w-32, bigH, 'にじの ばしょを ちょうせい', 'rgba(228,233,242,0.98)', '#22314a');
-  setBtns.push({ x:x+16, y:ty, w:w-32, h:bigH, val:'arc' });
-  ty += bigH + (tight ? 8 : 12);
+  // おいわいの プレビュー（めったに出ない パレードなどを すぐ見る）。押すと せっていを とじて その場で出す
+  const items = [['slide', 'すべりだい'], ['parade', 'パレード'], ['run', 'かけつけ']];
+  const fxRow = (left, width) => {
+    const g3 = 6, bw3 = (width - g3*(items.length - 1)) / items.length;
+    items.forEach(([v, label], i) => {
+      const bx = left + i*(bw3 + g3);
+      drawCardBtn(ctx, bx, ty, bw3, bigH, label, 'rgba(255,236,190,0.98)', '#6b4a00');
+      setBtns.push({ x:bx, y:ty, w:bw3, h:bigH, val:'fx', v });
+    });
+  };
+  if(tight){
+    const aw = (w - 32 - 18) / 4;
+    drawCardBtn(ctx, x+16, ty, aw, bigH, 'にじ', 'rgba(228,233,242,0.98)', '#22314a');
+    setBtns.push({ x:x+16, y:ty, w:aw, h:bigH, val:'arc' });
+    fxRow(x+16 + aw + 6, w - 32 - aw - 6);
+    ty += bigH + 8;
+  } else {
+    drawCardBtn(ctx, x+16, ty, w-32, bigH, 'にじの ばしょを ちょうせい', 'rgba(228,233,242,0.98)', '#22314a');
+    setBtns.push({ x:x+16, y:ty, w:w-32, h:bigH, val:'arc' });
+    ty += bigH + 12;
+    ctx.save(); ctx.fillStyle='#5a6a80'; ctx.font='bold 11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
+    ctx.fillText('おいわいを みる', x+16, ty+7); ctx.restore();
+    ty += 16;
+    fxRow(x+16, w-32);
+    ty += bigH + 12;
+  }
 
   drawCardBtn(ctx, x+16, ty, w-32, bigH, 'とじる', 'rgba(60,110,240,0.95)', '#fff');
   setBtns.push({ x:x+16, y:ty, w:w-32, h:bigH, val:'close' });
@@ -3579,6 +3617,7 @@ function handleSettingsTap(x, y){
     else if(b.val==='zukan') location.href = 'zukan.html';
     else if(b.val==='fs')    toggleFullscreen();
     else if(b.val==='arc')   { setOpen = false; openArcTuner(); }
+    else if(b.val==='fx')    { setOpen = false; previewFx(b.v); }
     else if(b.val==='close') setOpen = false;
     return;
   }
@@ -4494,6 +4533,7 @@ function drawFrame(ts){
     drawTaskCard(ctx, walkTime);
   } else if(mode==='factor'){
     lerpFactorBlocks(); drawFactorMode(ctx,walkTime);
+    updateWinFx(dt); drawCast(ctx);          // おいわいの プレビューは どの画面でも 見られる
   } else if(mode==='quiz'){
     // 解き終わったら（正解演出が終わる／時間切れ）すぐ次の問題へ。ずっと続く。
     // ここで間を置くと、その間 puzzle.draw() が「正解画面」ではなく問題を
@@ -4506,6 +4546,7 @@ function drawFrame(ts){
     }
     puzzle.draw(ctx,walkTime);
     drawQuizScore(ctx);
+    updateWinFx(dt); drawCast(ctx);
   } else {
     drawOpBar(ctx, walkTime);
     if(puzzle){

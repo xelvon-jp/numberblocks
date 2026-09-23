@@ -557,4 +557,39 @@ module.exports = {
     await t.sleep(2500);
     t.eq(t.errors, [], 'ページで エラー');
   },
+
+  '虹の すべりだい：体は ほぼ まっすぐで、坂が きゅうに なるほど すこし うしろに もたれる（前に たおれない）': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      const top = sliderTilt(-Math.PI/2), mid = sliderTilt(-Math.PI/4), foot = sliderTilt(0);
+      return { top: +top.toFixed(3), back: mid < 0 && foot < mid, small: Math.abs(foot) <= 0.4 };
+    });
+    t.eq(r, { top:0, back:true, small:true }, 'すべる 姿勢が ちがう');
+  },
+
+  'おいわいの プレビュー：せっていから すべりだい・パレード・かけつけ を すぐ見られる（どの画面でも）': async t => {
+    const p = await t.open();
+    const tap = v => p.evaluate(v => {
+      setOpen = true; drawSettings(ctx);
+      const b = setBtns.find(x => x.val === 'fx' && x.v === v);
+      handleSettingsTap(b.x + b.w/2, b.y + b.h/2);
+      return { open: setOpen, kinds: cast.map(a => a.kind), slide: !!(winFx && winFx.preview && winFx.praise.rainbow) };
+    }, v);
+    t.eq(await tap('parade'), { open:false, kinds:['parade'], slide:false }, 'パレードの プレビュー');
+    t.eq((await tap('run')).kinds.includes('run'), true, 'かけつけの プレビュー');
+    const sl = await tap('slide');
+    t.eq(sl.slide, true, 'すべりだいの プレビュー');
+    // 「できた！」の文字は 出さない
+    const stamp = await p.evaluate(() => { const got = [], ft = ctx.fillText;
+      ctx.fillText = function(s){ got.push(String(s)); return ft.apply(this, arguments); };
+      try{ drawWinStamp(ctx); } finally { ctx.fillText = ft; } return got; });
+    t.eq(stamp, [], 'プレビューで「できた！」が出た');
+    // 因数・ドリルの画面でも 動いて、止まらない
+    await p.evaluate(() => { setMode('factor'); previewFx('slide'); previewFx('parade'); });
+    await t.sleep(1200);
+    t.ok(await p.evaluate(() => rainbowTime() > 600 && cast.some(a => a.kind === 'parade')), '因数の画面で プレビューが すすまない');
+    await p.evaluate(() => { setMode('quiz'); previewFx('run'); });
+    await t.sleep(600);
+    t.eq(t.errors, [], 'ページで エラー');
+  },
 };
