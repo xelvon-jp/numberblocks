@@ -223,7 +223,7 @@ module.exports = {
       tap(gos[0]);
       return { cats, n: gos.length, allClock, open: stageOpen, mode, idx: taskIdx === catTasks('clock')[0] };
     });
-    t.eq(r, { cats:['calc','clock','mix'], n:60, allClock:true, open:false, mode:'clock', idx:true },
+    t.eq(r, { cats:['calc','clock','mix'], n:80, allClock:true, open:false, mode:'clock', idx:true },
          'いちらんの しゅるいの切りかえが おかしい');
   },
 
@@ -255,5 +255,83 @@ module.exports = {
     t.ok(await p.evaluate(() => winFx && winFx.center && rainbowTime() >= 0), 'とけいの演出が出ていない');
     await t.sleep(3000);
     t.eq(await p.evaluate(i => [taskIdx === i + 1, mode, taskDone], i), [true, 'clock', false], 'つぎへ進まない');
+  },
+
+  // ── よんで えらぶ（ドラムロール）──
+  'よんで えらぶ：はりは こたえの時こくで止まり、さわっても動かない。ドラムは 12:00 から': async t => {
+    const p = await t.open();
+    const i = await find(p, "x.k==='pick' && x.to==='4:37'");
+    const r = await p.evaluate(i => {
+      taskOn = true; startTask(i);
+      const before = clockT, g = getClockGeom(), m = handPos(g, clockMin()/60, g.R*0.78);
+      handleStart(m.x, m.y, 'm'); handleMove(m.x + 40, m.y + 60, 'm'); handleEnd(m.x + 40, m.y + 60, 'm');
+      return { mode, before, after: clockT, drum: drumTime(), lists: drum.lists.map(l => l.length) };
+    }, i);
+    t.eq(r, { mode:'clock', before:277, after:277, drum:720, lists:[12,6,10] }, 'よんで えらぶ の はじまりが おかしい');
+  },
+
+  'ドラム：はじいて まわすと 数がかわり、上下を ちょんと押すと 1つずつ かわる': async t => {
+    const p = await t.open();
+    const i = await find(p, "x.k==='pick' && x.to==='4:37'");
+    const r = await p.evaluate(i => {
+      taskOn = true; startTask(i);
+      const dg = drumGeom(), w = dg.wheels[2], cx = w.x + w.w/2, cy = w.y + w.h/2;
+      // 一のくらいを 3だん 上へ はじく（ゆっくり）
+      handleStart(cx, cy, 'm');
+      for(let k=1;k<=10;k++) handleMove(cx, cy - dg.rowH*3*k/10, 'm');
+      drum.drag.v = 0;                                     // いきおいは のせない
+      handleEnd(cx, cy - dg.rowH*3, 'm');
+      const a = drumVal(2);
+      // じ の ドラムの 下を ちょんと押す → 12 の つぎの 1
+      const h = dg.wheels[0];
+      handleStart(h.x + h.w/2, h.y + h.h - 6, 'm'); handleEnd(h.x + h.w/2, h.y + h.h - 6, 'm');
+      const b = drumVal(0);
+      handleStart(h.x + h.w/2, h.y + 6, 'm'); handleEnd(h.x + h.w/2, h.y + 6, 'm');
+      handleStart(h.x + h.w/2, h.y + 6, 'm'); handleEnd(h.x + h.w/2, h.y + 6, 'm');
+      return { a, b, c: drumVal(0) };
+    }, i);
+    t.eq(r, { a:3, b:1, c:11 }, 'ドラムが おもったとおりに まわらない');
+  },
+
+  'よんで えらぶ：ちがうと ゆれて できない。あっていれば できた。1かいめなら 虹': async t => {
+    const p = await t.open();
+    const i = await find(p, "x.k==='pick' && x.to==='4:37'");
+    const press = () => p.evaluate(() => { const b = drumGeom().btn; handleStart(b.x + b.w/2, b.y + b.h/2, 'm'); handleEnd(b.x + b.w/2, b.y + b.h/2, 'm'); });
+    await p.evaluate(i => { taskOn = true; startTask(i); drumSet(4, 37); }, i);
+    await press();
+    t.eq(await p.evaluate(() => [taskDone, !!winFx.praise.rainbow, taskLog.length]), [true, true, 1], '4:37 で できたにならない');
+    await p.evaluate(i => { startTask(i); drumSet(7, 22); }, i);        // みじかいはり と ながいはり を とりちがえた
+    await press();
+    t.eq(await p.evaluate(() => [taskDone, drum.miss, drum.shake > 0]), [false, 1, true], 'ちがうのに できたになった');
+    await p.evaluate(() => drumSet(4, 37));
+    await press();
+    t.eq(await p.evaluate(() => [taskDone, !!(winFx.praise && winFx.praise.rainbow)]), [true, false],
+         '2かいめで できた／虹は出ない のはず');
+  },
+
+  'ごごの じこく：じの ドラムは 0〜23。1:18 では だめで 13:18 で できた': async t => {
+    const p = await t.open();
+    const i = await find(p, "x.k==='pick' && x.to==='13:18'");
+    const press = () => p.evaluate(() => drumAnswer());
+    const r0 = await p.evaluate(i => { taskOn = true; startTask(i); return { n: drum.lists[0].length, clockT, tail: currentTask().c.tail }; }, i);
+    t.eq(r0, { n:24, clockT:78, tail:'ごごの とけい。デジタルで なんじ？' }, 'ごごの じこく の はじまりが おかしい');
+    await p.evaluate(() => drumSet(1, 18)); await press();
+    t.eq(await p.evaluate(() => taskDone), false, '1:18 で できたになった（ごごなので 13:18）');
+    await p.evaluate(() => drumSet(13, 18)); await press();
+    t.eq(await p.evaluate(() => taskDone), true, '13:18 で できたにならない');
+  },
+
+  'よんで えらぶ：ドラムが どの画面でも 文字盤と重ならず、下のパネルより上に収まる': async t => {
+    for(const [w, h] of [[393, 780], [375, 667], [430, 932], [780, 393]]){
+      const p = await t.open({ width:w, height:h });
+      const r = await p.evaluate(() => {
+        taskOn = true; setBegMode(true); startTask(TASKS.findIndex(x => x.k==='pick'));
+        const g = getClockGeom(), dg = drumGeom();
+        const all = dg.wheels.concat([dg.btn]);
+        return { belowDial: dg.top >= g.cy + g.R, fits: dg.top + dg.H + 50 <= sh - bottomPanelH() + 4,
+                 inside: all.every(b => b.x >= 0 && b.x + b.w <= sw) };
+      });
+      t.eq(r, { belowDial:true, fits:true, inside:true }, `${w}x${h} で ドラムが はみ出す／重なる`);
+    }
   },
 };

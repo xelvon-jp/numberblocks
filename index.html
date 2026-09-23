@@ -237,7 +237,9 @@ const TASK_LEVELS = [
   { name:'1じかんより ながく', color:'#d0553f', cat:'clock' },
   { name:'まぜまぜ1',   color:'#4a9a55', cat:'mix' },
   { name:'まぜまぜ2',   color:'#c08a20', cat:'mix' },
-  { name:'まぜまぜ3',   color:'#d0553f', cat:'mix' }
+  { name:'まぜまぜ3',   color:'#d0553f', cat:'mix' },
+  { name:'よんで えらぶ',   color:'#2f9a8a', cat:'clock' },
+  { name:'ごごの じこく',   color:'#3f7fc0', cat:'clock' }
 ];
 const TASK_CATS = [
   { id:'calc',  name:'けいさん' },
@@ -417,7 +419,32 @@ const TASKS = [
   { lv:14, k:'read', from:'7:15', to:'8:45', n:90,   use:[9,10], best:3, ref:3, way:[],      hint:'1じかんは60ぷん' },
   { lv:14, k:'clock', from:'6:20', d:-45, best:1 },
   { lv:14, k:'read', show:'12:17', n:17,   use:[5,2], best:6, ref:6, way:[7,10],      hint:'5が3こと2' },
-  { lv:14, k:'clock', from:'13:37', d:148, best:2 }
+  { lv:14, k:'clock', from:'13:37', d:148, best:2 },
+  // ── とけいを よんで、ドラムロールで えらぶ ─────────────────────
+  // pick … アナログの とけいを見て、デジタルの時こくを ドラムロールで えらんで「これ！」。
+  // 13:00 より あとの時こくは、じの ドラムが 0〜23 になる（「ごご」の よみかえ）。
+  // とけい7：よんで えらぶ
+  { lv:15, k:'pick', to:'4:37',  best:1 },
+  { lv:15, k:'pick', to:'9:12',  best:1 },
+  { lv:15, k:'pick', to:'2:48',  best:1 },
+  { lv:15, k:'pick', to:'7:03',  best:1 },
+  { lv:15, k:'pick', to:'11:26', best:1 },
+  { lv:15, k:'pick', to:'5:59',  best:1 },
+  { lv:15, k:'pick', to:'1:44',  best:1 },
+  { lv:15, k:'pick', to:'8:21',  best:1 },
+  { lv:15, k:'pick', to:'10:09', best:1 },
+  { lv:15, k:'pick', to:'6:33',  best:1 },
+  // とけい8：ごごの じこく
+  { lv:16, k:'pick', to:'13:18', best:1 },
+  { lv:16, k:'pick', to:'15:52', best:1 },
+  { lv:16, k:'pick', to:'14:07', best:1 },
+  { lv:16, k:'pick', to:'18:36', best:1 },
+  { lv:16, k:'pick', to:'20:41', best:1 },
+  { lv:16, k:'pick', to:'16:24', best:1 },
+  { lv:16, k:'pick', to:'22:13', best:1 },
+  { lv:16, k:'pick', to:'17:08', best:1 },
+  { lv:16, k:'pick', to:'19:57', best:1 },
+  { lv:16, k:'pick', to:'23:29', best:1 }
 ];
 const TASK_KEY = 'nbg.task.v1';
 
@@ -468,8 +495,18 @@ function buildClockTask(t){
   t.c = { start:from, goal:goal, way:way, hint:hint,
           title:t.from, tail:' の ' + durWord(t.d) + (dir > 0 ? ' あと' : ' まえ') };
 }
-for(const t of TASKS) if(t.k === 'clock') buildClockTask(t);
-function isClockTask(t){ return !!(t && t.k === 'clock'); }
+// よんで えらぶ（pick）：はりは こたえの時こくに止めておき、ドラムロールで えらぶ
+function buildPickTask(t){
+  buildClockTask(t);
+  const h24 = t.c.goal >= 13*60;
+  t.c.start = t.c.goal; t.c.way = []; t.c.h24 = h24;
+  t.c.title = ''; t.c.tail = h24 ? 'ごごの とけい。デジタルで なんじ？' : 'とけいを よんで えらぼう！';
+  if(h24) t.c.hint += '、ごごは じに 12を たす';
+}
+for(const t of TASKS){ if(t.k === 'clock') buildClockTask(t); else if(t.k === 'pick') buildPickTask(t); }
+// とけいの画面で遊ぶ おだい（はりを あわせる clock と、よんで えらぶ pick）
+function isClockTask(t){ return !!(t && (t.k === 'clock' || t.k === 'pick')); }
+function isPickTask(t){ return !!(t && t.k === 'pick'); }
 function catOf(i){ const t = TASKS[i]; return t ? TASK_LEVELS[t.lv].cat : 'calc'; }
 // おなじ しゅるいの中での レベルの番号（1から）
 function lvNum(lv){
@@ -485,6 +522,7 @@ function taskGoalLabel(t){
   return String(t.n);
 }
 function taskCellLabel(t){
+  if(isPickTask(t)) return 'よむ';
   if(isClockTask(t)) return t.to ? t.to : ((t.d > 0 ? '+' : '−') + (Math.abs(t.d) >= 60 ? fmtT(Math.abs(t.d)) : Math.abs(t.d)));
   if(t.k === 'read') return '?';
   return String(t.n);
@@ -817,6 +855,7 @@ function startTask(i){
   const nt = TASKS[taskIdx];
   if(isClockTask(nt)){ if(mode !== 'clock') setMode('clock'); clockT = ((nt.c.start % 720) + 720) % 720; clockMerged = false; }
   else if(!isCalcMode()) setMode('calc');
+  drumReset(nt);
   clockHintUsed = false;
   taskDone = false; taskLog = []; winFx = null;
   clearedAt = 0; autoNextOff = false;
@@ -850,6 +889,7 @@ function stepText(st){
   if(st.k==='copy')   return st.a + ' をコピー';
   if(st.k==='home')   return st.a + ' をおうちへ';
   if(st.k==='clock')  return 'はりを ' + fmtT(st.a) + ' → ' + fmtT(st.r);
+  if(st.k==='pick')   return fmtT(st.r) + ' と こたえた';
   return '';
 }
 
@@ -2410,7 +2450,8 @@ function drawClockMode(ctx, t){
   ctx.restore();
   }
 
-  drawClockParts(ctx, t, g);
+  if(drumActive()) drawDrum(ctx, t);
+  else drawClockParts(ctx, t, g);
 }
 
 // ─── 5のなかま ───────────────────────────────────────────────────────────
@@ -2548,6 +2589,8 @@ function clockAngleFrac(x,y){
   return a/(Math.PI*2);                       // 0〜1（12時が0）
 }
 function handleClockStart(x,y){
+  // よんで えらぶ おだいでは、はりは さわれない（こたえの時こくで止めてある）。ドラムだけ。
+  if(drumActive()){ drumStart(x, y); return; }
   const g = getClockGeom();
   // 文字盤より下＝5のなかまの場所。タップで合体／もとに戻す。
   if(y > g.textY && clockMin() > 0){
@@ -2567,6 +2610,7 @@ function handleClockStart(x,y){
   handleClockMove(x,y);
 }
 function handleClockMove(x,y){
+  if(drum && drum.drag){ drumMove(x, y); return; }
   if(!clockDrag) return;
   const f = clockAngleFrac(x,y);
   if(clockDrag==='min'){
@@ -2629,6 +2673,168 @@ function followTaskMode(){
     if(mode !== 'clock') setMode('clock');
     clockT = ((t.c.start % 720) + 720) % 720; clockMerged = false;
   } else if(mode === 'clock') setMode('calc');
+  drumReset(t);
+}
+
+// ─── ドラムロール（よんで えらぶ）─────────────────────────────────
+// 「じ」「ふんの 十のくらい」「ふんの 一のくらい」の3つの ドラム。
+// 上下に はじいて まわす（指をはなすと いちばん近い数に ぴたっと止まる）。
+// ドラムの 上下の数を ちょんと押すと 1つずつ まわる。「これ！」で こたえる。
+// ふんを 十のくらい と 一のくらい に分けたのは、47 が「4と7」でできていることを
+// 手で たしかめられるように。
+let drum = null;   // { lists:[[..],[..],[..]], pos:[..], goal:[..], drag, shake }
+function drumReset(t){
+  if(!isPickTask(t)){ drum = null; return; }
+  const hours = t.c.h24 ? Array.from({length:24}, (_, i) => i) : Array.from({length:12}, (_, i) => i + 1);
+  const lists = [hours, [0,1,2,3,4,5], [0,1,2,3,4,5,6,7,8,9]];
+  // はじめは 12:00（24じかんのときも 12:00）
+  drum = { lists, pos:[hours.indexOf(12), 0, 0], goal:[hours.indexOf(12), 0, 0], drag:null, shake:0, miss:0 };
+}
+function drumIdx(i){ const n = drum.lists[i].length; return ((Math.round(drum.goal[i]) % n) + n) % n; }
+function drumVal(i){ return drum.lists[i][drumIdx(i)]; }
+// えらんでいる時こく（0時からの ふん）
+function drumTime(){ return drumVal(0)*60 + drumVal(1)*10 + drumVal(2); }
+function drumSet(h, m){          // テストや デバッグ用：じ と ふん に そろえる
+  const i0 = drum.lists[0].indexOf(h);
+  drum.pos = [i0, Math.floor(m/10), m%10]; drum.goal = drum.pos.slice();
+}
+function drumActive(){ return taskActive() && isPickTask(currentTask()) && drum; }
+function drumGeom(){
+  const g = getClockGeom();
+  const top = g.cy + g.R + 14, bottom = calcFloor();
+  const H = Math.max(66, Math.min(138, bottom - top - 50));      // 下に 名前と ヒントの2行ぶん あける
+  const rowH = H/3, ww = Math.min(62, sw*0.15), colon = 18, gap = 5, bw = Math.min(100, sw*0.24), bg = 14;
+  const total = ww*3 + colon + gap + bg + bw;
+  let x = (sw - total)/2;
+  const wheels = [];
+  wheels.push({ x, y:top, w:ww, h:H }); x += ww;
+  const colonX = x + colon/2; x += colon;
+  wheels.push({ x, y:top, w:ww, h:H }); x += ww + gap;
+  wheels.push({ x, y:top, w:ww, h:H }); x += ww + bg;
+  const bh = Math.min(64, H*0.62);
+  return { wheels, colonX, rowH, top, H, btn:{ x, y: top + (H - bh)/2, w:bw, h:bh } };
+}
+function drawDrum(ctx, t){
+  if(!drumActive()) return;
+  const dg = drumGeom();
+  // はなしたあとは ぴたっと止まる数へ すうっと寄せる
+  for(let i=0;i<3;i++) if(!(drum.drag && drum.drag.i === i)) drum.pos[i] += (drum.goal[i] - drum.pos[i]) * 0.28;
+  const sx = drum.shake > 0 ? Math.sin(drum.shake*40)*8*drum.shake : 0;
+  if(drum.shake > 0) drum.shake = Math.max(0, drum.shake - 0.035);
+  ctx.save();
+  ctx.translate(sx, 0);
+  dg.wheels.forEach((w, i) => {
+    const list = drum.lists[i], n = list.length, pos = drum.pos[i];
+    ctx.save();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.roundRect(w.x, w.y, w.w, w.h, 12); ctx.fill();
+    ctx.clip();
+    // まん中の段（えらんでいる数）
+    ctx.fillStyle = i === 0 ? 'rgba(224,64,63,0.13)' : 'rgba(31,111,216,0.13)';
+    ctx.fillRect(w.x, w.y + dg.rowH, w.w, dg.rowH);
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const cy = w.y + w.h/2;
+    for(let k = Math.floor(pos) - 2; k <= Math.floor(pos) + 3; k++){
+      const y = cy + (k - pos)*dg.rowH;
+      const d = Math.abs(k - pos);
+      if(d > 2) continue;
+      const v = list[((k % n) + n) % n];
+      ctx.globalAlpha = Math.max(0.12, 1 - d*0.55);
+      ctx.font = 'bold ' + Math.round(dg.rowH*(d < 0.5 ? 0.72 : 0.58)) + 'px sans-serif';
+      ctx.fillStyle = i === 0 ? '#c0302f' : '#16233a';
+      ctx.fillText(String(v), w.x + w.w/2, y + 1);
+    }
+    ctx.restore();
+    ctx.strokeStyle = 'rgba(60,80,110,0.45)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(w.x, w.y, w.w, w.h, 12); ctx.stroke();
+  });
+  // ：と ドラムの下の名前
+  ctx.fillStyle = '#16233a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold ' + Math.round(dg.rowH*0.7) + 'px sans-serif';
+  ctx.fillText(':', dg.colonX, dg.top + dg.H/2);
+  ctx.font = 'bold 11px sans-serif'; ctx.fillStyle = '#2b3a52';
+  const lab = (x, s) => { ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.strokeText(s, x, dg.top + dg.H + 11); ctx.fillText(s, x, dg.top + dg.H + 11); };
+  const W = dg.wheels;
+  lab(W[0].x + W[0].w/2, 'じ');
+  lab((W[1].x + W[2].x + W[2].w)/2, 'ふん');
+  ctx.restore();
+  // 「これ！」
+  const b = dg.btn;
+  if(!taskDone){
+    drawCardBtn(ctx, b.x, b.y, b.w, b.h, '', 'rgba(60,110,240,0.95)', '#fff');
+    ctx.save(); ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 22px sans-serif'; ctx.fillText('これ！', b.x + b.w/2, b.y + b.h/2 + 1);
+    ctx.restore();
+  }
+  // ビギナーは よみかたの ヒントを いつも出す。ふつうは ちがったときに「ちがうよ」だけ
+  const line = (begMode() && !taskDone) ? currentTask().c.hint
+             : (drum.miss && !taskDone) ? 'ちがうよ。もういちど よんでみよう' : '';
+  if(line){
+    ctx.save(); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold 13px sans-serif';
+    // 入りきらないときは「、」のところで 2行に わける
+    const lines = [];
+    let cur = '';
+    for(const seg of line.split('、')){
+      const next = cur ? cur + '、' + seg : seg;
+      if(cur && ctx.measureText(next).width > sw - 24){ lines.push(cur + '、'); cur = seg; } else cur = next;
+    }
+    lines.push(cur);
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 4; ctx.lineJoin = 'round';
+    ctx.fillStyle = (drum.miss && !begMode()) ? '#c0392b' : BEG_COLOR;
+    lines.slice(0, 2).forEach((ln, k) => {
+      const y = dg.top + dg.H + 28 + k*17;
+      ctx.strokeText(ln, sw/2, y); ctx.fillText(ln, sw/2, y);
+    });
+    ctx.restore();
+  }
+}
+function drumStart(x, y){
+  if(!drumActive() || taskDone) return false;
+  const dg = drumGeom();
+  const b = dg.btn;
+  if(ptInRect(x, y, b.x, b.y, b.w, b.h)){ drumAnswer(); return true; }
+  for(let i=0;i<3;i++){
+    const w = dg.wheels[i];
+    if(!ptInRect(x, y, w.x - 4, w.y - 10, w.w + 8, w.h + 20)) continue;
+    drum.drag = { i, y0:y, pos0:drum.pos[i], lastY:y, lastT:Date.now(), v:0, moved:false };
+    return true;
+  }
+  return false;
+}
+function drumMove(x, y){
+  const d = drum && drum.drag; if(!d) return;
+  const dg = drumGeom(), now = Date.now();
+  if(Math.abs(y - d.y0) > 6) d.moved = true;
+  // 下へ はじくと 小さい数が おりてくる（数は 下へ いくほど 大きい）
+  drum.pos[d.i] = d.pos0 - (y - d.y0)/dg.rowH;
+  const dt = Math.max(1, now - d.lastT);
+  d.v = 0.6*d.v + 0.4*(-(y - d.lastY)/dg.rowH/dt);
+  d.lastY = y; d.lastT = now;
+}
+function drumEnd(x, y){
+  const d = drum && drum.drag; if(!d) return;
+  drum.drag = null;
+  if(!d.moved){
+    // ちょんと押しただけ：まん中より上なら 1つ もどす、下なら 1つ すすめる
+    const w = drumGeom().wheels[d.i], cy = w.y + w.h/2;
+    drum.goal[d.i] = Math.round(drum.goal[d.i]) + (y < cy - 8 ? -1 : y > cy + 8 ? 1 : 0);
+    drum.pos[d.i] = d.pos0;
+    return;
+  }
+  // いきおいを すこし のせてから、いちばん近い数に止める
+  drum.goal[d.i] = Math.round(drum.pos[d.i] + Math.max(-6, Math.min(6, d.v*140)));
+}
+function drumAnswer(){
+  if(!drumActive() || taskDone) return;
+  for(let i=0;i<3;i++) drum.pos[i] = drum.goal[i] = Math.round(drum.goal[i]);   // まわっている とちゅうでも 止めて こたえる
+  const t = currentTask(), v = drumTime();
+  logStep('pick', null, null, v);
+  // 12じかんの ドラムは 1〜12。とけいの 12:xx は 0:xx と おなじ
+  const goal = t.c.h24 ? t.c.goal : t.c.goal % 720;
+  const ok = t.c.h24 ? v === goal : (v % 720) === goal;
+  if(ok){ drum.miss = 0; clockClear(); }
+  else { drum.miss++; drum.shake = 1; }
 }
 
 // ─── クリアしたときの演出 ─────────────────────────────────────────
@@ -3172,7 +3378,6 @@ function catCountOf(id, cat, beg){
 }
 function stageGrid(){
   const pad = 12, cols = 10, cgap = 4;
-  const cw = (sw - pad*2 - cgap*(cols-1)) / cols;
   // しゅるいの切りかえ。横に広い画面では 見出しの段（ふつう／ビギナー と きろく のあいだ）に入れ、
   // せまい画面では 名前の札の下に 1段 使う。
   const kx = sw - pad - 58 - 6 - 54;                // 「きろく」ボタンの左はし
@@ -3183,9 +3388,14 @@ function stageGrid(){
                      : { x: pad, y: TAB_H+88, w: sw - pad*2, h: 30 };
   const y0 = inHead ? TAB_H + 90 : TAB_H + 126;     // 見出し ＋ 名前の札（＋ しゅるいの段）の下から
   const nLv = Math.max(1, catLevels(stageCat).length);
-  // 横向きの低い画面でも さいごの行まで収まるよう、行の高さは 38 まで ちぢめてよい
-  const rowH = Math.min(74, Math.max(38, (sh - y0 - 8) / nLv));
-  return { pad:pad, cols:cols, cgap:cgap, cw:cw, y0:y0, rowH:rowH, cat:cat,
+  // 横向きの低い画面でも さいごの行まで収まるよう、行の高さは 38 まで ちぢめてよい。
+  // それでも入らない 横に広い画面では、レベルを 左右2列に ならべる。
+  const lvCols = ((sh - y0 - 8) / nLv < 38 && sw >= 560) ? 2 : 1, colGap = 16;
+  const rows = Math.ceil(nLv / lvCols);
+  const colW = (sw - pad*2 - colGap*(lvCols-1)) / lvCols;
+  const cw = (colW - cgap*(cols-1)) / cols;
+  const rowH = Math.min(74, Math.max(38, (sh - y0 - 8) / rows));
+  return { pad:pad, cols:cols, cgap:cgap, cw:cw, y0:y0, rowH:rowH, cat:cat, lvCols, rows, colW, colGap,
            ch:Math.max(22, Math.min(46, rowH-24)) };
 }
 
@@ -3276,16 +3486,17 @@ function drawStageSelect(ctx, t){
   }
 
   // レベルごとに1行（いま見ている しゅるいの ぶんだけ）
-  catLevels(stageCat).forEach((lv, row) => {
-    const ry = g.y0 + row*g.rowH;
+  catLevels(stageCat).forEach((lv, k) => {
+    const col = Math.floor(k / g.rows), row = k % g.rows;
+    const ry = g.y0 + row*g.rowH, rx = g.pad + col*(g.colW + g.colGap);
     const L = TASK_LEVELS[lv];
     ctx.textAlign='left'; ctx.fillStyle=L.color; ctx.font='bold 11px sans-serif';
-    ctx.fillText('レベル' + lvNum(lv) + '  ' + L.name, g.pad, ry+7);
+    ctx.fillText('レベル' + lvNum(lv) + '  ' + L.name, rx, ry+7);
 
     const idxs = [];
     for(let i=0;i<TASKS.length;i++) if(TASKS[i].lv===lv) idxs.push(i);
     idxs.forEach((idx,c)=>{
-      const x = g.pad + c*(g.cw+g.cgap), y = ry+16, w = g.cw, h = g.ch;
+      const x = rx + c*(g.cw+g.cgap), y = ry+16, w = g.cw, h = g.ch;
       const done = !!taskCleared[idx], cur = (idx===taskIdx);
       ctx.fillStyle = done ? L.color : 'rgba(255,255,255,0.14)';
       ctx.beginPath(); ctx.roundRect(x,y,w,h,7); ctx.fill();
@@ -3714,7 +3925,8 @@ function drawStageDetail(ctx, idx){
   ctx.fillText(catName(catOf(idx)) + ' ' + stageLabel(idx) +
                (begMode() ? '　ビギナー' : ck ? '' : '　つかえる ' + task.use.join(' と ')), x+16, y+20);
   ctx.fillStyle='#16233a'; ctx.font='bold 21px sans-serif';
-  const title = ck ? task.c.title + task.c.tail.replace(' に あわせよう！', '') + ' → ' + fmtT(task.c.goal)
+  const title = isPickTask(task) ? 'とけいを よむ → ' + fmtT(task.c.goal)
+              : ck ? task.c.title + task.c.tail.replace(' に あわせよう！', '') + ' → ' + fmtT(task.c.goal)
               : task.k === 'read' ? (task.show ? task.show : task.from + '→' + task.to) + ' → ' + task.n
               : task.n + ' の てじゅん';
   ctx.font = 'bold ' + (title.length > 16 ? 16 : 21) + 'px sans-serif';
@@ -4163,7 +4375,7 @@ function handleMove(x,y,pid){
 
 function handleEnd(x,y,pid){
   if(stageHold && stageHold.pid===pid){ stageHold = null; return; }   // 途中で離した＝中止
-  if(mode==='clock'){ if(clockDrag) clockRelease(); clockDrag=null; return; }
+  if(mode==='clock'){ if(drum && drum.drag) drumEnd(x, y); if(clockDrag) clockRelease(); clockDrag=null; return; }
   if(clrHold && clrHold.pid===pid){ clrHold=null; return; }   // 途中で離した＝中止
   const ptr=dragPointers[pid]; if(!ptr){ dragBlock=null; dragPtr=null; return; }
   const b=ptr.block; delete dragPointers[pid]; dragBlock=null; dragPtr=null;
@@ -4199,7 +4411,7 @@ function setMode(newMode){
   if(!isCalc(mode) || !isCalc(newMode)) blocks=[];
   if(!isCalcMode(newMode)){ stageOpen=false; stageDetail=-1; }
   mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={}; clrHold=null; clockDrag=null; clockMerged=false;
-  if(!isCalcMode(newMode)) clearUndo();
+  if(!isCalcMode(newMode)){ clearUndo(); opBarBtns = []; }   // ＋−×÷ の当たり判定も すぐ消す
   fxParticles=[]; mirrorFlash=0; mirrorRing=0; mirrorReflect=0; mirrorReflectNum=0;
   homeFlash=0; homeOpen=0; homeNum=0; homeAfter=0; mirrorAfter=0; mirrorHandoff=0;
   for(const k in tgtFx) tgtFx[k]={open:0,after:0,flash:0,num:0};
