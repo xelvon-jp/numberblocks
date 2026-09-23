@@ -1,8 +1,9 @@
-// とけいの おだい と まぜまぜ。はりを あわせる判定・ドラムロールで よむ・虹・
-// ヒントを出さないこと・しゅるいの切りかえ・記録の引っこし。
+// まぜまぜ と とけいの おだい。とけいは その場で作る（6レベル）。
+// 時こくの作りかた・レベルの上がりかた・けいさん2問に とけい1問・はりを あわせる判定・
+// ドラムロールで よむ・ヒントを出さないこと・記録の引っこし。
 
-// そのおだいの番号をさがす（ページの中で）
-const find = (p, src) => p.evaluate(s => TASKS.findIndex(new Function('x', 'return ' + s)), src);
+// とけいの おだいを はじめる（spec を わたすと その おだい）
+const start = (p, spec) => p.evaluate(sp => { taskOn = true; startClockTask(sp); }, spec);
 
 // ながいはりを つかんで、m ぷんの場所まで まわして はなす（ほんとうの指と同じ道を通る）
 async function dragMinute(p, m, steps){
@@ -24,55 +25,245 @@ const setHands = (p, v) => p.evaluate(v => {
   clockDrag = 'min'; clockDragFrom = clockT; clockT = ((v % 720) + 720) % 720;
   handleEnd(0, 0, 'm');
 }, v);
+// 「これ！」を押す
+const press = p => p.evaluate(() => { const b = drumGeom().btn; handleStart(b.x + b.w/2, b.y + b.h/2, 'm'); handleEnd(b.x + b.w/2, b.y + b.h/2, 'm'); });
 
 module.exports = {
 
-  'とけいの おだいは「よんで えらぶ」と「はりを あわせる」の 2しゅるいだけ（4レベル×10問）': async t => {
+  // ── 時こくの作りかた ──
+  'レベルごとの 時こく：ちょうど／はん／5ふん／1ぷん（さかいめ多め）／ごご／ごごの1ぷん': async t => {
     const p = await t.open();
     const r = await p.evaluate(() => {
-      const list = catTasks('clock').map(i => TASKS[i]);
-      const set = TASKS.find(x => x.k === 'clock' && x.to === '3:47').c;
-      const pm  = TASKS.find(x => x.k === 'pick' && x.to === '15:52').c;
-      const am  = TASKS.find(x => x.k === 'pick' && x.to === '4:37').c;
-      return { kinds: [...new Set(list.map(x => x.k))].sort(), n: list.length,
-               levels: catLevels('clock').map(lv => TASK_LEVELS[lv].name),
-               set: [set.start, fmtT(set.goal), set.title + set.tail],
-               pm: [pm.start, pm.h24, pm.tail], am: [am.start, am.h24, am.tail] };
+      const N = 1500, out = {};
+      for(let lv=1; lv<=6; lv++){
+        const vs = []; for(let i=0;i<N;i++) vs.push(clockGenTime(lv, Math.random));
+        const h = vs.map(v => Math.floor(v/60)), m = vs.map(v => v % 60);
+        out[lv] = { hMin: Math.min(...h), hMax: Math.max(...h),
+                    m0: m.filter(x => x === 0).length / N, m30: m.filter(x => x === 30).length / N,
+                    five: m.filter(x => x % 5 === 0).length / N,
+                    edge: m.filter(x => x % 5 && (x <= 4 || x >= 56)).length / N,
+                    fiveOnly: m.every(x => x % 5 === 0 && x !== 0 && x !== 30) };
+      }
+      return out;
     });
-    t.eq(r.kinds, ['clock', 'pick'], 'とけいの おだいに ほかの しゅるいが まざっている');
-    t.eq(r.n, 40, 'とけいの おだいの数');
-    t.eq(r.levels, ['よんで えらぶ', 'はりを あわせる', 'ごごを よむ', 'ごごに あわせる'], 'とけいの レベル');
-    t.eq(r.set, [0, '3:47', '3:47 に あわせよう！'], 'はりを あわせる おだい');
-    t.eq(r.pm, [952, true, 'ごごの とけい。デジタルで なんじ？'], 'ごごを よむ おだい');
-    t.eq(r.am, [277, false, 'とけいを よんで えらぼう！'], 'よんで えらぶ おだい');
+    t.eq([r[1].hMin, r[1].hMax, r[1].m0], [1, 12, 1], 'レベル1 は 1〜12時の ちょうど');
+    t.ok(r[2].m30 > 0.7 && r[2].m30 + r[2].m0 === 1, 'レベル2 は はんが おおく、のこりは ちょうど');
+    t.ok(r[3].fiveOnly, 'レベル3 は ちょうど・はん いがいの 5ふん');
+    t.ok(r[4].five === 0 && r[4].edge > 0.2 && r[4].edge < 0.45, 'レベル4 は 1ぷん、さかいめ（:56〜:04）が 3わりくらい: ' + r[4].edge);
+    t.eq([r[5].hMin, r[5].hMax, r[5].five], [13, 23, 1], 'レベル5 は 13〜23時の ちょうど・はん・5ふん');
+    t.eq([r[6].hMin, r[6].hMax, r[6].five], [13, 23, 0], 'レベル6 は 13〜23時の 1ぷん');
   },
 
-  'はりを あわせる おだいを はじめると とけいの画面になり、はりは 12:00、文字盤は カードの下': async t => {
+  'つぎの レベル：ふだんは いまの レベルと おさらい。正解が ふえたら つぎの レベルを おためし': async t => {
     const p = await t.open();
-    const i = await find(p, "x.k==='clock' && x.to==='3:47'");
-    const r = await p.evaluate(i => {
-      setMode('+'); taskOn = true; startTask(i);
+    const r = await p.evaluate(() => {
+      const count = st => { const c = {}; for(let i=0;i<3000;i++){ const lv = clockNextLevel(st, Math.random); c[lv] = (c[lv]||0) + 1; } return c; };
+      return {
+        low:  count({ lv:3, hist:[true,false,false,true,false,false,false,false,false,true] }),   // 3/10
+        high: count({ lv:3, hist:[true,true,true,true,true,true,false,false,false,false] }),     // 6/10
+        one:  count({ lv:1, hist:[] }), top: count({ lv:6, hist:new Array(10).fill(true) })
+      };
+    });
+    const f = (c, k) => (c[k] || 0) / 3000;
+    t.ok(!r.low[4] && f(r.low, 3) > 0.62 && f(r.low, 3) < 0.78, 'ふだんは いまのレベル7わり: ' + JSON.stringify(r.low));
+    t.ok(f(r.low, 1) + f(r.low, 2) > 0.22, 'おさらい（下の レベル）が まざらない');
+    t.ok(f(r.high, 4) > 0.14 && f(r.high, 4) < 0.26, '6/10 で つぎの レベルが 2わり まざらない: ' + JSON.stringify(r.high));
+    t.eq(Object.keys(r.one), ['1'], 'レベル1 は レベル1 だけ');
+    t.ok(!r.top[7], 'レベル6 より 上は ない');
+  },
+
+  'とけいの おだいは「よむ」と「あわせる」が はんぶんずつ。つづけて同じ時こくに ならない': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      let pick = 0, same = 0, prev = -1;
+      const st = { lv:1, hist:[] };
+      for(let i=0;i<600;i++){
+        const q = makeClockTask(st, Math.random, prev);
+        if(q.k === 'pick') pick++;
+        if(q.c.goal === prev) same++;
+        prev = q.c.goal;
+        if((q.k === 'pick' ? 1 : 2) !== q.best) return 'best';
+      }
+      return { pick: pick/600, same };
+    });
+    t.ok(r.pick > 0.4 && r.pick < 0.6 && r.same === 0, 'よむ／あわせる の わりあい か つづけて同じ: ' + JSON.stringify(r));
+  },
+
+  // ── レベルの上がりかた ──
+  'いまの レベルで 直近10問中 8問 1かいめで あたれば レベルアップ。おさらいは 数えない。下がりは しない': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      taskOn = true;
+      const st = clockStats(); st.lv = 2; st.hist = [];
+      const ans = (lv, ok) => { startClockTask({ k:'pick', to:'3:30', clv:lv }); noteClockAnswer(ok); };
+      for(let i=0;i<7;i++) ans(2, true);
+      ans(1, true); ans(1, true);                         // おさらいは 数えない
+      const before = st.lv;
+      ans(2, false); ans(2, false);                       // 7/9 → 7/10
+      const mid = st.lv;
+      ans(2, true);                                       // 直近10問: 8問
+      const after = st.lv, up = lastLevelUp, hist = st.hist.length;
+      for(let i=0;i<10;i++) ans(3, false);                // まちがえつづけても 下がらない
+      return { before, mid, after, up, hist, still: st.lv };
+    });
+    t.eq(r, { before:2, mid:2, after:3, up:3, hist:0, still:3 }, 'レベルの 上がりかたが ちがう');
+  },
+
+  'レベルアップしたら カードに「とけい レベル3「5ふんきざみ」に アップ！」': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      taskOn = true;
+      const st = clockStats(); st.lv = 2; st.hist = new Array(7).fill(true).concat([false, false]);
+      startClockTask({ k:'pick', to:'7:30', clv:2 }); drumSet(7, 30); drumAnswer();
+      const got = [], ft = ctx.fillText;
+      ctx.fillText = function(s){ got.push(String(s)); return ft.apply(this, arguments); };
+      try{ drawTaskCard(ctx, 0); } finally { ctx.fillText = ft; }
+      return { lv: st.lv, text: got.find(s => /アップ/.test(s)) || '' };
+    });
+    t.eq(r, { lv:3, text:'とけい レベル3「5ふんきざみ」に アップ！' }, 'レベルアップが カードに出ない');
+  },
+
+  '1かいめの こたえだけを 数える（よむ：最初の「これ！」／あわせる：最初に はなしたとき）': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      taskOn = true;
+      const st = clockStats(); st.lv = 4; st.hist = [];
+      startClockTask({ k:'pick', to:'2:48', clv:4 }); drumSet(8, 12); drumAnswer(); drumSet(2, 48); drumAnswer();
+      startClockTask({ k:'pick', to:'9:03', clv:4 }); drumSet(9, 3); drumAnswer();
+      startClockTask({ k:'clock', to:'4:17', clv:4 });
+      clockDrag = 'min'; clockDragFrom = clockT; clockT = 4*60 + 17; handleEnd(0, 0, 'm');
+      startClockTask({ k:'clock', to:'5:41', clv:4 });
+      clockDrag = 'min'; clockDragFrom = clockT; clockT = 5*60 + 40; handleEnd(0, 0, 'm');
+      clockDrag = 'min'; clockDragFrom = clockT; clockT = 5*60 + 41; handleEnd(0, 0, 'm');
+      return st.hist;
+    });
+    t.eq(r, [false, true, true, false], '1かいめの 正解の 数えかたが ちがう');
+  },
+
+  // ── まぜまぜ ──
+  'まぜまぜ：けいさん2問 → とけい1問 → けいさん の じゅん。とけいの あとは つぎの けいさんから': async t => {
+    const p = await t.open();
+    const seq = await p.evaluate(() => {
+      taskOn = true; setMix(true); startTask(0);
+      const out = [];
+      for(let k=0;k<7;k++){
+        const c = currentTask();
+        out.push(isClockTask(c) ? 'と' : 'け' + taskIdx);
+        if(isPickTask(c)){
+          const h = Math.floor(c.c.goal/60);
+          drumSet(c.c.h24 ? h : (h % 12) || 12, c.c.goal % 60); drumAnswer();
+        } else if(isClockTask(c)){
+          clockDrag = 'min'; clockDragFrom = clockT; clockT = c.c.goal % 720; handleEnd(0,0,'m');
+        } else { spawnBlock(c.n); checkTask(); }
+        if(!taskDone) return 'できない ' + out.join(',');
+        nextTask();
+      }
+      return out.join(',');
+    });
+    t.eq(seq, 'け0,け1,と,け2,け3,と,け4', 'まぜまぜの じゅんばんが ちがう');
+  },
+
+  'まぜまぜで ないときは、とけいは 出ない': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      taskOn = true; setMix(false); startTask(0);
+      for(let k=0;k<6;k++){ spawnBlock(currentTask().n); checkTask(); nextTask(); if(genTask) return 'とけいが出た'; }
+      return taskIdx;
+    });
+    t.eq(r, 6, 'けいさんだけで 進まない');
+  },
+
+  'とけいが できても、けいさんの ステージの 記録には つけない。「てじゅん」も 出さない': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      taskOn = true; startTask(4);
+      const before = JSON.stringify(taskCleared);
+      startClockTask({ k:'pick', to:'4:37' }); drumSet(4, 37); drumAnswer();
+      drawTaskCard(ctx, 0);
+      return { done: taskDone, same: JSON.stringify(taskCleared) === before, steps: taskBtns.some(b => b.val === 'steps'),
+               next: taskBtns.some(b => b.val === 'next') };
+    });
+    t.eq(r, { done:true, same:true, steps:false, next:true }, 'とけいの クリアが けいさんの 記録に まざる');
+  },
+
+  'いちらん：けいさん／まぜまぜ を えらべて、まぜまぜ には とけいの レベルが出る。とけいの とちゅうで やめたら けいさんへ': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      taskOn = true; startTask(3); clockStats().lv = 4;
+      openStages(); drawStageSelect(ctx, 0);
+      const btns = stageBtns.filter(b => b.val === 'mix');
+      const got = [], ft = ctx.fillText;
+      ctx.fillText = function(s){ got.push(String(s)); return ft.apply(this, arguments); };
+      try{ drawStageSelect(ctx, 0); } finally { ctx.fillText = ft; }
+      const tap = b => handleStageTap(b.x + b.w/2, b.y + b.h/2, 'm');
+      tap(btns.find(b => b.v === true));
+      const on = mixMode();
+      startClockTask();
+      openStages(); drawStageSelect(ctx, 0);
+      tap(stageBtns.find(b => b.val === 'mix' && b.v === false));
+      return { n: btns.length, label: got.includes('まぜまぜ（とけい4）'), on, off: mixMode(),
+               back: !genTask && taskIdx === 3 && isCalcMode(), cells: stageBtns.filter(b => b.val === 'go').length };
+    });
+    t.eq(r, { n:2, label:true, on:true, off:false, back:true, cells:60 }, 'けいさん／まぜまぜ の切りかえが おかしい');
+  },
+
+  'まぜまぜ と とけいの レベルは 人ごとに のこり、開きなおしても きえない。きろくで 1に もどせる': async t => {
+    const p = await t.open({ who:'hinata' });
+    await p.evaluate(() => { taskOn = true; setMix(true); clockStats().lv = 5; clockStats().hist = [true]; saveTask(); });
+    await p.reload(); await p.waitForFunction(() => typeof drawFrame === 'function');
+    const r = await p.evaluate(() => {
+      const h = taskStore.hinata;
+      const a = { mix: !!h.mix, lv: h.clock.lv, papaLv: taskStore.papa.clock ? taskStore.papa.clock.lv : 1, papaMix: !!taskStore.papa.mix };
+      whoOpen = false; setProfile(PROFILES.findIndex(x => x.id === 'hinata'));
+      openStages(); recOpen = true; drawStageSelect(ctx, 0);
+      const ask = stageBtns.find(b => b.val === 'recAsk' && b.kind === 'clock');
+      handleStageTap(ask.x + 2, ask.y + 2, 'm'); drawStageSelect(ctx, 0);
+      const yes = stageBtns.find(b => b.val === 'recYes');
+      handleStageTap(yes.x + 2, yes.y + 2, 'm');
+      return Object.assign(a, { reset: clockStats().lv });
+    });
+    t.eq(r, { mix:true, lv:5, papaLv:1, papaMix:false, reset:1 }, 'まぜまぜ／とけいの レベルの のこりかたが ちがう');
+  },
+
+  'ならびの版が ふるい記録：けいさんの記録は のこし、60番より うしろは けす': async t => {
+    const old = { v:2, tv:3, on:false, cur:'hinata', p:{
+      hinata:{ idx:75, cleared:{5:true, 75:true}, logs:{5:[{k:'new',a:1}], 75:[{k:'new',a:1}]}, rainbow:{3:true, 75:true},
+               beg:{ idx:3, cleared:{2:true, 90:true}, logs:{}, rainbow:{90:true} } } } };
+    const p = await t.open({ storage:{ 'nbg.task.v1': JSON.stringify(old) } });
+    const r = await p.evaluate(() => {
+      const h = taskStore.hinata;
+      return { c: Object.keys(h.cleared), l: Object.keys(h.logs), idx: h.idx, rb: Object.keys(h.rainbow),
+               bc: Object.keys(h.beg.cleared), br: Object.keys(h.beg.rainbow), clock: h.clock.lv };
+    });
+    t.eq(r, { c:['5'], l:['5'], idx:0, rb:['3'], bc:['2'], br:[], clock:1 }, '引っこしで 記録の のこりかたが ちがう');
+  },
+
+  // ── はりを あわせる ──
+  'はりを あわせる：とけいの画面になり、はりは 12:00、文字盤は カードの下': async t => {
+    const p = await t.open();
+    await p.evaluate(() => setMode('+'));
+    await start(p, { k:'clock', to:'3:47' });
+    const r = await p.evaluate(() => {
       const card = getTaskCardRect(), g = getClockGeom();
-      return { mode, clockT, active: taskActive(), below: g.cy - g.R > card.y + card.h };
-    }, i);
-    t.eq(r, { mode:'clock', clockT:0, active:true, below:true }, 'はりを あわせる おだいの はじまりが おかしい');
+      return { mode, clockT, active: taskActive(), below: g.cy - g.R > card.y + card.h, tab: taskOn };
+    });
+    t.eq(r, { mode:'clock', clockT:0, active:true, below:true, tab:true }, 'はりを あわせる おだいの はじまりが おかしい');
   },
 
   'ながいはりを まわして はなしたら できた。best 回いないなら レインボー': async t => {
     const p = await t.open();
-    const i = await find(p, "x.k==='clock' && x.to==='4:03'");
-    await p.evaluate(i => { taskOn = true; startTask(i); clockT = 4*60; }, i);
+    await start(p, { k:'clock', to:'4:03' });
+    await p.evaluate(() => { clockT = 4*60; });
     await dragMinute(p, 3);
-    const r = await p.evaluate(i => ({ clockT, done: taskDone, cleared: !!taskCleared[i], moves: (taskLogs[i]||[]).length,
-                                       rainbow: !!(winFx && winFx.praise && winFx.praise.rainbow),
-                                       mark: !!(curRec().rainbow||{})[i] }), i);
-    t.eq(r, { clockT:243, done:true, cleared:true, moves:1, rainbow:true, mark:true }, '4:03 に あわせても できたにならない');
+    const r = await p.evaluate(() => ({ clockT, done: taskDone, moves: taskLog.length,
+                                        rainbow: !!(winFx && winFx.praise && winFx.praise.rainbow) }));
+    t.eq(r, { clockT:243, done:true, moves:1, rainbow:true }, '4:03 に あわせても できたにならない');
   },
 
   'とちゅうで こたえを 通りすぎても できたにしない。さわっただけは 数えない。best をこえたら 虹なし': async t => {
     const p = await t.open();
-    const i = await find(p, "x.k==='clock' && x.to==='4:03'");
-    await p.evaluate(i => { taskOn = true; startTask(i); clockT = 4*60; }, i);
+    await start(p, { k:'clock', to:'4:03' });
+    await p.evaluate(() => { clockT = 4*60; });
     await dragMinute(p, 10, 20);                           // 4:03 を 通りすぎて 4:10 で はなす
     t.eq(await p.evaluate(() => [clockT, taskDone, taskLog.length]), [250, false, 1], '通りすぎただけで できたになった');
     await p.evaluate(() => { const g = getClockGeom(); const s = handPos(g, clockMin()/60, g.R*0.78);
@@ -85,10 +276,9 @@ module.exports = {
     t.eq(r, { done:true, moves:3, rainbow:false }, '3かいめで できた／虹は出ない のはず');
   },
 
-  'ごごに あわせる おだいは、12じかんの とけいで あっていれば できた': async t => {
+  'ごごに あわせる：12じかんの とけいで あっていれば できた': async t => {
     const p = await t.open();
-    const i = await find(p, "x.k==='clock' && x.to==='15:45'");
-    await p.evaluate(i => { taskOn = true; startTask(i); }, i);
+    await start(p, { k:'clock', to:'15:45' });
     await setHands(p, 3*60);
     t.eq(await p.evaluate(() => taskDone), false, '3:00 で できたになった');
     await setHands(p, 3*60 + 45);
@@ -98,30 +288,26 @@ module.exports = {
 
   'とけいの おだいは ふつうでも ビギナーでも ヒント・みちしるべを 出さない': async t => {
     const p = await t.open();
-    const set = await find(p, "x.k==='clock' && x.to==='3:47'");
-    const pick = await find(p, "x.k==='pick' && x.to==='4:37'");
-    const look = (i, beg) => p.evaluate(([i, beg]) => {
-      setBegMode(beg); taskOn = true; startTask(i);
-      taskStartT = Date.now() - HINT_AFTER_MS - 1000;       // 苦戦したことにする
-      for(let k=0;k<8;k++) taskLog.push({k:'clock', a:0, r:1});
-      drawTaskCard(ctx, 0);
-      const got = [], ft = ctx.fillText;
-      ctx.fillText = function(s){ got.push(String(s)); return ft.apply(this, arguments); };
-      try{ drawClockMode(ctx, 0); } finally { ctx.fillText = ft; }
-      return { hint: taskBtns.some(b => b.val === 'hint'), way: currentWay().length, cardH: taskCardH(),
-               texts: got.filter(s => /はり|5が/.test(s)) };
-    }, [i, beg]);
     for(const beg of [false, true]){
-      for(const [i, name] of [[set, 'あわせる'], [pick, 'よむ']]){
-        t.eq(await look(i, beg), { hint:false, way:0, cardH:50, texts:[] },
-             `${beg ? 'ビギナー' : 'ふつう'}の ${name} で ヒントが出ている`);
+      for(const k of ['clock', 'pick']){
+        const r = await p.evaluate(([beg, k]) => {
+          setBegMode(beg); taskOn = true; startClockTask({ k, to:'3:47' });
+          taskStartT = Date.now() - HINT_AFTER_MS - 1000;       // 苦戦したことにする
+          for(let i=0;i<8;i++) taskLog.push({k, a:0, r:1});
+          drawTaskCard(ctx, 0);
+          const got = [], ft = ctx.fillText;
+          ctx.fillText = function(s){ got.push(String(s)); return ft.apply(this, arguments); };
+          try{ drawClockMode(ctx, 0); } finally { ctx.fillText = ft; }
+          return { hint: taskBtns.some(b => b.val === 'hint'), way: currentWay().length, cardH: taskCardH(),
+                   texts: got.filter(s => /はり|5が/.test(s)) };
+        }, [beg, k]);
+        t.eq(r, { hint:false, way:0, cardH:50, texts:[] }, `${beg ? 'ビギナー' : 'ふつう'}の ${k} で ヒントが出ている`);
       }
     }
   },
 
   'といている最中は、デジタル表示と 5のなかまの答えを かくす（ビギナーでも）。できたら出す': async t => {
     const p = await t.open();
-    const i = await find(p, "x.k==='clock' && x.to==='15:45'");
     const texts = () => p.evaluate(() => {
       const got = [], ft = ctx.fillText;
       ctx.fillText = function(s){ got.push(String(s)); return ft.apply(this, arguments); };
@@ -129,7 +315,7 @@ module.exports = {
       return got;
     });
     for(const beg of [false, true]){
-      await p.evaluate(([i, beg]) => { setBegMode(beg); taskOn = true; startTask(i); clockT = 3*60 + 40; }, [i, beg]);
+      await p.evaluate(beg => { setBegMode(beg); taskOn = true; startClockTask({ k:'clock', to:'15:45' }); clockT = 3*60 + 40; }, beg);
       const live = await texts();
       t.ok(!live.some(s => /^\d+:\d\d$/.test(s)), 'といている最中に デジタル表示が出ている: ' + live.join(' | '));
       t.ok(live.some(s => /= ？$/.test(s)), '5のなかまの式の こたえが かくれていない');
@@ -139,169 +325,85 @@ module.exports = {
     t.ok(done.includes('15:45'), 'できたのに 15:45 と出ない: ' + done.join(' | '));
   },
 
-  'とけいの つぎ は、とけいの中で進み、さいごからは はじめへ もどる': async t => {
+  'とけいで クリアしても 止まらず、演出のあと つぎの けいさんへ 進む': async t => {
     const p = await t.open();
-    const r = await p.evaluate(() => {
-      const list = catTasks('clock');
-      taskOn = true; startTask(list[3]); nextTask();
-      const a = taskIdx === list[4];
-      startTask(list[list.length-1]); nextTask();
-      return { a, wrap: taskIdx === list[0], mode };
-    });
-    t.eq(r, { a:true, wrap:true, mode:'clock' }, 'とけいの中で 進まない');
-  },
-
-  'まぜまぜ：けいさん と とけい が まざって出て、中の画面は かわるが おだいの ままで いる': async t => {
-    const p = await t.open();
-    const r = await p.evaluate(() => {
-      const list = catTasks('mix');
-      taskOn = true; startTask(list[0]);
-      const m0 = mode; nextTask();                        // けいさん → よんで えらぶ
-      const m1 = mode, a1 = taskActive(), d1 = !!drum; nextTask();   // → けいさん
-      const m2 = mode, a2 = taskActive();
-      return { m0, m1, a1, d1, m2, a2, on: taskOn,
-               kinds: [...new Set(list.map(i => TASKS[i].k || 'calc'))].sort() };
-    });
-    t.eq(r, { m0:'+', m1:'clock', a1:true, d1:true, m2:'+', a2:true, on:true, kinds:['calc','clock','pick'] },
-         'まぜまぜで 画面が きりかわらない');
-  },
-
-  'いちらん：しゅるいを えらぶと その レベルだけ ならび、マスを押すと その画面で はじまる': async t => {
-    const p = await t.open();
-    const r = await p.evaluate(() => {
-      taskOn = true; startTask(0); openStages(); drawStageSelect(ctx, 0);
-      const cats = stageBtns.filter(b => b.val === 'cat').map(b => b.v);
-      const tap = b => handleStageTap(b.x + b.w/2, b.y + b.h/2, 'm');
-      tap(stageBtns.find(b => b.val === 'cat' && b.v === 'clock'));
-      drawStageSelect(ctx, 0);
-      const gos = stageBtns.filter(b => b.val === 'go');
-      const allClock = gos.every(b => catOf(b.idx) === 'clock');
-      tap(gos[0]);
-      return { cats, n: gos.length, allClock, open: stageOpen, mode, idx: taskIdx === catTasks('clock')[0] };
-    });
-    t.eq(r, { cats:['calc','clock','mix'], n:40, allClock:true, open:false, mode:'clock', idx:true },
-         'いちらんの しゅるいの切りかえが おかしい');
-  },
-
-  'いちらん：どの画面でも しゅるいの段が 名前の札・マスと重ならず、マスは画面に収まる': async t => {
-    for(const [w, h] of [[393, 780], [375, 667], [780, 393], [667, 375]]){
-      const p = await t.open({ width:w, height:h });
-      for(const cat of ['calc', 'clock', 'mix']){
-        const r = await p.evaluate(c => {
-          taskOn = true; openStages(); stageCat = c; drawStageSelect(ctx, 0);
-          const cats = stageBtns.filter(b => b.val === 'cat'), prof = stageBtns.filter(b => b.val === 'prof');
-          const gos = stageBtns.filter(b => b.val === 'go'), head = stageBtns.filter(b => b.val === 'mode' || b.val === 'rec' || b.val === 'close');
-          const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-          const over = cats.some(c => prof.concat(gos, head).some(o => hit(c, o)));
-          const bottom = Math.max(...gos.map(b => b.y + b.h));
-          const right = Math.max(...cats.map(b => b.x + b.w));
-          return { over, fits: bottom <= sh && right <= sw };
-        }, cat);
-        t.eq(r, { over:false, fits:true }, `${w}x${h} ${cat} で いちらんが 重なる／はみ出す`);
-      }
-    }
-  },
-
-  'とけいで クリアしても 止まらず、演出のあと つぎへ進む': async t => {
-    const p = await t.open();
-    const i = await find(p, "x.k==='clock' && x.to==='3:47'");
-    await p.evaluate(i => { taskOn = true; startTask(i); }, i);
+    await p.evaluate(() => { taskOn = true; setMix(true); startTask(7); });
+    await start(p, { k:'clock', to:'3:47' });
     await setHands(p, 3*60 + 47);
     await t.sleep(400);
     t.ok(await p.evaluate(() => winFx && winFx.center && rainbowTime() >= 0), 'とけいの演出が出ていない');
     await t.sleep(3000);
-    t.eq(await p.evaluate(i => [taskIdx === i + 1, mode, taskDone], i), [true, 'clock', false], 'つぎへ進まない');
+    t.eq(await p.evaluate(() => [taskIdx, !!genTask, isCalcMode(), taskDone]), [8, false, true, false], 'つぎの けいさんへ 進まない');
   },
 
-  'おだいの ならびを かえたとき：けいさんの記録は のこり、とけい・まぜまぜの 古い記録は けす。虹の印は のこる': async t => {
-    const old = { v:2, on:false, cur:'hinata', p:{
-      hinata:{ idx:75, cleared:{5:true, 75:true}, logs:{5:[{k:'new',a:1}], 75:[{k:'new',a:1}]}, rainbow:{75:true},
-               beg:{ idx:3, cleared:{2:true, 90:true}, logs:{}, rainbow:{90:true} } } } };
-    const p = await t.open({ storage:{ 'nbg.task.v1': JSON.stringify(old) } });
-    const r = await p.evaluate(() => {
-      const h = taskStore.hinata;
-      return { c: Object.keys(h.cleared), l: Object.keys(h.logs), idx: h.idx,
-               bc: Object.keys(h.beg.cleared), br: Object.keys(h.beg.rainbow) };
-    });
-    t.eq(r, { c:['5'], l:['5'], idx:0, bc:['2'], br:[] }, '引っこしで 記録の のこりかたが ちがう');
-    // あたらしい版で 保存した 虹の印（ふつう）は、開きなおしても のこる
-    const i = await find(p, "x.k==='clock' && x.to==='3:47'");
-    await p.evaluate(i => { setProfile(PROFILES.findIndex(x => x.id === 'hinata')); taskOn = true; startTask(i); }, i);
-    await setHands(p, 3*60 + 47);
-    await p.reload(); await p.waitForFunction(() => typeof drawFrame === 'function');
-    t.eq(await p.evaluate(i => [!!taskStore.hinata.cleared[i], !!(taskStore.hinata.rainbow || {})[i]], i), [true, true],
-         '開きなおすと とけいの クリア／虹の印が きえる');
-  },
-
-
+  // ── よんで えらぶ（ドラムロール）──
   'よんで えらぶ：はりは こたえの時こくで止まり、さわっても動かない。ドラムは 12:00 から': async t => {
     const p = await t.open();
-    const i = await find(p, "x.k==='pick' && x.to==='4:37'");
-    const r = await p.evaluate(i => {
-      taskOn = true; startTask(i);
+    await start(p, { k:'pick', to:'4:37' });
+    const r = await p.evaluate(() => {
       const before = clockT, g = getClockGeom(), m = handPos(g, clockMin()/60, g.R*0.78);
       handleStart(m.x, m.y, 'm'); handleMove(m.x + 40, m.y + 60, 'm'); handleEnd(m.x + 40, m.y + 60, 'm');
       return { mode, before, after: clockT, drum: drumTime(), lists: drum.lists.map(l => l.length) };
-    }, i);
+    });
     t.eq(r, { mode:'clock', before:277, after:277, drum:720, lists:[12,6,10] }, 'よんで えらぶ の はじまりが おかしい');
   },
 
   'ドラム：はじいて まわすと 数がかわり、上下を ちょんと押すと 1つずつ かわる': async t => {
     const p = await t.open();
-    const i = await find(p, "x.k==='pick' && x.to==='4:37'");
-    const r = await p.evaluate(i => {
-      taskOn = true; startTask(i);
+    await start(p, { k:'pick', to:'4:37' });
+    const r = await p.evaluate(() => {
       const dg = drumGeom(), w = dg.wheels[2], cx = w.x + w.w/2, cy = w.y + w.h/2;
-      // 一のくらいを 3だん 上へ はじく（ゆっくり）
-      handleStart(cx, cy, 'm');
+      handleStart(cx, cy, 'm');                          // 一のくらいを 3だん 上へ はじく（ゆっくり）
       for(let k=1;k<=10;k++) handleMove(cx, cy - dg.rowH*3*k/10, 'm');
-      drum.drag.v = 0;                                     // いきおいは のせない
+      drum.drag.v = 0;
       handleEnd(cx, cy - dg.rowH*3, 'm');
       const a = drumVal(2);
-      // じ の ドラムの 下を ちょんと押す → 12 の つぎの 1
-      const h = dg.wheels[0];
+      const h = dg.wheels[0];                            // じ の ドラムの 下を ちょんと押す → 12 の つぎの 1
       handleStart(h.x + h.w/2, h.y + h.h - 6, 'm'); handleEnd(h.x + h.w/2, h.y + h.h - 6, 'm');
       const b = drumVal(0);
       handleStart(h.x + h.w/2, h.y + 6, 'm'); handleEnd(h.x + h.w/2, h.y + 6, 'm');
       handleStart(h.x + h.w/2, h.y + 6, 'm'); handleEnd(h.x + h.w/2, h.y + 6, 'm');
       return { a, b, c: drumVal(0) };
-    }, i);
+    });
     t.eq(r, { a:3, b:1, c:11 }, 'ドラムが おもったとおりに まわらない');
   },
 
   'よんで えらぶ：ちがうと ゆれて できない。あっていれば できた。1かいめなら 虹': async t => {
     const p = await t.open();
-    const i = await find(p, "x.k==='pick' && x.to==='4:37'");
-    const press = () => p.evaluate(() => { const b = drumGeom().btn; handleStart(b.x + b.w/2, b.y + b.h/2, 'm'); handleEnd(b.x + b.w/2, b.y + b.h/2, 'm'); });
-    await p.evaluate(i => { taskOn = true; startTask(i); drumSet(4, 37); }, i);
-    await press();
+    await start(p, { k:'pick', to:'4:37' });
+    await p.evaluate(() => drumSet(4, 37));
+    await press(p);
     t.eq(await p.evaluate(() => [taskDone, !!winFx.praise.rainbow, taskLog.length]), [true, true, 1], '4:37 で できたにならない');
-    await p.evaluate(i => { startTask(i); drumSet(7, 22); }, i);        // みじかいはり と ながいはり を とりちがえた
-    await press();
+    await start(p, { k:'pick', to:'4:37' });
+    await p.evaluate(() => drumSet(7, 22));                 // みじかいはり と ながいはり を とりちがえた
+    await press(p);
     t.eq(await p.evaluate(() => [taskDone, drum.miss, drum.shake > 0]), [false, 1, true], 'ちがうのに できたになった');
     await p.evaluate(() => drumSet(4, 37));
-    await press();
+    await press(p);
     t.eq(await p.evaluate(() => [taskDone, !!(winFx.praise && winFx.praise.rainbow)]), [true, false],
          '2かいめで できた／虹は出ない のはず');
   },
 
-  'ごごの じこく：じの ドラムは 0〜23。1:18 では だめで 13:18 で できた': async t => {
+  'ごごを よむ：じの ドラムは 0〜23。1:18 では だめで 13:18 で できた。12じ台は 12': async t => {
     const p = await t.open();
-    const i = await find(p, "x.k==='pick' && x.to==='13:18'");
-    const press = () => p.evaluate(() => drumAnswer());
-    const r0 = await p.evaluate(i => { taskOn = true; startTask(i); return { n: drum.lists[0].length, clockT, tail: currentTask().c.tail }; }, i);
-    t.eq(r0, { n:24, clockT:78, tail:'ごごの とけい。デジタルで なんじ？' }, 'ごごの じこく の はじまりが おかしい');
-    await p.evaluate(() => drumSet(1, 18)); await press();
+    await start(p, { k:'pick', to:'13:18' });
+    t.eq(await p.evaluate(() => [drum.lists[0].length, clockT, currentTask().c.tail]), [24, 78, 'ごごの とけい。デジタルで なんじ？'],
+         'ごごを よむ の はじまりが おかしい');
+    await p.evaluate(() => { drumSet(1, 18); drumAnswer(); });
     t.eq(await p.evaluate(() => taskDone), false, '1:18 で できたになった（ごごなので 13:18）');
-    await p.evaluate(() => drumSet(13, 18)); await press();
+    await p.evaluate(() => { drumSet(13, 18); drumAnswer(); });
     t.eq(await p.evaluate(() => taskDone), true, '13:18 で できたにならない');
+    await start(p, { k:'pick', to:'12:30' });
+    await p.evaluate(() => { drumSet(12, 30); drumAnswer(); });
+    t.eq(await p.evaluate(() => [drum.lists[0].length, taskDone]), [12, true], '12:30 が よめない');
   },
 
   'よんで えらぶ：ドラムが どの画面でも 文字盤と重ならず、下のパネルより上に収まる': async t => {
     for(const [w, h] of [[393, 780], [375, 667], [430, 932], [780, 393]]){
       const p = await t.open({ width:w, height:h });
+      await start(p, { k:'pick', to:'4:37' });
       const r = await p.evaluate(() => {
-        taskOn = true; startTask(TASKS.findIndex(x => x.k==='pick')); drum.miss = 1;   // 「ちがうよ」も出す
+        drum.miss = 1;                                     // 「ちがうよ」も出す
         const g = getClockGeom(), dg = drumGeom();
         const all = dg.wheels.concat([dg.btn]);
         return { belowDial: dg.top >= g.cy + g.R, fits: dg.top + dg.H + 50 <= sh - bottomPanelH() + 4,
@@ -313,14 +415,30 @@ module.exports = {
 
   'よんで えらぶ：できたあとも、ドラムの場所に 時こくの文字を 重ねない': async t => {
     const p = await t.open();
-    const i = await find(p, "x.k==='pick' && x.to==='2:48'");
-    const r = await p.evaluate(i => {
-      taskOn = true; startTask(i); drumSet(2, 48); drumAnswer();
+    await start(p, { k:'pick', to:'2:48' });
+    const r = await p.evaluate(() => {
+      drumSet(2, 48); drumAnswer();
       const got = [], ft = ctx.fillText, dg = drumGeom();
       ctx.fillText = function(s, x, y){ got.push({ s:String(s), y }); return ft.apply(this, arguments); };
       try{ drawClockMode(ctx, 0); } finally { ctx.fillText = ft; }
       return { done: taskDone, over: got.filter(g => /\d+:\d\d|時/.test(g.s) && g.y >= dg.top - 20 && g.y <= dg.top + dg.H + 20).map(g => g.s) };
-    }, i);
+    });
     t.eq(r, { done:true, over:[] }, 'ドラムに 文字が かさなっている');
+  },
+
+  'いちらん：どの画面でも けいさん／まぜまぜ の段が 名前の札・マスと重ならず、マスは画面に収まる': async t => {
+    for(const [w, h] of [[393, 780], [375, 667], [780, 393], [667, 375]]){
+      const p = await t.open({ width:w, height:h });
+      const r = await p.evaluate(() => {
+        taskOn = true; openStages(); drawStageSelect(ctx, 0);
+        const cats = stageBtns.filter(b => b.val === 'mix'), prof = stageBtns.filter(b => b.val === 'prof');
+        const gos = stageBtns.filter(b => b.val === 'go'), head = stageBtns.filter(b => b.val === 'mode' || b.val === 'rec' || b.val === 'close');
+        const hit = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+        const over = cats.some(c => prof.concat(gos, head).some(o => hit(c, o)));
+        const bottom = Math.max(...gos.map(b => b.y + b.h));
+        return { over, fits: bottom <= sh && Math.max(...cats.map(b => b.x + b.w)) <= sw };
+      });
+      t.eq(r, { over:false, fits:true }, `${w}x${h} で いちらんが 重なる／はみ出す`);
+    }
   },
 };

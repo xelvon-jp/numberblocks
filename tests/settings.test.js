@@ -92,7 +92,7 @@ module.exports = {
     await tap('calc');
     t.eq(await p.evaluate(() => [taskOn, isCalcMode()]), [false, true], 'けいさんタブで おだいが おわらない');
     // タブの光りかたは おだい中は「おだい」だけ
-    const lit = await p.evaluate(() => { taskOn = true; startTask(catTasks('clock')[0]); return mode; });
+    const lit = await p.evaluate(() => { taskOn = true; startClockTask({ k:'clock', to:'3:00' }); return mode; });
     t.eq(lit, 'clock', 'とけいの おだいで 画面が とけいに ならない');
     // せっていに おだいの ON/OFF は もう無い
     await tapGear(p);
