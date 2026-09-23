@@ -260,4 +260,29 @@ module.exports = {
     await t.sleep(2400);                               // ふつうの演出（2秒）は もう終わっている
     t.eq(await p.evaluate(() => rainbowTime() > 0), true, '2秒すぎで 虹が消えてしまった');
   },
+
+  '「レインボー🌈クリア！」の文字は 虹といっしょに出る': async t => {
+    const p = await t.open({ who:'hinata' });
+    await tapMode(p, true);
+    await p.evaluate(() => {
+      taskOn = true; setMode('+'); startTask(20);
+      spawnBlock(3); spawnBlock(7);
+    });
+    await t.sleep(900);
+    await p.evaluate(() => { fuseBlocks(blocks[0], blocks[1]); checkTask(); });
+    // スタンプとカードを描いて、虹の文字が描かれたかを数える
+    const words = () => p.evaluate(() => {
+      let n = 0; const orig = drawRainbowWords;
+      drawRainbowWords = function(...a){ n++; return orig.apply(this, a); };
+      try{ drawWinStamp(ctx); drawTaskCard(ctx, 0); } finally { drawRainbowWords = orig; }
+      return { n, rt: rainbowTime() };
+    });
+    await t.sleep(120);
+    const air = await words();
+    t.eq(air, { n:0, rt:-1 }, '跳ねている最中に もう虹の文字が出ている');
+    await t.sleep(1100);
+    const land = await words();
+    t.ok(land.rt > 0, '着地しても 虹が出ていない');
+    t.eq(land.n, 2, '虹が出たのに スタンプとカードの両方に 虹の文字が出ていない');
+  },
 };

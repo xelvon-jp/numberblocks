@@ -2417,7 +2417,7 @@ function drawWinLines(ctx){
 function drawWinStamp(ctx){
   if(!winFx) return;
   const t = winFx.t;
-  const fade = Math.min(1, Math.max(0, (WIN_MS-t)/500));
+  const fade = Math.min(1, Math.max(0, ((winFx.life || WIN_MS) - t)/500));
   // 出るときにちょっと行き過ぎてから戻る（ぽんっと押した感じ）
   const e = Math.min(1, t/190);
   const sc = 1 + 0.55*(1-e)*(1-e) - 0.22*Math.sin(e*Math.PI);
@@ -2435,7 +2435,14 @@ function drawWinStamp(ctx){
   if(pr){
     ctx.font='bold ' + (pr.big ? 24 : 22) + 'px sans-serif';
     if(pr.rainbow){
-      drawRainbowWords(ctx, 0, 32, pr.big ? 24 : 22, 7);
+      const rt = rainbowTime();                     // 着地して虹が出るまでは まだ出さない
+      if(rt >= 0){
+        const e2 = Math.min(1, rt/190);
+        const s2 = 1 + 0.55*(1-e2)*(1-e2) - 0.22*Math.sin(e2*Math.PI);
+        ctx.save(); ctx.translate(0, 32); ctx.scale(s2, s2);
+        drawRainbowWords(ctx, 0, 0, pr.big ? 24 : 22, 7);
+        ctx.restore();
+      }
     } else {
       ctx.strokeStyle='#fff'; ctx.lineWidth=7; ctx.strokeText(pr.text,0,32);
       ctx.fillStyle = pr.color;
@@ -2578,7 +2585,7 @@ function drawTaskCard(ctx, t){
     ctx.textAlign='left'; ctx.fillStyle='#6b4a00'; ctx.font='bold 19px sans-serif';
     if(begMode()){
       // ビギナーは手数を出さない。レインボークリアのときだけ 虹色でひとこと
-      const rb = lastRainbow;
+      const rb = lastRainbow && (!winFx || rainbowTime() >= 0);
       ctx.fillText('できた！  ' + task.n, r.x+14, rb ? r.y+19 : r.y+25);
       if(rb){
         ctx.font='bold 13px sans-serif';
