@@ -39,7 +39,10 @@
     8: [ [[[0.8,0.15],[0.5,0],[0.2,0.15],[0.25,0.35],[0.5,0.48],[0.8,0.65],[0.8,0.88],[0.5,1],[0.2,0.88],[0.2,0.65],[0.5,0.48],[0.75,0.35],[0.8,0.15]]],
          [ell(0.5,0.25,0.26,0.25,Math.PI/2, Math.PI*2.5, 16), ell(0.5,0.74,0.32,0.26,-Math.PI/2, Math.PI*1.5, 16)] ],
     9: [ [[[0.82,0.28],[0.6,0.02],[0.3,0.05],[0.15,0.28],[0.35,0.5],[0.7,0.45],[0.85,0.25],[0.82,1]]],
-         [[[0.8,0.25],[0.5,0],[0.2,0.2],[0.4,0.45],[0.8,0.3]],[[0.8,0.1],[0.8,1]]] ]
+         [[[0.8,0.25],[0.5,0],[0.2,0.2],[0.4,0.45],[0.8,0.3]],[[0.8,0.1],[0.8,1]]],
+         // 小さな まる と、ななめに ながく のびる しっぽ（子どもに おおい）
+         [[[0.95,0.1],[0.75,0],[0.45,0.02],[0.3,0.14],[0.35,0.26],[0.65,0.26],[0.92,0.16],[0.95,0.05],[0.9,0.2],[0.7,0.5],[0.45,0.8],[0.1,1]]],
+         [[[0.95,0.1],[0.75,0],[0.45,0.02],[0.3,0.14],[0.35,0.26],[0.65,0.26],[0.92,0.16],[0.95,0.05]],[[0.9,0.2],[0.7,0.5],[0.45,0.8],[0.1,1]]] ]
   };
   const MIRROR = [2,3,4,5,6,7,9];      // 左右 はんたいに 書くと べつの 形に なる 数字
 
@@ -110,7 +113,7 @@
       TEMPLATES.push({ digit:+d, mirrored:false, cloud: normalize(v) });
       if(MIRROR.includes(+d)) TEMPLATES.push({ digit:+d, mirrored:true, cloud: normalize(flip(v)) });
     }
-    for(const s of loadSamples()) TEMPLATES.push({ digit:s.digit, mirrored:false, cloud:s.cloud, mine:true });
+    for(const s of loadSamples()) TEMPLATES.push({ digit:s.digit, mirrored:false, cloud:s.cloud, mine:true, loop: s.loop });
   }
   function loadSamples(){
     try{ const v = JSON.parse((root.localStorage && root.localStorage.getItem(KEY)) || '[]'); return Array.isArray(v) ? v : []; }
@@ -118,6 +121,31 @@
   }
   function saveSamples(list){ try{ root.localStorage && root.localStorage.setItem(KEY, JSON.stringify(list)); }catch(e){} }
 
+  // わっか が あるか（9・6・0・8 には ある、7・1 には ない）。線が じぶんと 交わるか、書きはじめと おわりが くっついたら わっか
+  function hasLoop(strokes){
+    const pts = toPoints(strokes); if(pts.length < 3) return false;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for(const p of pts){ x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y); }
+    const size = Math.max(x1 - x0, y1 - y0) || 1;
+    const cross = (a, b, c, d) => { const o = (p, q, r) => (q.x - p.x)*(r.y - p.y) - (q.y - p.y)*(r.x - p.x);
+      return o(a, b, c)*o(a, b, d) < 0 && o(c, d, a)*o(c, d, b) < 0; };
+    for(const s0 of strokes){
+      const s = resample(s0.map(p => ({ x: p.x !== undefined ? p.x : p[0], y: p.y !== undefined ? p.y : p[1], id:0 })), 40);
+      if(!s) continue;
+      if(pathLength(s) > size*1.2 && dist(s[0], s[s.length - 1]) < size*0.12) return true;
+      for(let i=0;i<s.length - 1;i++) for(let j=i+2;j<s.length - 1;j++) if(cross(s[i], s[i+1], s[j], s[j+1])) return true;
+    }
+    return false;
+  }
+  // わっかの あるなしが あわないときに たす 点。1・3・5・7 に わっかは まず ない。9 は ふつう ある（ひらいた 9 も あるので かるく）。
+  // 0・2・4・6・8 は 書きかたで どちらも あるので 見ない。その子の お手本は その字の とおりに くらべる
+  const LOOP_NO = [1,3,5,7], LOOP_W = 0.3, LOOP_W9 = 0.15;
+  function loopPenalty(t, loop){
+    if(t.mine) return t.loop === undefined || t.loop === loop ? 0 : LOOP_W;
+    if(loop && LOOP_NO.includes(t.digit)) return LOOP_W;
+    if(!loop && t.digit === 9) return LOOP_W9;
+    return 0;
+  }
   // 書いた じゅんばん どおりに 点を ならべて くらべる（書きじゅん・線の むき も 見る）。
   // 5 と 6、7 と 9、0 と 6 のように 形の にている 字は、書きかたの ほうが ちがいが 大きい
   function orderDistance(a, b){ let d = 0; for(let i=0;i<N;i++) d += dist(a[i], b[i]); return d / N; }
@@ -125,10 +153,12 @@
   const ORDER_RATIO = 1.25;    // 書きじゅんが これだけ はっきり 2ばんに にていたら 2ばんに する
   function recognize(strokes){
     const c = normalize(strokes); if(!c) return null;
+    const loop = hasLoop(strokes);
     // 数字（かがみもじは べつ）ごとに いちばん にている お手本
     const by = {};
     for(const t of TEMPLATES){
       const k = t.digit + (t.mirrored ? 'm' : ''), r = score(c, t);
+      r.s += loopPenalty(t, loop);   // えらぶ ときだけ（よめない の はんていには つかわない）
       if(!by[k]) by[k] = { digit:t.digit, mirrored:t.mirrored, score:r.g, s:r.s, list:[] };
       by[k].list.push(t);
       if(r.s < by[k].s){ by[k].s = r.s; by[k].score = r.g; }
@@ -154,7 +184,7 @@
   }
   function learn(digit, strokes){
     const c = normalize(strokes); if(!c) return false;
-    const list = loadSamples(); list.push({ digit, cloud:c });
+    const list = loadSamples(); list.push({ digit, cloud:c, loop: hasLoop(strokes) });
     saveSamples(list.slice(-80)); build(); return true;
   }
   function forget(){ saveSamples([]); build(); }

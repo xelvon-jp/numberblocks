@@ -159,6 +159,18 @@ module.exports = {
     await p.waitForFunction(() => S.done, null, { timeout: 10000 });
   },
 
+  'よみとり：小さな まるに ながい しっぽの 9 を 7 と まちがえない（96−57 で あった 字）': async t => {
+    const p = await openH(t, 'write', 'sub');
+    const r = await p.evaluate(() => {
+      const d = pts => { const o = []; for(let i=0;i<pts.length-1;i++) for(let k=0;k<8;k++) o.push({ x:pts[i][0] + (pts[i+1][0]-pts[i][0])*k/8, y:pts[i][1] + (pts[i+1][1]-pts[i][1])*k/8 }); return o; };
+      const one = [[720,1220],[690,1195],[640,1200],[605,1240],[600,1290],[660,1295],[720,1270],[730,1240],[715,1265],[690,1380],[660,1500],[620,1610],[570,1680],[550,1715]];
+      const two = [one.slice(0, 8), one.slice(8)];
+      const seven = [[600,1200],[730,1200],[690,1380],[640,1600]];
+      return [Ink.recognize([d(one)]), Ink.recognize(two.map(d)), Ink.recognize([d(seven)])].map(q => q && q.digit);
+    });
+    t.eq(r, [9, 9, 7], 'しっぽの ながい 9 が よめない');
+  },
+
   'E かく：12+39 を 指で 書く（線の上は メモ → 一 → 十）': async t => {
     const p = await openH(t, 'write', 'add');
     await p.evaluate(() => setProblem('+', 12, 39));
