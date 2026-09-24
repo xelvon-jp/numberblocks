@@ -104,7 +104,7 @@ function newProblem(fixed){
         res:{ o:null, t:null, h:null }, miss:0, done:false, doneAt:0,
         drum: [0,0,0], picked:null, bad:new Set(), shake:{},
         msg:'', msgAt:0, hideOnesB:false, cells:null, memo:[], wmsg:'', pulse:null };
-  S.cells = makeCells();
+  S.cells = makeCells(); cele = null;
   clearTimeout(inkTimer); inkTimer = null; inkCell = null; pen = null;
   drag = null; anims = []; parts = []; busy = 0; askCol = null; askResolve = null;
   choices = null;
@@ -293,6 +293,7 @@ function finish(){
   const l = L();
   for(let i=0;i<60;i++) burst(W/2, (l.rooms.t.y + l.bottom)/2, 1);
   say(S.miss ? 'できた！' : 'レインボー🌈クリア！');
+  if(modeId === 'write') celebrateWrite();
 }
 
 // ─── ドラッグ（A）──────────────────────────────────────────────
@@ -574,17 +575,141 @@ function drawWrite(l){
     ctx.fillStyle = S.done ? '#c0398a' : S.wunk ? '#c07a10' : S.wmsg ? '#c8322f' : '#2b3a52'; ctx.fillText(s, W/2, y);
   });
   ctx.restore();
-  // できた！ 式の ところに こたえの キャラが 出て とびはねる（こたえの 行は 見えたまま）
+  // できた！ 式の ところで キャラが 位ごとに わかれて 計算し、こたえの キャラに なる（こたえの 行は 見えたまま）
   if(S.done){
-    const e = Math.min(1, (t - S.doneAt)/400), sp = blockSpec(P.ans);
-    const top = wl.py + 4, bot = wl.yLine - 4;
-    ctx.save(); ctx.fillStyle = 'rgba(255,255,255,' + 0.8*e + ')'; ctx.beginPath(); ctx.roundRect(wl.px, wl.py, wl.pw, bot - wl.py, [16, 16, 0, 0]); ctx.fill(); ctx.restore();
-    const bs = Math.min(15, (bot - top - 40)/sp.rows, (wl.pw*0.7)/sp.cols);
-    const by = bot - 6 - Math.abs(Math.sin((t - S.doneAt)*0.006))*18*e;
-    ctx.save(); ctx.globalAlpha = e;
-    drawNumberblock(ctx, P.ans, W/2 - sp.cols*bs/2, by - sp.rows*bs, bs, { t, animate:true });
+    const e = Math.min(1, (t - S.doneAt)/400);
+    ctx.save(); ctx.fillStyle = 'rgba(255,255,255,' + 0.85*e + ')'; ctx.beginPath(); ctx.roundRect(wl.px, wl.py, wl.pw, wl.yLine - 4 - wl.py, [16, 16, 0, 0]); ctx.fill(); ctx.restore();
+    drawCele(t);
+  }
+}
+
+// ─── できた！の 計算アニメ（E かく）──────────────────────────────
+// 16 + 74：16 と 74 → 10・6 と 70・4 に わかれる → 6 と 4 が がったいして 10 → 10 は 十のほうへ
+//          → 10 と 70 と 10 が がったいして 90 → こたえ 90
+// 52 − 27：52 と 27 → 50・2 と 20・7 → 50 から 10 を 一のほうへ（12）→ 7 が 12 から 7 を つれていく → 5
+//          → 20 が 40 から 20 を つれていく → 20 → こたえ 25
+let cele = null;   // { id, actors:[], bs, ground }
+function celeActor(n, x, y){ const a = { n, x, y, fx:x, fy:y, t0:0, dur:0, hop:0, alpha:1, fadeAt:0, pop:0 }; cele.actors.push(a); return a; }
+function celePos(a, t){
+  if(!a.dur) return { x:a.x, y:a.y };
+  const k = Math.min(1, (t - a.t0)/a.dur), e = k < 0.5 ? 2*k*k : 1 - Math.pow(-2*k + 2, 2)/2;
+  return { x: a.fx + (a.x - a.fx)*e, y: a.fy + (a.y - a.fy)*e - a.hop*Math.sin(k*Math.PI) };
+}
+function celeMove(a, x, y, dur, hop){ const p = celePos(a, now()); a.fx = p.x; a.fy = p.y; a.x = x; a.y = y; a.t0 = now(); a.dur = dur; a.hop = hop || 0; }
+function celeDrop(a){ cele.actors.splice(cele.actors.indexOf(a), 1); }
+function celeWidth(n){ return n > 0 ? blockSpec(n).cols*cele.bs : 0; }
+// ならべる：まんなか cx に、はばに あわせて よこに ならべた ときの それぞれの まんなか
+function celeRow(cx, ns, gap){
+  const ws = ns.map(celeWidth), tot = ws.reduce((s, w) => s + w, 0) + gap*(ns.length - 1);
+  let x = cx - tot/2; return ws.map(w => { const c = x + w/2; x += w + gap; return c; });
+}
+function drawCele(t){
+  if(!cele) return;
+  for(const a of cele.actors){
+    if(a.n <= 0) continue;
+    const p = celePos(a, t), sp = blockSpec(a.n);
+    const pop = a.pop && t - a.pop >= 0 && t - a.pop < 300 ? 1 + 0.15*Math.sin((t - a.pop)/300*Math.PI) : 1;
+    const bs = cele.bs*(a.big || 1)*pop;
+    const bounce = a.bounce && t > a.bounce ? Math.abs(Math.sin((t - a.bounce)*0.006))*16 : 0;
+    ctx.save();
+    ctx.globalAlpha = a.fadeAt && t > a.fadeAt ? Math.max(0, 1 - (t - a.fadeAt)/350) : a.alpha;
+    drawNumberblock(ctx, a.n, p.x - sp.cols*bs/2, p.y - bounce - sp.rows*bs, bs, { t, animate:true });
     ctx.restore();
   }
+}
+async function celebrateWrite(){
+  const wl = WL(), myP = P, id = {};
+  cele = { id, actors:[], bs: 6, ground: wl.yLine - 10 };
+  const ok = () => cele && cele.id === id && P === myP;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  // ブロックの 大きさ：十のほうに 2ひき（いちばん ひろくて 9れつ ずつ）＋ 一のほう、高さは 10だん
+  const G = cele.ground, H0 = G - (wl.py + 30);
+  const aT = Math.floor(P.a/10)*10, aO = P.a%10, bT = Math.floor(P.b/10)*10, bO = P.b%10;
+  // この もんだいで いちばん よこに ひろがる ところ（ふたり ならぶ、十のほうに 2〜3びき）に あわせる
+  const cols = n => n > 0 ? blockSpec(n).cols : 0;
+  const wTens = cols(aT) + cols(bT) + 1, wBoth = cols(P.a) + cols(P.b);
+  cele.bs = Math.max(3, Math.min(12, H0/11, (wl.pw*0.56 - 36)/wTens, (wl.pw*0.9 - 30)/wBoth));
+  const xT = wl.px + wl.pw*0.34, xO = wl.px + wl.pw*0.8, xC = W/2;
+  const poof = (a, n) => { const p = celePos(a, now()); burst(p.x, p.y - blockSpec(Math.max(1, a.n)).rows*cele.bs/2, n || 10); };
+  // 1) ふたりが ならんで とうじょう
+  const [xa, xb] = celeRow(xC, [P.a, P.b], 26);
+  const A = celeActor(P.a, xa, G), B = celeActor(P.b, xb, G);
+  A.pop = B.pop = now();
+  await wait(900); if(!ok()) return;
+  // 2) 位ごとに わかれる（十は 左、一は 右）
+  const [xat, xbt] = celeRow(xT, [aT, bT], 14), [xao, xbo] = celeRow(xO, [aO, bO], 10);
+  const At = celeActor(aT, xa, G), Ao = celeActor(aO, xa, G), Bt = celeActor(bT, xb, G), Bo = celeActor(bO, xb, G);
+  celeDrop(A); celeDrop(B);
+  celeMove(At, xat, G, 650, 30); celeMove(Ao, xao, G, 650, 50); celeMove(Bt, xbt, G, 650, 30); celeMove(Bo, xbo, G, 650, 50);
+  await wait(1000); if(!ok()) return;
+  let T, O;
+  if(P.op === '+'){
+    // 3) 一のくらい：がったい
+    celeMove(Ao, xO, G, 450, 20); celeMove(Bo, xO, G, 450, 20);
+    await wait(480); if(!ok()) return;
+    celeDrop(Ao); celeDrop(Bo);
+    O = celeActor(aO + bO, xO, G); O.pop = now(); poof(O, 14);
+    await wait(700); if(!ok()) return;
+    // 4) 10 に なったら 十のほうへ（くり上がり）
+    let C = null;
+    if(O.n >= 10){
+      const rest = O.n - 10; celeDrop(O);
+      C = celeActor(10, xO, G); O = celeActor(rest, xO, G);
+      const [, , xc] = celeRow(xT, [aT, bT, 10], 14);
+      celeMove(At, celeRow(xT, [aT, bT, 10], 14)[0], G, 400); celeMove(Bt, celeRow(xT, [aT, bT, 10], 14)[1], G, 400);
+      celeMove(C, xc, G, 800, 70);
+      await wait(1000); if(!ok()) return;
+    }
+    // 5) 十のくらい：がったい
+    for(const q of [At, Bt, C]) if(q) celeMove(q, xT, G, 450, 20);
+    await wait(480); if(!ok()) return;
+    for(const q of [At, Bt, C]) if(q) celeDrop(q);
+    T = celeActor(aT + bT + (C ? 10 : 0), xT, G); T.pop = now(); poof(T, 18);
+    if(T.n > 100) T.big = Math.min(1, (G - wl.py - 30)/((10 + blockSpec(T.n - 100).rows + 1)*cele.bs));   // 100 を こえたら 高さに おさめる
+  } else {
+    // 3) ひけないので 十のほうから 10 を つれてくる（くり下がり）
+    celeDrop(At);
+    const At2 = celeActor(aT - 10, xat, G), K = celeActor(10, xat, G);
+    celeMove(K, xao - celeWidth(aO)/2 - celeWidth(10), G, 800, 70);
+    await wait(900); if(!ok()) return;
+    celeMove(K, xao, G, 300); celeMove(Ao, xao, G, 300);
+    await wait(330); if(!ok()) return;
+    celeDrop(K); celeDrop(Ao);
+    const Ao2 = celeActor(10 + aO, xao, G); Ao2.pop = now(); poof(Ao2, 10);
+    await wait(700); if(!ok()) return;
+    // 4) 一のくらい：下の 数が 上の 数から その ぶんを つれていく
+    const leave = async (from, taker, n, rest, x) => {
+      // taker が やってきて、from から n だけ つれて いっしょに でていく
+      celeMove(taker, x + celeWidth(from.n)/2 + celeWidth(n)/2 + 8, G, 450, 30);
+      await wait(480); if(!ok()) return null;
+      celeDrop(from);
+      const R = celeActor(rest, x - celeWidth(n)/2 - 4, G), X = celeActor(n, x + celeWidth(rest)/2 + 4, G);
+      R.pop = now(); poof(X, 8);
+      await wait(350); if(!ok()) return null;
+      celeMove(X, W + 60, G - 40, 900, 40); celeMove(taker, W + 60 + celeWidth(n), G - 40, 900, 40);
+      X.fadeAt = taker.fadeAt = now() + 500;
+      setTimeout(() => { if(ok()){ celeDrop(X); celeDrop(taker); } }, 950);
+      celeMove(R, x, G, 500);
+      return R;
+    };
+    O = await leave(Ao2, Bo, bO, 10 + aO - bO, xao); if(!O) return;
+    await wait(700); if(!ok()) return;
+    // 5) 十のくらい
+    T = await leave(At2, Bt, bT, aT - 10 - bT, xat); if(!T) return;
+  }
+  await wait(750); if(!ok()) return;
+  // 6) こたえの キャラに なる
+  celeMove(T, xC, G, 500, 20); if(O) celeMove(O, xC, G, 500, 20);
+  await wait(530); if(!ok()) return;
+  celeDrop(T); if(O) celeDrop(O);
+  const ans = celeActor(P.ans, xC, G);
+  const sp = blockSpec(P.ans);
+  // 100 より 大きい 数は 100 の うえに のこりが のる ので、その ぶんも 高さに いれる
+  const rowsH = P.ans > 100 ? 10 + blockSpec(P.ans - 100).rows + 1 : sp.rows;
+  ans.big = Math.min(1.5, (G - wl.py - 30)/(rowsH*cele.bs), (wl.pw*0.8)/(sp.cols*cele.bs));
+  ans.pop = now(); ans.bounce = now() + 300;
+  for(let i=0;i<50;i++) burst(xC, G - sp.rows*cele.bs*ans.big/2, 1);
+  cele.finished = true;
 }
 
 // ─── おぼえる：その子の 字を お手本に する ─────────────────────────

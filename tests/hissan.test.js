@@ -183,6 +183,9 @@ module.exports = {
     t.eq((await writeDigit(p, 'o', 1)).st, 'ok', '一のくらいの 1 が よめない');
     t.eq((await writeDigit(p, 't', 5)).st, 'ok', '十のくらいの 5 が よめない');
     t.eq(await p.evaluate(() => [S.done, S.miss, S.memo.length]), [true, 0, 1], 'おわらない');
+    // できた！：キャラが わかれて 計算し、さいごは こたえの キャラ
+    await p.waitForFunction(() => cele && cele.finished, null, { timeout: 12000 });
+    t.eq(await p.evaluate(() => [cele.actors.map(a => a.n), window.__err || '']), [[51], ''], 'さいごが こたえの キャラに ならない');
     // 書いた 字は きろくに のこる
     t.eq(await p.evaluate(() => Ink.records().map(r => [r.want, r.got])), [[1, 1], [5, 5]], 'きろく');
   },
@@ -226,6 +229,8 @@ module.exports = {
     t.ok(/1 から 8 は ひけない/.test(r), 'ぎゃくに ひいた ときの ことば: ' + r);
     await p.evaluate(() => { judgeCell('o', 3); judgeCell('t', 2); });
     t.eq(await p.evaluate(() => S.done), true, 'おわらない');
+    await p.waitForFunction(() => cele && cele.finished, null, { timeout: 12000 });
+    t.eq(await p.evaluate(() => [cele.actors.map(a => a.n), window.__err || '']), [[23], ''], 'ひき算の さいごが こたえの キャラに ならない');
     await p.evaluate(() => setProblem('+', 58, 67));
     t.eq(await p.evaluate(() => cellKeys().map(cellWant)), [5, 2, 1], '3けたの ます');
   },
