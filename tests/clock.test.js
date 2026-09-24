@@ -612,4 +612,61 @@ module.exports = {
     await t.sleep(600);
     t.eq(t.errors, [], 'ページで エラー');
   },
+
+  // ── ごほうびの パレード ──
+  'ごほうびの パレード：おだいが 5問 できるごとに、その5問で つくった数が 行進する（とけいも 数える）': async t => {
+    const p = await t.open({ who:'hinata' });
+    const r = await p.evaluate(() => {
+      taskOn = true; setMix(false); prize().n = 0; prize().made = [];
+      const calc = i => { startTask(i); spawnBlock(TASKS[i].n); checkTask(); };
+      calc(0); calc(1); calc(2);
+      startClockTask({ k:'clock', to:'3:47' }); clockT = 3*60 + 47; clockAnswer();
+      const before = { n: prize().n, parade: cast.some(a => a.kind === 'parade') };
+      startClockTask({ k:'pick', to:'9:00' }); drumSet(9, 0); drumAnswer();
+      const pr = cast.find(a => a.kind === 'parade');
+      const seen = []; const orig = drawCastChar;
+      drawCastChar = (ctx, n) => { seen.push(n); return 0; };
+      try{ for(let a=0;a<=pr.dur;a+=200) pr.draw(ctx, a); } finally { drawCastChar = orig; }
+      return { before, after: prize().n, members: [...new Set(seen)] };
+    });
+    t.eq(r.before, { n:4, parade:false }, '4問めまでに パレードが出た');
+    t.eq(r.after, 0, '5問めで かぞえなおしに ならない');
+    t.eq(await p.evaluate(() => { const f = prizeFull; startTask(3); return [f, prizeFull]; }), [true, false],
+         '5こ たまった おだいの あいだ ●●●●● の ままに ならない');
+    t.eq(r.members.sort((a,b) => a-b), [5, 6, 8, 9, 47], '5問で つくった数（5,6,8 と 47ふん・9じ）が 行進しない');
+  },
+
+  'ごほうびの パレード：もどすで とりけして また できても 2かい 数えない。人ごとに のこる': async t => {
+    const p = await t.open({ who:'hinata' });
+    await p.evaluate(() => {
+      taskOn = true; prize().n = 0; prize().made = [];
+      startTask(20); setMode('+'); spawnBlock(3); spawnBlock(7); fuseBlocks(blocks[0], blocks[1]); checkTask();
+      doUndo(); fuseBlocks(blocks[0], blocks[1]); checkTask();
+      saveTask();
+    });
+    t.eq(await p.evaluate(() => [taskDone, prize().n]), [true, 1], 'とりけして また できたら 2かい 数えた');
+    await p.reload(); await p.waitForFunction(() => typeof drawFrame === 'function');
+    t.eq(await p.evaluate(() => [taskStore.hinata.prize.n, (taskStore.papa.prize || { n:0 }).n]), [1, 0], '人ごとに のこらない');
+  },
+
+  'ごほうびの パレード：カードに ●○ で あと なんもんか 出る。大きな数も 10 より 大きくは ならない': async t => {
+    const p = await t.open({ who:'hinata' });
+    const r = await p.evaluate(() => {
+      taskOn = true; startTask(0); prize().n = 3;
+      let filled = 0, empty = 0;
+      const fa = ctx.fill, st = ctx.stroke;
+      const arcs = []; const ar = ctx.arc;
+      ctx.arc = function(x, y, rr){ arcs.push(rr); return ar.apply(this, arguments); };
+      ctx.fill = function(){ if(arcs.length && arcs[arcs.length-1] === 3.6){ filled++; arcs.pop(); } return fa.apply(this, arguments); };
+      ctx.stroke = function(){ if(arcs.length && arcs[arcs.length-1] === 3.6){ empty++; arcs.pop(); } return st.apply(this, arguments); };
+      try{ drawTaskCard(ctx, 0); } finally { ctx.fill = fa; ctx.stroke = st; ctx.arc = ar; }
+      castParade([1000, 144, 10]);
+      const pr = cast.find(a => a.kind === 'parade'), sizes = {};
+      const orig = drawCastChar;
+      drawCastChar = (ctx, n, x, y, bs) => { const sp = blockSpec(n); sizes[n] = Math.max(sizes[n] || 0, Math.max(sp.rows, sp.cols)*bs / bs * bs); return 0; };
+      try{ for(let a=0;a<pr.dur;a+=100) pr.draw(ctx, a); } finally { drawCastChar = orig; }
+      return { filled, empty, big: sizes[1000] <= sizes[10] * 1.01 && sizes[144] <= sizes[10] * 1.01 };
+    });
+    t.eq(r, { filled:3, empty:2, big:true }, '●○ か 大きな数の おおきさが ちがう');
+  },
 };

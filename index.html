@@ -444,6 +444,7 @@ try{
         const b = r.beg || {};
         taskStore[pr.id] = { idx:r.idx|0, cleared:r.cleared||{}, logs:r.logs||{}, rainbow:r.rainbow||{},
                              useBeg: !!r.useBeg, mix: !!r.mix,
+                             prize: (r.prize && r.prize.made) ? { n: r.prize.n|0, made: r.prize.made.slice(-5) } : { n:0, made:[] },
                              clock: (r.clock && r.clock.lv) ? { lv: Math.min(CLOCK_MAX, r.clock.lv|0) || 1, hist: r.clock.hist || [] }
                                                              : { lv:1, hist:[] },
                              beg: { idx:b.idx|0, cleared:b.cleared||{}, logs:b.logs||{}, rainbow:b.rainbow||{} } };
@@ -748,6 +749,7 @@ function checkWay(){
 
 // おだいを はじめるときに まっさらに もどすもの
 function resetTaskState(){
+  prizeCounted = false; prizeFull = false;
   cast = cast.filter(a => a.kind !== 'run');
   drumReset(currentTask());
   taskDone = false; taskLog = []; winFx = null;
@@ -2603,7 +2605,9 @@ function clockClear(){
             arc: rainbow ? rainbowArcPlace() : null, stampAt:{ cx:g.cx, cy:g.cy + g.R*0.38 },
             landedAt:null, life: rainbow ? RAINBOW_LIFE : WIN_MS };
   for(let i=0;i<70;i++) fxParticles.push(new Particle(g.cx, g.cy));
-  if(!lastLevelUp) castRun(t.c.goal);                // レベルアップのときは パレードだけにする
+  if(!lastLevelUp) castRun(t.c.goal);
+  const gm = t.c.goal % 60;
+  notePrize(gm || (Math.floor(t.c.goal/60) % 12) || 12);   // とけいは ふん（ちょうどなら じ）の キャラ                // レベルアップのときは パレードだけにする
 }
 // おだいの しゅるいに 画面を合わせる（開いたとき・人をかえたとき など）
 function followTaskMode(){
@@ -2853,9 +2857,11 @@ function paradePath(u){                               // u：みちの どこか
   const y0 = groundTopY() - arcPlayH()*o.y0, y1 = calcFloor() + o.y1;
   return { x: x0 + (x1 - x0)*e, y: y0 + (y1 - y0)*e, s: o.s0 + (o.s1 - o.s0)*e };
 }
-function castParade(){
+// nums を わたすと その数たちが 行進する（わたさなければ 1〜10）。
+// 大きな数（100 や 1000）も、10 より 大きくは ならないように ちぢめる。
+function castParade(nums){
   cast = cast.filter(a => a.kind !== 'parade');
-  const nums = [1,2,3,4,5,6,7,8,9,10];
+  nums = (nums && nums.length) ? nums.slice() : [1,2,3,4,5,6,7,8,9,10];
   const base = Math.max(5, Math.min(11, (calcFloor() - TAB_H) * 0.28 / 10));
   const o0 = paradeSettings();
   cast.push({ kind:'parade', t0: castNow(), dur: o0.sec*1000, draw(ctx, age){
@@ -2867,8 +2873,9 @@ function castParade(){
     for(let i = nums.length - 1; i >= 0; i--){
       const u = us[i];
       if(u < 0 || u > 1.05) continue;
-      const p = paradePath(Math.min(1, u)), n = nums[i], bs = base * p.s;
-      const hop = Math.abs(Math.sin(age*0.011 + i*0.8)) * bs*o.hop;
+      const p = paradePath(Math.min(1, u)), n = nums[i], sp = blockSpec(n);
+      const bs = base * p.s * Math.min(1, 10 / Math.max(sp.rows, sp.cols));
+      const hop = Math.abs(Math.sin(age*0.011 + i*0.8)) * base*p.s*o.hop;
       const w = blockSpec(n).cols*bs;
       ctx.save(); ctx.globalAlpha = Math.min(1, u/0.06);              // おくから ふわっと あらわれる
       drawCastChar(ctx, n, p.x - w/2, p.y - hop, bs, true);
@@ -2876,6 +2883,43 @@ function castParade(){
     }
   }});
 }
+// ─── ごほうびの パレード ─────────────────────────────────────────
+// おだいが 5問 できるごとに、その5問で つくった数たちが 行進してくる（けいさんも とけいも 数える）。
+// あと なんもんか は カードの ●○ で見える。人ごとに おぼえる（アプリを とじても のこる）。
+const PRIZE_EVERY = 5;
+function prizeOf(id){
+  const r = taskStore[id] || (taskStore[id] = emptyRec());
+  return r.prize || (r.prize = { n:0, made:[] });
+}
+function prize(){ return prizeOf(profile().id); }
+let prizeCounted = false;         // この おだいは もう数えたか（もどす で とりけして また できても 2かい 数えない）
+let prizeFull = false;            // この おだいで 5こ たまった（パレードの あいだは ●●●●● のまま 見せる）
+function notePrize(num){
+  if(prizeCounted) return;
+  prizeCounted = true;
+  const pz = prize();
+  pz.made = (pz.made || []).concat([num]).slice(-PRIZE_EVERY);
+  pz.n = (pz.n || 0) + 1;
+  if(pz.n >= PRIZE_EVERY){
+    // とけいの レベルアップと かさなったら、そちらの（1〜10 の）パレードに まかせる
+    if(!lastLevelUp) castParade(pz.made);
+    pz.n = 0; pz.made = []; prizeFull = true;
+  }
+  saveTask();
+}
+// カードの ●●●○○（あと なんもんで パレードか）
+function drawPrizeDots(ctx, x, y){
+  const n = prizeFull ? PRIZE_EVERY : (prize().n || 0), r = 3.6, gap = 10;
+  ctx.save();
+  for(let i=0;i<PRIZE_EVERY;i++){
+    ctx.beginPath(); ctx.arc(x + i*gap, y, r, 0, Math.PI*2);
+    if(i < n){ ctx.fillStyle = '#f0a020'; ctx.fill(); }
+    else { ctx.strokeStyle = 'rgba(120,130,150,0.7)'; ctx.lineWidth = 1.3; ctx.stroke(); }
+  }
+  ctx.restore();
+  return PRIZE_EVERY*gap;
+}
+
 // ─── パレードの ちょうせい ───────────────────────────────────────
 // せっていから開く。ちょうせい中は パレードを くりかえし出し、みち（点線）も 見せる。
 let paradeTuning = false;
@@ -3306,6 +3350,14 @@ function drawTaskCard(ctx, t){
       const pz = winFx && winFx.praise;
       ctx.fillText(taskLog.length + (isClockTask(task) ? ' かい' : ' て') + (pz ? '　' + pz.text : ''), r.x+14, r.y+37);
     }
+    // 「できた！ 10」の みぎに、パレードまでの ●○（いま ふえた ところが 見える）
+    {
+      ctx.save(); ctx.font='bold 19px sans-serif';
+      const tw0 = ctx.measureText('できた！  ' + taskGoalLabel(task)).width;
+      const ty = (begMode() && !lastLevelUp && !(lastRainbow && (!winFx || rainbowTime() >= 0))) ? r.y+25 : r.y+19;
+      ctx.restore();
+      drawPrizeDots(ctx, r.x+14 + tw0 + 14, ty);
+    }
     const bh=32, by=r.y+9;
     const nw=58, tw=68, gap=6;
     const bx2 = r.x+r.w-10-nw, bx1 = bx2-gap-tw;
@@ -3397,6 +3449,7 @@ function drawTaskCard(ctx, t){
     ctx.font='bold '+f2+'px sans-serif'; ctx.fillStyle='#2b3a52';
     ctx.fillText(tail, tx0+nw, ty0);
     ctx.textBaseline='middle';
+    drawPrizeDots(ctx, r.x+19, r.y+44);          // あと なんもんで パレードか
   }
   ctx.restore();
 
@@ -4134,6 +4187,7 @@ function checkTask(){
     if(rainbow){ const cr = curRec(); cr.rainbow = cr.rainbow || {}; cr.rainbow[taskIdx] = true; }
     if(!kept || moves < kept.length) taskLogs[taskIdx] = taskLog.slice();
     saveTask();
+    notePrize(t.n);
     const win = blocks.find(b=>b.num===t.n);
     winFx = { block:win, num:t.n, t:0, praise:praise, moves:moves,
               arc: rainbow ? rainbowArcPlace() : null, stampAt: stampPlace(),
@@ -4683,8 +4737,8 @@ function drawFrame(ts){
       updateWinFx(dt);
       drawWinLines(ctx);
       drawWinStamp(ctx);
-      drawCast(ctx);
       for(const b of blocks){ if(b===dragBlock) continue; b.draw(ctx,walkTime,0); }
+      drawCast(ctx);                                  // パレードは キャラより てまえ
       if(dragBlock){
         let bestMerge=null,bestMergeD=Infinity;
         for(const o of blocks){
