@@ -3741,14 +3741,16 @@ function drawSettings(ctx){
   ctx.beginPath(); ctx.moveTo(x+16,ty+6); ctx.lineTo(x+w-16,ty+6); ctx.stroke();
   ty += 14;
 
-  // ずかん と 全画面（全画面は使える端末だけ）
-  const n = CAN_FULLSCREEN ? 2 : 1, g2 = 8, bw2 = (w - 32 - g2*(n-1)) / n;
-  drawCardBtn(ctx, x+16, ty, bw2, bigH, 'ずかん・キャラメイクへ', 'rgba(228,233,242,0.98)', '#22314a');
+  // ずかん・ひっさん（ためしの ページ）・全画面（全画面は使える端末だけ）
+  const n = CAN_FULLSCREEN ? 3 : 2, g2 = 8, bw2 = (w - 32 - g2*(n-1)) / n;
+  drawCardBtn(ctx, x+16, ty, bw2, bigH, n === 2 ? 'ずかん・キャラメイク' : 'ずかん', 'rgba(228,233,242,0.98)', '#22314a');
   setBtns.push({ x:x+16, y:ty, w:bw2, h:bigH, val:'zukan' });
+  drawCardBtn(ctx, x+16+bw2+g2, ty, bw2, bigH, n === 2 ? 'ひっさん（ためし）' : 'ひっさん', 'rgba(255,236,190,0.98)', '#6b4a00');
+  setBtns.push({ x:x+16+bw2+g2, y:ty, w:bw2, h:bigH, val:'hissan' });
   if(CAN_FULLSCREEN){
-    drawCardBtn(ctx, x+16+bw2+g2, ty, bw2, bigH, document.fullscreenElement ? 'ぜんがめん やめる' : 'ぜんがめん',
+    drawCardBtn(ctx, x+16+(bw2+g2)*2, ty, bw2, bigH, document.fullscreenElement ? 'やめる' : 'ぜんがめん',
                 'rgba(228,233,242,0.98)', '#22314a');
-    setBtns.push({ x:x+16+bw2+g2, y:ty, w:bw2, h:bigH, val:'fs' });
+    setBtns.push({ x:x+16+(bw2+g2)*2, y:ty, w:bw2, h:bigH, val:'fs' });
   }
   ty += bigH + (tight ? 8 : 12);
 
@@ -3796,6 +3798,7 @@ function handleSettingsTap(x, y){
     if(b.val==='size')       setBlockSize(b.v);
     else if(b.val==='quiz')  setQuizOn(b.v);
     else if(b.val==='zukan') location.href = 'zukan.html';
+    else if(b.val==='hissan') location.href = 'hissan.html';
     else if(b.val==='fs')    toggleFullscreen();
     else if(b.val==='arc')   { setOpen = false; openArcTuner(); }
     else if(b.val==='ptune') { setOpen = false; openParadeTuner(); }
