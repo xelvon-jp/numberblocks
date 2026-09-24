@@ -146,4 +146,34 @@ module.exports = {
                                  !!document.getElementById('arc-tuner')]),
          [r0, null, false, false], 'もとにもどす／とじる が きかない');
   },
+
+  'パレードの ちょうせい：せっていから開き、動かした値が みちに使われ、のこり、もとにもどせる。ちょうせい中は くりかえす': async t => {
+    const p = await t.open();
+    const d0 = await p.evaluate(() => JSON.stringify(paradePath(0)));
+    await p.evaluate(() => {
+      setOpen = true; drawSettings(ctx);
+      const b = setBtns.find(x => x.val === 'ptune');
+      handleSettingsTap(b.x + b.w/2, b.y + b.h/2);
+    });
+    t.eq(await p.evaluate(() => [setOpen, paradeTuning, !!document.getElementById('parade-tuner'), cast.some(a => a.kind === 'parade')]),
+         [false, true, true, true], 'パレードの ちょうせいが 開かない');
+    const slide = (k, v) => p.evaluate(([k, v]) => {
+      const i = document.querySelector('#parade-tuner input[data-k="' + k + '"]');
+      i.value = v; i.dispatchEvent(new Event('input'));
+    }, [k, v]);
+    await slide('x0', 0.2); await slide('s1', 2); await slide('sec', 3);
+    const r = await p.evaluate(() => ({ x0: +(paradePath(0).x / sw).toFixed(2), s1: +paradePath(1).s.toFixed(2),
+      saved: JSON.parse(localStorage.getItem('nb_parade_tune')), text: document.getElementById('parade-tune-text').textContent }));
+    t.eq([r.x0, r.s1, r.saved.x0, r.saved.sec], [0.2, 2, 0.2, 3], '動かした値が パレードに使われていない／保存されない');
+    t.ok(/おくの よこ 0\.20/.test(r.text), '値の文字が 出ていない: ' + r.text);
+    // おわっても ちょうせい中は また はじまる
+    await p.evaluate(() => { cast = []; drawCast(ctx); });
+    t.eq(await p.evaluate(() => cast.some(a => a.kind === 'parade')), true, 'ちょうせい中に くりかえさない');
+    await p.reload(); await p.waitForFunction(() => typeof drawFrame === 'function');
+    t.eq(await p.evaluate(() => paradeSettings().x0), 0.2, '開きなおすと 値が消える');
+    await p.evaluate(() => { openParadeTuner();
+      [...document.querySelectorAll('#parade-tuner button')].find(b => b.textContent === 'もとにもどす').click(); closeParadeTuner(); });
+    t.eq(await p.evaluate(() => [JSON.stringify(paradePath(0)), localStorage.getItem('nb_parade_tune'), paradeTuning]),
+         [d0, null, false], 'もとにもどす／とじる が きかない');
+  },
 };

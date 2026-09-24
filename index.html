@@ -2785,11 +2785,6 @@ function drumAnswer(){
 // どれも 見るだけ（さわれない）。キャラの ほうは いつもの描きかた（drawNumberblock）を そのまま使う。
 let cast = [];        // { kind, t0, dur, draw(ctx, age) }
 function castNow(){ return performance.now(); }
-function drawCast(ctx){
-  const now = castNow();
-  cast = cast.filter(a => now - a.t0 < a.dur);
-  for(const a of cast) a.draw(ctx, now - a.t0);
-}
 // 体の下のはし（足は そこから下に出る）が y になるよう、n を x（体の左はし）に描く
 function drawCastChar(ctx, n, x, bottom, bs, walk){
   const spec = blockSpec(n);
@@ -2819,24 +2814,45 @@ function castRun(goal){
 // パレード：1〜10 が 1れつで、左の おくから 右の てまえへ 行進してくる（1が せんとう）。
 // おくは 小さく 高いところ（お山の ふもと）、てまえは 大きく 低いところ。
 // 1本の みちの上を すすむので、うしろの キャラから 先に描いて、てまえの キャラが かさなるようにする。
-const PARADE_MS = 5200, PARADE_GAP = 0.075;          // ぜんたいの長さ／キャラどうしの あいだ（みちの わりあい）
-function paradePath(u){                               // u：みちの どこか（0＝左おく、1＝右てまえ）
+// みちと うごきは せっていの「パレードの ちょうせい」で かえられる（この端末に 保存）。
+//   x0,y0,s0 … おくの よこ（画面の幅の わりあい）・たかさ（草はらから 上へ、遊ぶ場所の高さの わりあい）・おおきさ
+//   x1,y1,s1 … てまえの よこ・たかさ（キャラの 足もとの線から 下へ px）・おおきさ
+//   sec … 1回の ながさ（びょう）  gap … キャラどうしの あいだ  hop … はねる たかさ
+const PARADE_TUNE_KEY = 'nb_parade_tune';
+let paradeTune = (() => {
+  try{ const v = JSON.parse(localStorage.getItem(PARADE_TUNE_KEY)); return v && typeof v === 'object' ? v : null; }
+  catch(e){ return null; }
+})();
+function saveParadeTune(){
+  try{
+    if(paradeTune) localStorage.setItem(PARADE_TUNE_KEY, JSON.stringify(paradeTune));
+    else localStorage.removeItem(PARADE_TUNE_KEY);
+  }catch(e){}
+}
+function paradeDefaults(){ return { x0:-0.08, y0:0.28, s0:0.32, x1:1.1, y1:18, s1:1.3, sec:5.2, gap:0.075, hop:0.9 }; }
+function paradeSettings(){ return Object.assign(paradeDefaults(), paradeTune || {}); }
+function paradePath(u){                               // u：みちの どこか（0＝おく、1＝てまえ）
+  const o = paradeSettings();
   const e = u*u*(3 - 2*u)*0.35 + u*0.65;              // てまえに 来るほど すこし はやく 見える
-  const y0 = groundTopY() - arcPlayH()*0.28, y1 = calcFloor() + 18;
-  return { x: -30 + (sw + 70)*e, y: y0 + (y1 - y0)*e, s: 0.32 + 0.98*e };
+  const x0 = sw*o.x0, x1 = sw*o.x1;
+  const y0 = groundTopY() - arcPlayH()*o.y0, y1 = calcFloor() + o.y1;
+  return { x: x0 + (x1 - x0)*e, y: y0 + (y1 - y0)*e, s: o.s0 + (o.s1 - o.s0)*e };
 }
 function castParade(){
   cast = cast.filter(a => a.kind !== 'parade');
   const nums = [1,2,3,4,5,6,7,8,9,10];
   const base = Math.max(5, Math.min(11, (calcFloor() - TAB_H) * 0.28 / 10));
-  cast.push({ kind:'parade', t0: castNow(), dur: PARADE_MS, draw(ctx, age){
-    const head = (1 + PARADE_GAP*nums.length) * (age / PARADE_MS);
+  const o0 = paradeSettings();
+  cast.push({ kind:'parade', t0: castNow(), dur: o0.sec*1000, draw(ctx, age){
+    const o = paradeSettings(), ms = o.sec*1000;      // ちょうせい中は 動かしたら すぐ かわる
+    this.dur = ms;
+    const head = (1 + o.gap*nums.length) * (age / ms);
     // うしろ（10）から描く
     for(let i = nums.length - 1; i >= 0; i--){
-      const u = head - i*PARADE_GAP;
+      const u = head - i*o.gap;
       if(u < 0 || u > 1.05) continue;
       const p = paradePath(Math.min(1, u)), n = nums[i], bs = base * p.s;
-      const hop = Math.abs(Math.sin(age*0.011 + i*0.8)) * bs*0.9;
+      const hop = Math.abs(Math.sin(age*0.011 + i*0.8)) * bs*o.hop;
       const w = blockSpec(n).cols*bs;
       ctx.save(); ctx.globalAlpha = Math.min(1, u/0.06);              // おくから ふわっと あらわれる
       drawCastChar(ctx, n, p.x - w/2, p.y - hop, bs, true);
@@ -2844,6 +2860,58 @@ function castParade(){
     }
   }});
 }
+// ─── パレードの ちょうせい ───────────────────────────────────────
+// せっていから開く。ちょうせい中は パレードを くりかえし出し、みち（点線）も 見せる。
+let paradeTuning = false;
+const PARADE_SLIDERS = [
+  { k:'x0',  label:'おくの よこ',       min:-0.3, max:0.8,  step:0.01 },
+  { k:'y0',  label:'おくの たかさ',     min:0,    max:0.9,  step:0.01 },
+  { k:'s0',  label:'おくの おおきさ',   min:0.1,  max:1.5,  step:0.01 },
+  { k:'x1',  label:'てまえの よこ',     min:0.2,  max:1.4,  step:0.01 },
+  { k:'y1',  label:'てまえの たかさ',   min:-200, max:80,   step:1 },
+  { k:'s1',  label:'てまえの おおきさ', min:0.3,  max:2.5,  step:0.01 },
+  { k:'sec', label:'ながさ（秒）',      min:2,    max:12,   step:0.1 },
+  { k:'gap', label:'あいだ',           min:0.03, max:0.2,  step:0.005 },
+  { k:'hop', label:'はねる',           min:0,    max:2,    step:0.05 },
+];
+function paradeTuneText(){
+  const o = paradeSettings();
+  return PARADE_SLIDERS.map(d => d.label + ' ' + (+o[d.k]).toFixed(d.step >= 1 ? 0 : d.step >= 0.1 ? 1 : 2)).join(' ／ ');
+}
+function openParadeTuner(){
+  if(document.getElementById('parade-tuner')) return;
+  paradeTuning = true; castParade();
+  openTunerPanel({
+    id:'parade-tuner', textId:'parade-tune-text', title:'パレードの ちょうせい', sliders: PARADE_SLIDERS,
+    get: paradeSettings, tuned: () => !!paradeTune, text: paradeTuneText,
+    set: (k, v) => { paradeTune = Object.assign(paradeSettings(), { [k]: v }); saveParadeTune(); },
+    reset: () => { paradeTune = null; saveParadeTune(); },
+    close: closeParadeTuner
+  });
+}
+function closeParadeTuner(){
+  const box = document.getElementById('parade-tuner');
+  if(box) box.remove();
+  paradeTuning = false;
+}
+// ちょうせい中は みちを 点線で見せ、パレードが おわったら また はじめる
+function drawParadeGuide(ctx){
+  if(!paradeTuning) return;
+  if(!cast.some(a => a.kind === 'parade')) castParade();
+  ctx.save();
+  ctx.setLineDash([6, 6]); ctx.strokeStyle = 'rgba(40,60,90,0.55)'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  for(let k=0;k<=20;k++){ const q = paradePath(k/20); if(k) ctx.lineTo(q.x, q.y); else ctx.moveTo(q.x, q.y); }
+  ctx.stroke();
+  ctx.restore();
+}
+function drawCast(ctx){
+  drawParadeGuide(ctx);
+  const now = castNow();
+  cast = cast.filter(a => now - a.t0 < a.dur);
+  for(const a of cast) a.draw(ctx, now - a.t0);
+}
+
 // 虹の すべりだい。虹が かかりきったら 1〜5 の だれかが てっぺんから 右の足もとまで すべりおりる。
 // 虹と おなじ かさなりに描く（drawRainbowArc の中）ので、お山のうしろの虹なら 山のうしろへ きえていく。
 // 虹が 画面より大きくて 足もとが 画面の外でも、そのまま 外へ すべっていく。
@@ -3597,14 +3665,19 @@ function drawSettings(ctx){
     });
   };
   if(tight){
-    const aw = (w - 32 - 18) / 4;
+    const aw = (w - 32 - 24) / 5;
     drawCardBtn(ctx, x+16, ty, aw, bigH, 'にじ', 'rgba(228,233,242,0.98)', '#22314a');
     setBtns.push({ x:x+16, y:ty, w:aw, h:bigH, val:'arc' });
-    fxRow(x+16 + aw + 6, w - 32 - aw - 6);
+    drawCardBtn(ctx, x+16 + aw + 6, ty, aw, bigH, 'れつ', 'rgba(228,233,242,0.98)', '#22314a');
+    setBtns.push({ x:x+16 + aw + 6, y:ty, w:aw, h:bigH, val:'ptune' });
+    fxRow(x+16 + (aw + 6)*2, w - 32 - (aw + 6)*2);
     ty += bigH + 8;
   } else {
-    drawCardBtn(ctx, x+16, ty, w-32, bigH, 'にじの ばしょを ちょうせい', 'rgba(228,233,242,0.98)', '#22314a');
-    setBtns.push({ x:x+16, y:ty, w:w-32, h:bigH, val:'arc' });
+    const hw = (w - 32 - 6) / 2;
+    drawCardBtn(ctx, x+16, ty, hw, bigH, 'にじの ちょうせい', 'rgba(228,233,242,0.98)', '#22314a');
+    setBtns.push({ x:x+16, y:ty, w:hw, h:bigH, val:'arc' });
+    drawCardBtn(ctx, x+16 + hw + 6, ty, hw, bigH, 'パレードの ちょうせい', 'rgba(228,233,242,0.98)', '#22314a');
+    setBtns.push({ x:x+16 + hw + 6, y:ty, w:hw, h:bigH, val:'ptune' });
     ty += bigH + 12;
     ctx.save(); ctx.fillStyle='#5a6a80'; ctx.font='bold 11px sans-serif'; ctx.textAlign='left'; ctx.textBaseline='middle';
     ctx.fillText('おいわいを みる', x+16, ty+7); ctx.restore();
@@ -3627,6 +3700,7 @@ function handleSettingsTap(x, y){
     else if(b.val==='zukan') location.href = 'zukan.html';
     else if(b.val==='fs')    toggleFullscreen();
     else if(b.val==='arc')   { setOpen = false; openArcTuner(); }
+    else if(b.val==='ptune') { setOpen = false; openParadeTuner(); }
     else if(b.val==='fx')    { setOpen = false; previewFx(b.v); }
     else if(b.val==='close') setOpen = false;
     return;
@@ -3652,19 +3726,20 @@ function arcTuneText(){
   return 'よこ ' + o.x.toFixed(2) + ' ／ あし ' + o.foot.toFixed(2) + ' ／ おおきさ ' + o.r.toFixed(2) +
          ' ／ ふとさ ' + o.band + ' ／ こさ ' + o.alpha.toFixed(2) + ' ／ かさなり ' + ARC_LAYERS[o.layer];
 }
-function openArcTuner(){
-  if(document.getElementById('arc-tuner')) return;
-  arcTuning = true;
+// ちょうせいパネル（虹・パレード で共通）。画面の下に スライダーを出し、動かすと その場で かわる。
+//   spec = { id, textId, title, sliders:[{k,label,min,max,step}], choice:{label, list}（あれば）,
+//            get() → いまの値, set(k, v), reset(), tuned() → 手で かえたか, text() → 値の文字, close() }
+function openTunerPanel(spec){
   const box = document.createElement('div');
-  box.id = 'arc-tuner';
+  box.id = spec.id;
   box.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:50;padding:8px 14px calc(10px + env(safe-area-inset-bottom));' +
     'background:rgba(253,253,255,0.96);box-shadow:0 -2px 10px rgba(0,0,0,0.18);font:13px sans-serif;color:#22314a;' +
-    'border-radius:14px 14px 0 0;max-height:60vh;overflow:auto;';
+    'border-radius:14px 14px 0 0;max-height:42vh;overflow:auto;';   // 見たいものが かくれないよう 低めに（中は スクロール）
   const btnCss = 'height:34px;padding:0 12px;border-radius:9px;border:1px solid #c6cfdc;background:#e8edf5;' +
                  'color:#22314a;font:bold 13px sans-serif;';
   const head = document.createElement('div');
   head.style.cssText = 'display:flex;gap:6px;align-items:center;margin-bottom:4px;';
-  head.innerHTML = '<b style="flex:1;font-size:15px">にじの ちょうせい</b>';
+  head.innerHTML = '<b style="flex:1;font-size:15px;white-space:nowrap">' + spec.title + '</b>';
   const mk = (text, fn, css) => { const b = document.createElement('button'); b.textContent = text;
     b.style.cssText = btnCss + (css || ''); b.onclick = fn; return b; };
   const body = document.createElement('div');
@@ -3678,48 +3753,64 @@ function openArcTuner(){
     const hide = body.style.display !== 'none';
     body.style.display = hide ? 'none' : ''; fold.textContent = hide ? 'ひらく' : 'たたむ';
   });
-  head.append(flip, fold, mk('とじる', closeArcTuner, 'background:#3c6ef0;color:#fff;border-color:#3c6ef0;'));
+  head.append(flip, fold, mk('とじる', spec.close, 'background:#3c6ef0;color:#fff;border-color:#3c6ef0;'));
   box.appendChild(head);
 
   const inputs = {};
-  for(const d of ARC_SLIDERS){
+  for(const d of spec.sliders){
     const row = document.createElement('label');
-    row.style.cssText = 'display:flex;align-items:center;gap:8px;height:34px;';
-    row.innerHTML = '<span style="width:78px;flex:0 0 auto;font-weight:bold">' + d.label + '</span>';
+    row.style.cssText = 'display:flex;align-items:center;gap:8px;height:30px;';
+    row.innerHTML = '<span style="width:112px;flex:0 0 auto;font-weight:bold;font-size:12px;white-space:nowrap">' + d.label + '</span>';
     const inp = document.createElement('input');
     inp.type = 'range'; inp.min = d.min; inp.max = d.max; inp.step = d.step;
     inp.dataset.k = d.k;
     inp.style.cssText = 'flex:1 1 auto;min-width:0;height:28px;accent-color:#3c6ef0;';
-    inp.oninput = () => { arcTune = Object.assign(arcSettings(), { [d.k]: parseFloat(inp.value) }); saveArcTune(); sync(); };
+    inp.oninput = () => { spec.set(d.k, parseFloat(inp.value)); sync(); };
     row.appendChild(inp); body.appendChild(row); inputs[d.k] = inp;
   }
-  const lay = document.createElement('div');
-  lay.style.cssText = 'display:flex;gap:6px;align-items:center;margin:4px 0;';
-  lay.innerHTML = '<span style="width:78px;flex:0 0 auto;font-weight:bold">かさなり</span>';
-  const layBtns = ARC_LAYERS.map((t, i) => {
-    const b = mk(t, () => { arcTune = Object.assign(arcSettings(), { layer:i }); saveArcTune(); sync(); }, 'flex:1 1 0;padding:0 4px;');
-    lay.appendChild(b); return b;
-  });
-  body.appendChild(lay);
+  let choiceBtns = [];
+  if(spec.choice){
+    const c = spec.choice;
+    const lay = document.createElement('div');
+    lay.style.cssText = 'display:flex;gap:6px;align-items:center;margin:4px 0;';
+    lay.innerHTML = '<span style="width:112px;flex:0 0 auto;font-weight:bold;font-size:12px;white-space:nowrap">' + c.label + '</span>';
+    choiceBtns = c.list.map((t, i) => {
+      const b = mk(t, () => { spec.set(c.k, i); sync(); }, 'flex:1 1 0;padding:0 2px;font-size:12px;white-space:nowrap;');
+      lay.appendChild(b); return b;
+    });
+    body.appendChild(lay);
+  }
   const out = document.createElement('div');
-  out.id = 'arc-tune-text';
+  out.id = spec.textId;
   out.style.cssText = 'margin:6px 0 4px;padding:6px 8px;background:#eef2f8;border-radius:8px;font-size:12px;line-height:1.5;';
   body.appendChild(out);
   const foot = document.createElement('div');
   foot.style.cssText = 'display:flex;gap:6px;';
-  foot.append(mk('もとにもどす', () => { arcTune = null; saveArcTune(); sync(); }, 'flex:1 1 0;'));
+  foot.append(mk('もとにもどす', () => { spec.reset(); sync(); }, 'flex:1 1 0;'));
   body.appendChild(foot);
   box.appendChild(body);
   document.body.appendChild(box);
 
   function sync(){
-    const o = arcSettings();
+    const o = spec.get();
     for(const k in inputs) inputs[k].value = o[k];
-    layBtns.forEach((b, i) => { const on = i === o.layer;
+    if(spec.choice) choiceBtns.forEach((b, i) => { const on = i === o[spec.choice.k];
       b.style.background = on ? '#3c6ef0' : '#e8edf5'; b.style.color = on ? '#fff' : '#22314a'; });
-    out.textContent = (arcTune ? '' : '（ふだんの まま）') + arcTuneText();
+    out.textContent = (spec.tuned() ? '' : '（ふだんの まま）') + spec.text();
   }
   sync();
+}
+function openArcTuner(){
+  if(document.getElementById('arc-tuner')) return;
+  arcTuning = true;
+  openTunerPanel({
+    id:'arc-tuner', textId:'arc-tune-text', title:'にじの ちょうせい', sliders: ARC_SLIDERS,
+    choice:{ k:'layer', label:'かさなり', list: ARC_LAYERS },
+    get: arcSettings, tuned: () => !!arcTune, text: arcTuneText,
+    set: (k, v) => { arcTune = Object.assign(arcSettings(), { [k]: v }); saveArcTune(); },
+    reset: () => { arcTune = null; saveArcTune(); },
+    close: closeArcTuner
+  });
 }
 function closeArcTuner(){
   const box = document.getElementById('arc-tuner');
