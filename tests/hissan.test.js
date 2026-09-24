@@ -159,13 +159,20 @@ module.exports = {
     await p.waitForFunction(() => S.done, null, { timeout: 10000 });
   },
 
-  'E かく：12+39 を 指で 書く（くり上がりの 1 → 一 → 十）': async t => {
+  'E かく：12+39 を 指で 書く（線の上は メモ → 一 → 十）': async t => {
     const p = await openH(t, 'write', 'add');
     await p.evaluate(() => setProblem('+', 12, 39));
-    t.eq(await writeDigit(p, 'cT', 1), { st:'ok', val:1, msg:'' }, 'くり上がりの 1 が よめない');
+    // 十のくらいの 上に くり上がりの 1 を メモ：よみとらない
+    const memo = await p.evaluate(() => WL().carry);
+    await p.mouse.move(memo.x + memo.w/2, memo.y + 4); await p.mouse.down();
+    await p.mouse.move(memo.x + memo.w/2, memo.y + memo.h/2); await p.mouse.move(memo.x + memo.w/2, memo.y + memo.h - 4); await p.mouse.up();
+    await t.sleep(900);
+    t.eq(await p.evaluate(() => [S.memo.length, S.wmsg, Ink.records().length]), [1, '', 0], 'メモが よみとられた');
     t.eq((await writeDigit(p, 'o', 1)).st, 'ok', '一のくらいの 1 が よめない');
     t.eq((await writeDigit(p, 't', 5)).st, 'ok', '十のくらいの 5 が よめない');
-    t.eq(await p.evaluate(() => [S.done, S.miss]), [true, 0], 'おわらない');
+    t.eq(await p.evaluate(() => [S.done, S.miss, S.memo.length]), [true, 0, 1], 'おわらない');
+    // 書いた 字は きろくに のこる
+    t.eq(await p.evaluate(() => Ink.records().map(r => [r.want, r.got])), [[1, 1], [5, 5]], 'きろく');
   },
 
   'E かく：まちがえると どこが ちがうか おしえる（くり上がり わすれ・かがみもじ・よめない）': async t => {
@@ -173,8 +180,8 @@ module.exports = {
     await p.evaluate(() => setProblem('+', 12, 39));
     let r = await writeDigit(p, 't', 4);
     t.eq([r.st, r.val], ['bad', 4], '4 を まちがいに しない');
-    t.ok(/くり上がりの 1 を たしわすれ/.test(r.msg), 'くり上がり わすれの ことばが ない: ' + r.msg);
-    t.eq(await p.evaluate(() => S.pulse && S.pulse.k), 'cT', 'くり上がりの ますを 光らせない');
+    t.ok(/くり上がりの 1 を たしわすれ/.test(r.msg), 'くり上がり わすれの ことば: ' + r.msg);
+    t.eq(await p.evaluate(() => S.pulse && S.pulse.k), 'carry', '十のくらいの 上を 光らせない');
     r = await writeDigit(p, 't', 5);                   // 上から 書きなおせる
     t.eq(r.st, 'ok', '書きなおせない');
     r = await writeDigit(p, 'o', 2);
@@ -186,26 +193,28 @@ module.exports = {
     // らくがきは よめない
     await p.evaluate(() => { const c = WL().cells.t; S.cells.t.strokes = [[0,.3,.1,.9,.2,.1,.8,.9,.5,.2,.95,.6].reduce((a, v, i, s) => (i%2 ? a : a.concat({ x:c.x + c.w*v, y:c.y + c.h*s[i+1] })), [])]; S.cells.t.st = 'wait'; judgeCell('t'); });
     t.ok(/よめなかった|十のくらい|くり上がり/.test(await p.evaluate(() => S.wmsg)), 'らくがきの あつかい');
-    // けす
-    await p.evaluate(() => eraseInk());
-    t.eq(await p.evaluate(() => [S.cells.o.st, S.cells.o.strokes.length, S.cells.t.st]), ['empty', 0, 'empty'], 'けす で きえない');
+    // こたえを けす は こたえだけ、けしゴム は メモだけ
+    await p.evaluate(() => { S.memo.push([{ x:10, y:200 }, { x:30, y:220 }]); eraseInk(); });
+    t.eq(await p.evaluate(() => [S.cells.o.st, S.cells.o.strokes.length, S.cells.t.st, S.memo.length]), ['empty', 0, 'empty', 1], 'こたえを けす');
+    await p.evaluate(() => eraseMemo());
+    t.eq(await p.evaluate(() => S.memo.length), 0, 'けしゴムで メモが きえない');
   },
 
-  'E かく：ひき算 52−27（へった 十のくらい 4、一 5、十 2）と くり下がり わすれ': async t => {
+  'E かく：ひき算 52−27（一 5、十 2）と くり下がり わすれ・3けた': async t => {
     const p = await openH(t, 'write', 'sub');
     await p.evaluate(() => setProblem('-', 52, 27));
-    let r = await p.evaluate(() => { judgeCell('t', 3); return S.wmsg; });
-    t.ok(/くり下がりで 十のくらいが 1 へった/.test(r), 'くり下がり わすれの ことば: ' + r);
-    r = await p.evaluate(() => { judgeCell('o', 5); judgeCell('cT', 5); return S.wmsg; });
-    t.ok(/1 へる/.test(r), 'へらし わすれの ことば: ' + r);
-    await p.evaluate(() => { judgeCell('cT', 4); judgeCell('t', 2); });
+    let r = await p.evaluate(() => { judgeCell('t', 3); return [S.wmsg, S.pulse.k]; });
+    t.ok(/くり下がりで 十のくらいが 1 へった/.test(r[0]) && r[1] === 'carry', 'くり下がり わすれの ことば: ' + r);
+    await p.evaluate(() => setProblem('-', 61, 38));
+    r = await p.evaluate(() => { judgeCell('o', 7); return S.wmsg; });
+    t.ok(/1 から 8 は ひけない/.test(r), 'ぎゃくに ひいた ときの ことば: ' + r);
+    await p.evaluate(() => { judgeCell('o', 3); judgeCell('t', 2); });
     t.eq(await p.evaluate(() => S.done), true, 'おわらない');
-    // 3けた：百のくらいの ますが ある
     await p.evaluate(() => setProblem('+', 58, 67));
-    t.eq(await p.evaluate(() => cellKeys().map(cellWant)), [1, 5, 2, 1], '3けたの ます');
+    t.eq(await p.evaluate(() => cellKeys().map(cellWant)), [5, 2, 1], '3けたの ます');
   },
 
-  'E かく：おぼえる で 書いた 字を お手本に する': async t => {
+  'E かく：おぼえる・きろくの「ほんとうは？」で お手本に なる': async t => {
     const p = await openH(t, 'write', 'add');
     const r = await p.evaluate(() => {
       openTrain();
@@ -217,6 +226,19 @@ module.exports = {
       return [n, i, Ink.samples(), !!train];
     });
     t.eq(r, [1, 1, 0, false], 'おぼえる が うごかない');
+    // きろくを なおす
+    await p.evaluate(() => setProblem('+', 12, 39));
+    await writeDigit(p, 't', 4);
+    const q = await p.evaluate(() => {
+      openTrain(); train.view = 'rec'; btns = []; drawRecords();
+      btns[0].act();                                   // いちばん あたらしい 字
+      btns = []; drawRecords();
+      const b5 = btns.find(b => b.w < 40 && b.y > H - 200 && btns.indexOf(b) === btns.length - 3 - 10 + 5);
+      b5.act();
+      const rec = Ink.records()[0];
+      return [train.sel, rec.fixed, Ink.samples(), window.__err || ''];
+    });
+    t.eq(q, [null, 5, 1, ''], 'ほんとうは？ で なおせない');
   },
 
   'どの画面でも へや・ボタンが 収まり、エラーが 出ない（5つの こたえかた）': async t => {

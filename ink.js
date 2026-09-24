@@ -7,8 +7,10 @@
 //     strokes … [[{x,y}, …], …]（1画ずつ）
 //   Ink.learn(digit, strokes) … その人の 字を お手本に くわえる（この端末に 保存）
 //   Ink.forget()              … おぼえた 字を けす
+//   Ink.record / records / fixRecord … 書いた 字の きろく。まちがって よんだ 字を 正しい 数字として おぼえさせる
 //
 // かがみもじ（左右 はんたい）の お手本も もっていて、それに いちばん にていたら mirrored:true。
+// 形で 1ばん・2ばんが きっこう したときは、書きじゅん・線の むきも くらべて きめる（byOrder:true）。
 (function(root){
   const N = 32;                        // 1もじを この数の 点に ならべなおして くらべる
   const REJECT = 1.35;                 // これより にていなければ「よめない」（ためして きめた）
@@ -28,7 +30,9 @@
          [[[0.25,0],[0.12,0.6],[0.92,0.6]],[[0.7,0.05],[0.7,1]]],
          [[[0.65,1],[0.65,0],[0.05,0.68],[0.95,0.68]]] ],
     5: [ [[[0.82,0.02],[0.25,0.02]],[[0.25,0.02],[0.2,0.45],[0.55,0.38],[0.85,0.55],[0.82,0.85],[0.5,1],[0.12,0.9]]],
-         [[[0.85,0],[0.25,0],[0.2,0.45],[0.55,0.38],[0.85,0.55],[0.82,0.85],[0.5,1],[0.12,0.9]]] ],
+         [[[0.85,0],[0.25,0],[0.2,0.45],[0.55,0.38],[0.85,0.55],[0.82,0.85],[0.5,1],[0.12,0.9]]],
+         // 書きじゅんちがい：たて・まるを 先に 書いて、さいごに 上の よこ線（左→右）
+         [[[0.25,0.02],[0.2,0.45],[0.55,0.38],[0.85,0.55],[0.82,0.85],[0.5,1],[0.12,0.9]],[[0.25,0.02],[0.82,0.02]]] ],
     6: [ [[[0.72,0.02],[0.4,0.2],[0.18,0.5],[0.15,0.78],[0.35,0.98],[0.65,0.98],[0.85,0.78],[0.75,0.55],[0.5,0.5],[0.22,0.62]]],
          [[[0.65,0],[0.25,0.4],[0.18,0.75],[0.4,1],[0.75,0.9],[0.8,0.62],[0.5,0.5],[0.2,0.7]]] ],
     7: [ [[[0.1,0.02],[0.9,0.02],[0.45,1]]], [[[0.1,0.22],[0.1,0.02],[0.9,0.02],[0.45,1]]], [[[0.1,0.02],[0.9,0.02],[0.55,0.5],[0.5,1]]] ],
@@ -114,13 +118,32 @@
   }
   function saveSamples(list){ try{ root.localStorage && root.localStorage.setItem(KEY, JSON.stringify(list)); }catch(e){} }
 
+  // 書いた じゅんばん どおりに 点を ならべて くらべる（書きじゅん・線の むき も 見る）。
+  // 5 と 6、7 と 9、0 と 6 のように 形の にている 字は、書きかたの ほうが ちがいが 大きい
+  function orderDistance(a, b){ let d = 0; for(let i=0;i<N;i++) d += dist(a[i], b[i]); return d / N; }
+  const ORDER_MARGIN = 0.15;   // 形の にかたの 1ばんと 2ばんが これより 近いときだけ 書きじゅんで きめる
+  const ORDER_RATIO = 1.25;    // 書きじゅんが これだけ はっきり 2ばんに にていたら 2ばんに する
   function recognize(strokes){
     const c = normalize(strokes); if(!c) return null;
-    let best = null;
-    for(const t of TEMPLATES){ const r = score(c, t); if(!best || r.s < best.s) best = { digit:t.digit, score:r.g, s:r.s, mirrored:t.mirrored }; }
-    // えらぶ ときは たてよこ比も 見るが、「よめない」の はんていは 形の にかた（g）だけで する
+    // 数字（かがみもじは べつ）ごとに いちばん にている お手本
+    const by = {};
+    for(const t of TEMPLATES){
+      const k = t.digit + (t.mirrored ? 'm' : ''), r = score(c, t);
+      if(!by[k]) by[k] = { digit:t.digit, mirrored:t.mirrored, score:r.g, s:r.s, list:[] };
+      by[k].list.push(t);
+      if(r.s < by[k].s){ by[k].s = r.s; by[k].score = r.g; }
+    }
+    const top = Object.values(by).sort((a, b) => a.s - b.s);
+    let best = top[0], byOrder = false;
+    const second = top[1];
+    if(best && second && second.s - best.s < ORDER_MARGIN){
+      const od = e => Math.min(...e.list.map(t => orderDistance(c, t.cloud)));
+      const o1 = od(best), o2 = od(second);
+      if(o2*ORDER_RATIO < o1){ best = second; byOrder = true; }
+    }
+    // 「よめない」の はんていは 形の にかた だけで する
     if(!best || best.score > REJECT) return null;
-    return { digit:best.digit, score:best.score, mirrored:best.mirrored };
+    return { digit:best.digit, score:best.score, mirrored:best.mirrored, byOrder };
   }
   // 1もじ ぶんの 線を、いちばん にている じゅんに（しらべる・テスト用）
   function rank(strokes){
@@ -135,6 +158,26 @@
     saveSamples(list.slice(-80)); build(); return true;
   }
   function forget(){ saveSamples([]); build(); }
+
+  // ─── きろく：じっさいに 書いた 字と、なにと よんだか（あとで 見なおして なおすため）───
+  const LOG = 'nb_ink_log', LOG_MAX = 60;
+  function records(){ try{ const v = JSON.parse((root.localStorage && root.localStorage.getItem(LOG)) || '[]'); return Array.isArray(v) ? v : []; }catch(e){ return []; } }
+  function saveRecords(list){ try{ root.localStorage && root.localStorage.setItem(LOG, JSON.stringify(list.slice(-LOG_MAX))); }catch(e){} }
+  // strokes は ますの 中の 線、box は ますの わく。0〜100 に して 点を へらして のこす
+  function record(strokes, box, info){
+    const sx = 100/(box.w || 1), sy = 100/(box.h || 1);
+    const pack = strokes.filter(q => q.length).map(q => {
+      const step = Math.max(1, Math.ceil(q.length / 40));
+      return q.filter((p, i) => i % step === 0 || i === q.length - 1).map(p => [Math.round((p.x - box.x)*sx), Math.round((p.y - box.y)*sy)]);
+    });
+    const list = records(); list.push(Object.assign({ at: Date.now(), s: pack }, info)); saveRecords(list);
+  }
+  function fixRecord(i, digit){
+    const list = records(); const r = list[i]; if(!r) return false;
+    r.fixed = digit; saveRecords(list);
+    return learn(digit, r.s);
+  }
+  function clearRecords(){ saveRecords([]); }
   build();
-  root.Ink = { recognize, rank, learn, forget, samples: () => loadSamples().length, BASE, N, REJECT };
+  root.Ink = { recognize, rank, learn, forget, samples: () => loadSamples().length, record, records, fixRecord, clearRecords, BASE, N, REJECT };
 })(typeof window !== 'undefined' ? window : globalThis);
