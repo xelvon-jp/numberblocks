@@ -450,6 +450,8 @@ function judgeCell(k, d){
   if(!r){ c.st = 'empty'; c.val = null; c.strokes = []; c.unk = now(); wsay('もういちど かいてね'); S.wunk = true; return; }
   c.val = r.digit;
   const want = cellWant(k);
+  // ちがう 数字と よんだら、書いた 線の かわりに よんだ 数字を 赤で 出して ゆらす（きかいが どう よんだか わかるように）
+  if(r.digit !== want || r.mirrored){ c.strokes = []; c.mir = !!r.mirrored; }
   if(r.digit === want && r.mirrored){ c.st = 'bad'; S.miss++; wsay('おしい！ ' + want + ' が かがみもじに なってるよ', k); return; }
   if(r.digit !== want){ c.st = 'bad'; S.miss++; const m = whyWrong(k, r.digit); wsay(m.t, m.pulse || k); return; }
   c.st = 'ok'; c.strokes = [];
@@ -523,7 +525,7 @@ function drawWrite(l){
   const firstOpen = cellKeys().find(q => S.cells[q].st !== 'ok');
   for(const k in wl.cells){
     const r = wl.cells[k], c = S.cells[k];
-    const sh = c.st === 'bad' && t - c.at < 450 ? Math.sin((t - c.at)*0.07)*6 : 0;
+    const sh = c.st === 'bad' && t - c.at < 700 ? Math.sin((t - c.at)*0.06)*8*(1 - (t - c.at)/700) : 0;
     const pulse = S.pulse && S.pulse.k === k && t - S.pulse.at < 2400 ? 0.5 + 0.5*Math.sin((t - S.pulse.at)*0.012) : 0;
     ctx.save(); ctx.translate(sh, 0);
     if(c.st !== 'ok'){
@@ -548,6 +550,12 @@ function drawWrite(l){
         ctx.fillStyle = '#f0a020'; ctx.font = 'bold ' + Math.round(0.72*cw) + 'px sans-serif';
         ctx.fillText('？', r.x + r.w/2, r.y + r.h/2 + 2);
         ctx.restore();
+      }
+      if(c.st === 'bad' && c.val !== null && !c.strokes.length){
+        // よんだ 数字（かがみもじは 左右 はんたいに）
+        ctx.save(); ctx.translate(r.x + r.w/2, r.y + r.h/2 + 2); if(c.mir) ctx.scale(-1, 1);
+        ctx.fillStyle = '#e0403f'; ctx.font = 'bold ' + Math.round(0.78*cw) + 'px sans-serif';
+        ctx.fillText(c.val, 0, 0); ctx.restore();
       }
       const col = c.st === 'bad' ? '#e0403f' : '#22314a';
       for(const s of c.strokes) inkPath(s, Math.max(4, cw*0.075), col);

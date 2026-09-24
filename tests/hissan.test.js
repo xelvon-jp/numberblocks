@@ -194,6 +194,7 @@ module.exports = {
     t.eq([r.st, r.val], ['bad', 4], '4 を まちがいに しない');
     t.ok(/くり上がりの 1 を たしわすれ/.test(r.msg), 'くり上がり わすれの ことば: ' + r.msg);
     t.eq(await p.evaluate(() => S.pulse && S.pulse.k), 'carry', '十のくらいの 上を 光らせない');
+    t.eq(await p.evaluate(() => [S.cells.t.strokes.length, S.cells.t.val]), [0, 4], 'よんだ 数字（4）を 出さない');
     r = await writeDigit(p, 't', 5);                   // 上から 書きなおせる
     t.eq(r.st, 'ok', '書きなおせない');
     r = await writeDigit(p, 'o', 2);
