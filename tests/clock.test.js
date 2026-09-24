@@ -157,7 +157,7 @@ module.exports = {
           clockT = c.c.goal % 720; clockAnswer();
         } else { spawnBlock(c.n); checkTask(); }
         if(!taskDone) return 'できない ' + out.join(',');
-        nextTask();
+        nextTask(); if(paradeBreak) endParadeBreak();      // ごほうびの パレードは とばす
       }
       return out.join(',');
     });
@@ -168,7 +168,7 @@ module.exports = {
     const p = await t.open();
     const r = await p.evaluate(() => {
       taskOn = true; setMix(false); startTask(0);
-      for(let k=0;k<6;k++){ spawnBlock(currentTask().n); checkTask(); nextTask(); if(genTask) return 'とけいが出た'; }
+      for(let k=0;k<6;k++){ spawnBlock(currentTask().n); checkTask(); nextTask(); if(paradeBreak) endParadeBreak(); if(genTask) return 'とけいが出た'; }
       return taskIdx;
     });
     t.eq(r, 6, 'けいさんだけで 進まない');
@@ -494,15 +494,15 @@ module.exports = {
       taskOn = true;
       const st = clockStats(); st.lv = 2; st.hist = new Array(7).fill(true).concat([false, false]);
       startClockTask({ k:'pick', to:'7:30', clv:2 }); drumSet(7, 30); drumAnswer();
-      const kinds = cast.map(a => a.kind);
+      const kinds = cast.map(a => a.kind).concat(pendingParade ? ['あとで ' + pendingParade.join(',')] : []);
+      nextTask();                                        // できた おだいを かたづけてから パレード
       const seen = [];
       const orig = drawCastChar;
       drawCastChar = (ctx, n) => { seen.push(n); return 0; };
       try{ for(const k of [800, 1600, 2400, 3200, 4000]) cast.find(a => a.kind === 'parade').draw(ctx, k); } finally { drawCastChar = orig; }
-      startTask(0);
       return { kinds, all: [...new Set(seen)].sort((a,b) => a-b), stays: cast.some(a => a.kind === 'parade') };
     });
-    t.eq(r, { kinds:['parade'], all:[1,2,3,4,5,6,7,8,9,10], stays:true }, 'パレードが おかしい');
+    t.eq(r, { kinds:['あとで 1,2,3,4,5,6,7,8,9,10'], all:[1,2,3,4,5,6,7,8,9,10], stays:true }, 'パレードが おかしい');
   },
 
   'パレード：左の おくから 右の てまえへ。すすむほど 右・下・大きく、おくの キャラから 先に描く': async t => {
@@ -623,16 +623,16 @@ module.exports = {
       startClockTask({ k:'clock', to:'3:47' }); clockT = 3*60 + 47; clockAnswer();
       const before = { n: prize().n, parade: cast.some(a => a.kind === 'parade') };
       startClockTask({ k:'pick', to:'9:00' }); drumSet(9, 0); drumAnswer();
+      const now = cast.some(a => a.kind === 'parade');
+      nextTask();
       const pr = cast.find(a => a.kind === 'parade');
       const seen = []; const orig = drawCastChar;
       drawCastChar = (ctx, n) => { seen.push(n); return 0; };
       try{ for(let a=0;a<=pr.dur;a+=200) pr.draw(ctx, a); } finally { drawCastChar = orig; }
-      return { before, after: prize().n, members: [...new Set(seen)] };
+      return { before, now, after: prize().n, members: [...new Set(seen)] };
     });
     t.eq(r.before, { n:4, parade:false }, '4問めまでに パレードが出た');
-    t.eq(r.after, 0, '5問めで かぞえなおしに ならない');
-    t.eq(await p.evaluate(() => { const f = prizeFull; startTask(3); return [f, prizeFull]; }), [true, false],
-         '5こ たまった おだいの あいだ ●●●●● の ままに ならない');
+    t.eq([r.after, r.now], [0, false], '5問めで かぞえなおしに ならない／できた その場で パレードが出た');
     t.eq(r.members.sort((a,b) => a-b), [5, 6, 8, 9, 47], '5問で つくった数（5,6,8 と 47ふん・9じ）が 行進しない');
   },
 
@@ -668,5 +668,39 @@ module.exports = {
       return { filled, empty, big: sizes[1000] <= sizes[10] * 1.01 && sizes[144] <= sizes[10] * 1.01 };
     });
     t.eq(r, { filled:3, empty:2, big:true }, '●○ か 大きな数の おおきさが ちがう');
+  },
+
+  'ごほうびの パレードは、できた おだいを かたづけてから：つぎへ で 草はらを 行進し、おわったら つぎの おだい': async t => {
+    const p = await t.open({ who:'hinata' });
+    const r = await p.evaluate(() => {
+      taskOn = true; setMix(false); prize().n = 4; prize().made = [5, 6, 8, 9];
+      startTask(4); spawnBlock(TASKS[4].n); checkTask();
+      const full = prizeFull, idx = taskIdx;
+      nextTask();                                          // 「つぎ」
+      const during = { brk: paradeBreak, blocks: blocks.length, same: taskIdx === idx, winFx: winFx };
+      tickAutoNext(); tickAutoNext();                      // あいだに 自動で すすまない
+      const still = paradeBreak && taskIdx === idx;
+      // パレードが おわったら つぎへ
+      cast.find(a => a.kind === 'parade').t0 -= 60000; drawFrame(performance.now());
+      const after = { brk: paradeBreak, idx: taskIdx, done: taskDone };
+      return { full, during, still, after, idx };
+    });
+    t.eq(r.full, true, '5こめの おだいで ●●●●● に ならない');
+    t.eq(r.during, { brk:true, blocks:0, same:true, winFx:null }, 'パレードの あいだに 問題が のこっている');
+    t.eq(r.still, true, 'パレードの あいだに 自動で すすんだ');
+    t.eq(r.after, { brk:false, idx: r.idx + 1, done:false }, 'パレードの あとに つぎの おだいへ すすまない');
+  },
+
+  'パレードの とちゅうで 画面を おすと、すぐ つぎの おだいへ（カードは 出さない）': async t => {
+    const p = await t.open({ who:'hinata' });
+    const r = await p.evaluate(() => {
+      taskOn = true; setMix(false); prize().n = 4; prize().made = [1, 2, 3, 4];
+      startTask(7); spawnBlock(TASKS[7].n); checkTask(); nextTask();
+      taskBtns = []; drawFrame(performance.now());
+      const card = taskBtns.length;
+      handleStart(sw/2, sh/2, 'm'); handleEnd(sw/2, sh/2, 'm');
+      return { card, brk: paradeBreak, idx: taskIdx, parade: cast.some(a => a.kind === 'parade') };
+    });
+    t.eq(r, { card:0, brk:false, idx:8, parade:false }, 'パレードを とばせない');
   },
 };

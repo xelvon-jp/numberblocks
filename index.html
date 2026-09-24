@@ -506,9 +506,11 @@ let genTask = null;       // いま出している とけいの おだい（な�
 let sinceClock = 0;       // まえの とけいから けいさんを 何問 すすめたか
 let lastClockGoal = -1;   // つづけて同じ時こくにしないため
 let lastLevelUp = 0;      // この とけいの おだいで レベルが上がったら そのレベル
+let pendingParade = null; // つぎへ いくときに 出す パレード（数の ならび。nextTask を見る）
+let paradeBreak = false;  // いま パレードの あいだ
 
 function loadProfileState(){
-  genTask = null;
+  genTask = null; paradeBreak = false; pendingParade = null;
   const r = curRec();
   taskIdx = Math.min(TASKS.length-1, r.idx|0);
   taskCleared = r.cleared;
@@ -714,6 +716,7 @@ function autoNextProgress(){
   return Math.min(1, (Date.now() - clearedAt) / AUTO_NEXT_MS);
 }
 function tickAutoNext(){
+  if(paradeBreak) return;
   if(!taskActive() || !taskDone || !clearedAt || autoNextOff) return;
   if(stageOpen || setOpen || whoOpen) return;     // ほかの画面を出しているあいだは待つ
   if(Date.now() - clearedAt >= AUTO_NEXT_MS) nextTask();
@@ -749,7 +752,7 @@ function checkWay(){
 
 // おだいを はじめるときに まっさらに もどすもの
 function resetTaskState(){
-  prizeCounted = false; prizeFull = false;
+  prizeCounted = false; prizeFull = false; paradeBreak = false; pendingParade = null;
   cast = cast.filter(a => a.kind !== 'run');
   drumReset(currentTask());
   taskDone = false; taskLog = []; winFx = null;
@@ -779,7 +782,26 @@ function startClockTask(spec){
 }
 // つぎへ。まぜまぜでは けいさん2問のあとに とけいを1問はさむ。
 // とけいの あとは、はさむ前の つづき（つぎの けいさん）から。さいごまで来たら はじめへ。
+// パレードは、できた おだいを 画面から かたづけてから 出す（あいだの じかん）。
+// 「つぎ」（または 自動で つぎへ）を おしたら、まず 空いた草はらを 行進して、おわったら つぎの おだい。
+// パレードの とちゅうで 画面を おすと、すぐ つぎへ すすむ。
 function nextTask(){
+  if(pendingParade){
+    const nums = pendingParade; pendingParade = null;
+    paradeBreak = true;
+    blocks = []; puzzle = null; winFx = null; dragBlock = null; dragPtr = null; dragPointers = {};
+    castParade(nums);
+    return;
+  }
+  advanceTask();
+}
+function endParadeBreak(){
+  if(!paradeBreak) return;
+  paradeBreak = false;
+  cast = cast.filter(a => a.kind !== 'parade');
+  advanceTask();
+}
+function advanceTask(){
   if(genTask){ startTask((taskIdx + 1) % TASKS.length); return; }
   if(mixMode() && ++sinceClock >= CLOCK_EVERY - 1){ sinceClock = 0; startClockTask(); return; }
   startTask((taskIdx + 1) % TASKS.length);
@@ -799,7 +821,7 @@ function noteClockAnswer(ok){
   const st = clockStats();
   if(t.clv !== st.lv) return;                 // おさらい・おためし は 数えない
   st.hist = (st.hist || []).concat([!!ok]).slice(-CLOCK_WINDOW);
-  if(clockRecentOk(st) >= CLOCK_UP && st.lv < CLOCK_MAX){ st.lv++; st.hist = []; lastLevelUp = st.lv; castParade(); }
+  if(clockRecentOk(st) >= CLOCK_UP && st.lv < CLOCK_MAX){ st.lv++; st.hist = []; lastLevelUp = st.lv; pendingParade = [1,2,3,4,5,6,7,8,9,10]; }
   saveTask();
 }
 
@@ -2902,7 +2924,7 @@ function notePrize(num){
   pz.n = (pz.n || 0) + 1;
   if(pz.n >= PRIZE_EVERY){
     // とけいの レベルアップと かさなったら、そちらの（1〜10 の）パレードに まかせる
-    if(!lastLevelUp) castParade(pz.made);
+    if(!lastLevelUp) pendingParade = pz.made.slice();
     pz.n = 0; pz.made = []; prizeFull = true;
   }
   saveTask();
@@ -3654,6 +3676,7 @@ function toggleFullscreen(){
 function setTaskOn(v){
   if(taskOn === v) return;
   taskOn = v; taskDone = false; taskLog = []; clearUndo(); winFx = null; drum = null; genTask = null;
+  paradeBreak = false; pendingParade = null;
   stageOpen = false; stageDetail = -1;
   hintOn = false; hintShownAt = 0; taskStartT = Date.now();
   blocks = []; saveTask(); updateTargets();
@@ -4408,6 +4431,8 @@ function handleStart(x,y,pid){
   }
   // いちらんを出しているあいだは、ほかのボタンには触れさせない
   if(stageOpen){ handleStageTap(x,y,pid); return; }
+  // パレードの とちゅうは、どこを おしても つぎの おだいへ（タブと 歯車は そのまま きく）
+  if(paradeBreak && y > TAB_H){ endParadeBreak(); return; }
   for(const ob of opBarBtns){
     if(!ptInRect(x,y,ob.x,ob.y,ob.w,ob.h)) continue;
     if(ob.op==='undo') doUndo(); else setMode(ob.op);
@@ -4695,7 +4720,14 @@ function drawFrame(ts){
   guardKidProfile();
   tickAutoNext();
   ctx.clearRect(0,0,sw,sh); drawBG(ctx); drawTabsAndUI(ctx);
-  if(mode==='clock'){
+  if(paradeBreak){
+    // できた おだいは かたづけて、パレードだけ。おわったら つぎの おだいへ
+    for(const fp of fxParticles) fp.update();
+    fxParticles = fxParticles.filter(fp=>fp.life>0);
+    drawCast(ctx);
+    for(const fp of fxParticles) fp.draw(ctx);
+    if(!cast.some(a => a.kind === 'parade')) endParadeBreak();
+  } else if(mode==='clock'){
     updateWinFx(dt);
     drawWinLines(ctx);
     drawClockMode(ctx, walkTime);
