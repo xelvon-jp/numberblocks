@@ -175,7 +175,7 @@ module.exports = {
     t.eq(await p.evaluate(() => Ink.records().map(r => [r.want, r.got])), [[1, 1], [5, 5]], 'きろく');
   },
 
-  'E かく：まちがえると どこが ちがうか おしえる（くり上がり わすれ・かがみもじ・よめない）': async t => {
+  'E かく：まちがえると どこが ちがうか おしえる（くり上がり わすれ・かがみもじ）、よめない ときは「？」': async t => {
     const p = await openH(t, 'write', 'add');
     await p.evaluate(() => setProblem('+', 12, 39));
     let r = await writeDigit(p, 't', 4);
@@ -192,7 +192,10 @@ module.exports = {
     t.ok(r.st === 'bad' && /かがみもじ/.test(r.msg), 'かがみもじを おしえない: ' + JSON.stringify(r));
     // らくがきは よめない
     await p.evaluate(() => { const c = WL().cells.t; S.cells.t.strokes = [[0,.3,.1,.9,.2,.1,.8,.9,.5,.2,.95,.6].reduce((a, v, i, s) => (i%2 ? a : a.concat({ x:c.x + c.w*v, y:c.y + c.h*s[i+1] })), [])]; S.cells.t.st = 'wait'; judgeCell('t'); });
-    t.ok(/よめなかった|十のくらい|くり上がり/.test(await p.evaluate(() => S.wmsg)), 'らくがきの あつかい');
+    const u = await p.evaluate(() => ({ msg: S.wmsg, st: S.cells.t.st, n: S.cells.t.strokes.length, unk: S.cells.t.unk > 0 }));
+    t.ok(u.msg === 'もういちど かいてね' && u.st === 'empty' && u.n === 0 && u.unk, 'よめない ときは「？」を 出して けす: ' + JSON.stringify(u));
+    await p.evaluate(() => { inkDown(WL().cells.t.x + 10, WL().cells.t.y + 10); inkUp(); clearTimeout(inkTimer); S.cells.t.strokes = []; S.cells.t.st = 'empty'; });
+    t.eq(await p.evaluate(() => [S.wmsg, S.cells.t.unk]), ['', 0], '書きはじめたら「？」と ことばが きえない');
     // こたえを けす は こたえだけ、けしゴム は メモだけ
     await p.evaluate(() => { S.memo.push([{ x:10, y:200 }, { x:30, y:220 }]); eraseInk(); });
     t.eq(await p.evaluate(() => [S.cells.o.st, S.cells.o.strokes.length, S.cells.t.st, S.memo.length]), ['empty', 0, 'empty', 1], 'こたえを けす');

@@ -409,7 +409,7 @@ function cellAt(wl, x, y){
   return best;
 }
 let pen = null, inkTimer = null, inkCell = null;   // pen = 書いている 線 { cell, pts }
-function wsay(t, pulse){ S.wmsg = t; S.pulse = pulse ? { k:pulse, at:now() } : null; }
+function wsay(t, pulse){ S.wmsg = t; S.wunk = false; S.pulse = pulse ? { k:pulse, at:now() } : null; }
 function inkDown(x, y){
   if(S.done) return;
   const wl = WL();
@@ -422,6 +422,7 @@ function inkDown(x, y){
   if(inkCell && inkCell !== k) judgeCell(inkCell);     // べつの ますに うつったら 前の ますを すぐ よむ
   clearTimeout(inkTimer); inkTimer = null;
   if(c.st === 'bad'){ c.strokes = []; c.st = 'empty'; c.val = null; }
+  c.unk = 0; if(S.wunk){ S.wunk = false; wsay(''); }
   c.st = 'wait'; inkCell = k;
   pen = { cell:k, pts:[{ x, y }] }; c.strokes.push(pen.pts);
 }
@@ -445,7 +446,8 @@ function judgeCell(k, d){
   }
   c.at = now();
   if(d === undefined) Ink.record(c.strokes, WL().cells[k], { want: cellWant(k), got: r ? r.digit : null, m: r && r.mirrored ? 1 : 0, o: r && r.byOrder ? 1 : 0 });
-  if(!r){ c.st = 'bad'; c.val = null; wsay('よめなかったよ。もういちど かいてね', k); return; }
+  // よめない：ますに「？」を 出して ゆらし、書いた 線は けす（まちがい では ないので かぞえない）
+  if(!r){ c.st = 'empty'; c.val = null; c.strokes = []; c.unk = now(); wsay('もういちど かいてね'); S.wunk = true; return; }
   c.val = r.digit;
   const want = cellWant(k);
   if(r.digit === want && r.mirrored){ c.st = 'bad'; S.miss++; wsay('おしい！ ' + want + ' が かがみもじに なってるよ', k); return; }
@@ -537,6 +539,16 @@ function drawWrite(l){
       ctx.font = 'bold ' + Math.round(0.78*cw) + 'px sans-serif';
       ctx.fillText(cellWant(k), r.x + r.w/2, r.y + r.h/2 + 2);
     } else {
+      // よめなかった「？」：ゆれて、すこしずつ きえる
+      const ua = c.unk ? t - c.unk : 1e9;
+      if(ua < 1100){
+        ctx.save();
+        ctx.globalAlpha = ua < 650 ? 1 : 1 - (ua - 650)/450;
+        ctx.translate(Math.sin(ua*0.06)*7*Math.max(0, 1 - ua/700), 0);
+        ctx.fillStyle = '#f0a020'; ctx.font = 'bold ' + Math.round(0.72*cw) + 'px sans-serif';
+        ctx.fillText('？', r.x + r.w/2, r.y + r.h/2 + 2);
+        ctx.restore();
+      }
       const col = c.st === 'bad' ? '#e0403f' : '#22314a';
       for(const s of c.strokes) inkPath(s, Math.max(4, cw*0.075), col);
     }
@@ -551,7 +563,7 @@ function drawWrite(l){
   lines.forEach((s, i) => {
     const y = wl.msgY + 14 + i*22;
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.strokeText(s, W/2, y);
-    ctx.fillStyle = S.done ? '#c0398a' : S.wmsg ? '#c8322f' : '#2b3a52'; ctx.fillText(s, W/2, y);
+    ctx.fillStyle = S.done ? '#c0398a' : S.wunk ? '#c07a10' : S.wmsg ? '#c8322f' : '#2b3a52'; ctx.fillText(s, W/2, y);
   });
   ctx.restore();
   // できた！ 式の ところに こたえの キャラが 出て とびはねる（こたえの 行は 見えたまま）
