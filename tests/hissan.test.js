@@ -1,4 +1,4 @@
-// ひっさん（ためし）のページ。もんだいの作りかた と、4つの こたえかた（へや・おまかせ・ドラム・えらぶ）が
+// ひっさん（ためし）のページ。もんだいの作りかた と、5つの こたえかた（へや・おまかせ・ドラム・えらぶ・かく）が
 // さいごまで とけること、まちがいの あつかい。
 
 async function openH(t, mode, kind, size){
@@ -27,6 +27,25 @@ const dragIn = (p, from, to) => p.evaluate(([from, to]) => {
   if(drag){ drag.x = x1; drag.y = y1; }
   return endDrag(x1, y1).then(() => got);
 }, [from, to]);
+// ゆびで 数字を 書く（お手本の 線を ますの 大きさに して、じっさいに ポインタで なぞる）
+async function writeDigit(p, key, d, opt){
+  opt = opt || {};
+  const strokes = await p.evaluate(([key, d, opt]) => {
+    const r = WL().cells[key], m = 0.18;
+    const v = Ink.BASE[d][opt.variant || 0];
+    return v.map(s => s.map(([x, y]) => [r.x + r.w*(m + (1 - 2*m)*(opt.mirror ? 1 - x : x)*0.7 + 0.15*(1 - 2*m)), r.y + r.h*(m + (1 - 2*m)*y)]));
+  }, [key, d, opt]);
+  for(const s of strokes){
+    await p.mouse.move(s[0][0], s[0][1]); await p.mouse.down();
+    for(let i=1;i<s.length;i++){
+      const [x0, y0] = s[i-1], [x1, y1] = s[i];
+      for(let k=1;k<=5;k++) await p.mouse.move(x0 + (x1 - x0)*k/5, y0 + (y1 - y0)*k/5);
+    }
+    await p.mouse.up();
+  }
+  await p.waitForFunction(key => S.cells[key].st !== 'wait', key, { timeout: 4000 });
+  return p.evaluate(key => ({ st: S.cells[key].st, val: S.cells[key].val, msg: S.wmsg }), key);
+}
 const waitIdle = p => p.waitForFunction(() => busy === 0 && anims.length === 0, null, { timeout: 8000 });
 
 module.exports = {
@@ -140,14 +159,79 @@ module.exports = {
     await p.waitForFunction(() => S.done, null, { timeout: 10000 });
   },
 
-  'どの画面でも へや・ボタンが 収まり、エラーが 出ない（4つの こたえかた）': async t => {
+  'E かく：12+39 を 指で 書く（くり上がりの 1 → 一 → 十）': async t => {
+    const p = await openH(t, 'write', 'add');
+    await p.evaluate(() => setProblem('+', 12, 39));
+    t.eq(await writeDigit(p, 'cT', 1), { st:'ok', val:1, msg:'' }, 'くり上がりの 1 が よめない');
+    t.eq((await writeDigit(p, 'o', 1)).st, 'ok', '一のくらいの 1 が よめない');
+    t.eq((await writeDigit(p, 't', 5)).st, 'ok', '十のくらいの 5 が よめない');
+    t.eq(await p.evaluate(() => [S.done, S.miss]), [true, 0], 'おわらない');
+  },
+
+  'E かく：まちがえると どこが ちがうか おしえる（くり上がり わすれ・かがみもじ・よめない）': async t => {
+    const p = await openH(t, 'write', 'add');
+    await p.evaluate(() => setProblem('+', 12, 39));
+    let r = await writeDigit(p, 't', 4);
+    t.eq([r.st, r.val], ['bad', 4], '4 を まちがいに しない');
+    t.ok(/くり上がりの 1 を たしわすれ/.test(r.msg), 'くり上がり わすれの ことばが ない: ' + r.msg);
+    t.eq(await p.evaluate(() => S.pulse && S.pulse.k), 'cT', 'くり上がりの ますを 光らせない');
+    r = await writeDigit(p, 't', 5);                   // 上から 書きなおせる
+    t.eq(r.st, 'ok', '書きなおせない');
+    r = await writeDigit(p, 'o', 2);
+    t.ok(r.st === 'bad' && /2 \+ 9 は？/.test(r.msg), '一のくらいの ことば: ' + r.msg);
+    t.eq(await p.evaluate(() => S.miss), 2, 'まちがいが かぞえられない');
+    await p.evaluate(() => setProblem('+', 18, 29));   // 一のくらい 7 を かがみもじで
+    r = await writeDigit(p, 'o', 7, { mirror:true });
+    t.ok(r.st === 'bad' && /かがみもじ/.test(r.msg), 'かがみもじを おしえない: ' + JSON.stringify(r));
+    // らくがきは よめない
+    await p.evaluate(() => { const c = WL().cells.t; S.cells.t.strokes = [[0,.3,.1,.9,.2,.1,.8,.9,.5,.2,.95,.6].reduce((a, v, i, s) => (i%2 ? a : a.concat({ x:c.x + c.w*v, y:c.y + c.h*s[i+1] })), [])]; S.cells.t.st = 'wait'; judgeCell('t'); });
+    t.ok(/よめなかった|十のくらい|くり上がり/.test(await p.evaluate(() => S.wmsg)), 'らくがきの あつかい');
+    // けす
+    await p.evaluate(() => eraseInk());
+    t.eq(await p.evaluate(() => [S.cells.o.st, S.cells.o.strokes.length, S.cells.t.st]), ['empty', 0, 'empty'], 'けす で きえない');
+  },
+
+  'E かく：ひき算 52−27（へった 十のくらい 4、一 5、十 2）と くり下がり わすれ': async t => {
+    const p = await openH(t, 'write', 'sub');
+    await p.evaluate(() => setProblem('-', 52, 27));
+    let r = await p.evaluate(() => { judgeCell('t', 3); return S.wmsg; });
+    t.ok(/くり下がりで 十のくらいが 1 へった/.test(r), 'くり下がり わすれの ことば: ' + r);
+    r = await p.evaluate(() => { judgeCell('o', 5); judgeCell('cT', 5); return S.wmsg; });
+    t.ok(/1 へる/.test(r), 'へらし わすれの ことば: ' + r);
+    await p.evaluate(() => { judgeCell('cT', 4); judgeCell('t', 2); });
+    t.eq(await p.evaluate(() => S.done), true, 'おわらない');
+    // 3けた：百のくらいの ますが ある
+    await p.evaluate(() => setProblem('+', 58, 67));
+    t.eq(await p.evaluate(() => cellKeys().map(cellWant)), [1, 5, 2, 1], '3けたの ます');
+  },
+
+  'E かく：おぼえる で 書いた 字を お手本に する': async t => {
+    const p = await openH(t, 'write', 'add');
+    const r = await p.evaluate(() => {
+      openTrain();
+      const b = trainBox();
+      train.strokes = [[{ x:b.x + 10, y:b.y + 10 }, { x:b.x + 60, y:b.y + 12 }, { x:b.x + 20, y:b.y + 90 }]];
+      trainDone();
+      const n = Ink.samples(), i = train.i;
+      closeTrain(); Ink.forget();
+      return [n, i, Ink.samples(), !!train];
+    });
+    t.eq(r, [1, 1, 0, false], 'おぼえる が うごかない');
+  },
+
+  'どの画面でも へや・ボタンが 収まり、エラーが 出ない（5つの こたえかた）': async t => {
     for(const [w, h] of [[393, 780], [375, 667], [430, 932]]){
-      for(const m of ['room', 'auto', 'drum', 'pick']){
+      for(const m of ['room', 'auto', 'drum', 'pick', 'write']){
         const p = await openH(t, m, 'mix', { width:w, height:h });
         await t.sleep(150);
         const r = await p.evaluate(() => {
           setProblem('+', 76, 58); const l = L(); draw();
           const fit = btns.every(b => b.x >= 0 && b.x + b.w <= W + 0.5 && b.y >= 0 && b.y + b.h <= H + 0.5);
+          if(modeId === 'write'){
+            const wl = WL(), cs = Object.values(wl.cells);
+            const ok = wl.cw >= 60 && cs.every(c => c.x >= 0 && c.x + c.w <= W && c.y > l.top - 1 && c.y + c.h < wl.msgY) && wl.msgY + 50 < l.bottom;
+            return { fit, rooms: ok, err: window.__err || '' };
+          }
           return { fit, rooms: l.rooms.t.h > 120, err: window.__err || '' };
         });
         t.eq(r, { fit:true, rooms:true, err:'' }, `${w}x${h} ${m} で はみ出す／エラー`);

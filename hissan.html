@@ -18,6 +18,7 @@
 <canvas id="c"></canvas>
 <script src="overrides.js"></script>
 <script src="engine.js"></script>
+<script src="ink.js"></script>
 <script>
 // ─── ひっさん（ためし）────────────────────────────────────────────
 // 2けたどうしの くり上がり・くり下がり の ある ひっさんを、キャラで あそぶ ためしの ページ。
@@ -26,6 +27,7 @@
 //   B おまかせ … キャラは じどうで うごく。とまったところで 一のくらい・十のくらい を こたえる
 //   C ドラム   … キャラは 見るだけ。こたえを ドラムロールで いっきに。あたったら うごきで わけを 見せる
 //   D えらぶ   … こたえの こうほ 3つ（せいかい と よくある まちがい）から えらぶ。あたったら わけを 見せる
+//   E かく     … ひっさんを 大きく 出し、くり上がりの 1 と こたえを 指で 書く。ちがう ところを おしえる
 // へや：一のへやには 9 までしか はいれない。10 に なったら 手を つないで「10」に へんしんし、十のへやへ。
 const cv = document.getElementById('c'), ctx = cv.getContext('2d');
 let W = 0, H = 0;
@@ -39,7 +41,7 @@ window.addEventListener('resize', resize); resize();
 const SAFE_B = (() => { const d = document.createElement('div'); d.style.cssText = 'position:fixed;bottom:0;height:env(safe-area-inset-bottom)';
   document.body.appendChild(d); const h = d.getBoundingClientRect().height; d.remove(); return h || 0; })();
 
-const MODES = [{ id:'room', label:'A へや' }, { id:'auto', label:'B おまかせ' }, { id:'drum', label:'C ドラム' }, { id:'pick', label:'D えらぶ' }];
+const MODES = [{ id:'room', label:'A へや' }, { id:'auto', label:'B おまかせ' }, { id:'drum', label:'C ドラム' }, { id:'pick', label:'D えらぶ' }, { id:'write', label:'E かく' }];
 const KINDS = [{ id:'add', label:'たし算' }, { id:'sub', label:'ひき算' }, { id:'mix', label:'まぜ' }];
 let modeId = 'room', kindId = 'add';
 try{ const v = JSON.parse(localStorage.getItem('nb_hissan_try') || '{}'); if(v.m) modeId = v.m; if(v.k) kindId = v.k; }catch(e){}
@@ -97,7 +99,9 @@ function newProblem(fixed){
         markT:false, markH:false, borrow:false,        // ひっさんの 小さな「1」と、くり下がりの ななめ線
         res:{ o:null, t:null, h:null }, miss:0, done:false, doneAt:0,
         drum: [0,0,0], picked:null, bad:new Set(), shake:{},
-        msg:'', msgAt:0, hideOnesB:false };
+        msg:'', msgAt:0, hideOnesB:false, cells:null, wmsg:'', pulse:null };
+  S.cells = makeCells();
+  clearTimeout(inkTimer); inkTimer = null; inkCell = null; pen = null;
   drag = null; anims = []; parts = []; busy = 0; askCol = null; askResolve = null;
   choices = null;
   if(modeId === 'pick'){ choices = [P.ans].concat(wrongAnswers(P)); choices.sort(() => Math.random() - 0.5); }
@@ -107,7 +111,7 @@ function newProblem(fixed){
 // ─── レイアウト ─────────────────────────────────────────────────
 function L(){
   const top = 8 + 38 + 6 + 36 + 8;
-  const bottomH = (modeId === 'pick' ? 150 : modeId === 'drum' ? 150 : 132) + SAFE_B;
+  const bottomH = (modeId === 'pick' ? 150 : modeId === 'drum' ? 150 : modeId === 'write' ? 76 : 132) + SAFE_B;
   const written = { top, h: 176 };
   const hintY = top + written.h + 10;
   const roomsTop = hintY + 16, roomsBottom = H - bottomH - 8;
@@ -363,6 +367,234 @@ function hintText(){
   return nextCol() ? colName(nextCol()) + 'の こたえを おそう' : '';
 }
 
+// ─── かく（E）──────────────────────────────────────────────────
+// ひっさんを 大きく 書き、くり上がりの 1（ひき算は くり下がって へった 数）と こたえを 指で 書く。
+// 1ます ずつ、書きおわって 少し たつと よみとって しらべる。ちがえば どこが ちがうかを おしえる。
+const INK_WAIT = 750;                     // さいごの 線から この ms で よみとる
+function cellKeys(){ return ['cT', 'o', 't'].concat(P.ans >= 100 ? ['h'] : []); }   // 書く じゅん
+function cellWant(k){
+  const aT = Math.floor(P.a/10);
+  if(k === 'cT') return P.op === '+' ? 1 : aT - 1;
+  return digitsOf(P)[k];
+}
+function makeCells(){ const c = {}; for(const k of cellKeys()) c[k] = { strokes:[], st:'empty', val:null, at:0 }; return c; }
+function WL(){
+  const l = L();
+  const cols = colsOf(P).slice().reverse();          // 左から 百・十・一
+  const nc = cols.length + 0.7;                      // 左はしに ＋・− の ぶん
+  const msgH = 64, availH = l.bottom - l.top - msgH - 12;
+  const cw = Math.max(48, Math.min(120, (W - 28)/nc, availH/4.05));
+  const pw = nc*cw + 16, px = W/2 - pw/2;
+  const ph = cw*4.05, py = l.top + Math.max(0, (availH - ph)*0.35);
+  const x = {}; cols.forEach((c, i) => { x[c] = px + 8 + (0.7 + i + 0.5)*cw; });
+  const yC = py + 0.06*cw, yA = yC + 0.78*cw, yB = yA + cw, yLine = yB + cw + 0.06*cw, yR = yLine + 0.08*cw;
+  const cells = {
+    cT: { x: x.t - 0.4*cw, y: yC, w: 0.8*cw, h: 0.72*cw },
+    o:  { x: x.o - 0.45*cw, y: yR, w: 0.9*cw, h: 0.98*cw },
+    t:  { x: x.t - 0.45*cw, y: yR, w: 0.9*cw, h: 0.98*cw },
+  };
+  if(x.h !== undefined) cells.h = { x: x.h - 0.45*cw, y: yR, w: 0.9*cw, h: 0.98*cw };
+  return { l, cw, px, py, pw, ph, x, yA, yB, yLine, cells, signX: px + 8 + 0.35*cw, msgY: py + ph + 12, msgH };
+}
+// ゆびが どの ますに 書いたか（ます より 少し ひろく とる）
+function cellAt(wl, x, y){
+  let best = null, bd = Infinity;
+  for(const k in wl.cells){
+    const r = wl.cells[k], m = wl.cw*0.18;
+    if(x < r.x - m || x > r.x + r.w + m || y < r.y - m || y > r.y + r.h + m) continue;
+    const d = Math.hypot(x - (r.x + r.w/2), y - (r.y + r.h/2));
+    if(d < bd){ bd = d; best = k; }
+  }
+  return best;
+}
+let pen = null, inkTimer = null, inkCell = null;   // pen = 書いている 線 { cell, pts }
+function wsay(t, pulse){ S.wmsg = t; S.pulse = pulse ? { k:pulse, at:now() } : null; }
+function inkDown(x, y){
+  if(S.done) return;
+  const wl = WL(), k = cellAt(wl, x, y);
+  if(!k) return;
+  const c = S.cells[k];
+  if(c.st === 'ok') return;                            // あっている ますは そのまま
+  if(inkCell && inkCell !== k) judgeCell(inkCell);     // べつの ますに うつったら 前の ますを すぐ よむ
+  clearTimeout(inkTimer); inkTimer = null;
+  if(c.st === 'bad'){ c.strokes = []; c.st = 'empty'; c.val = null; }
+  c.st = 'wait'; inkCell = k;
+  pen = { cell:k, pts:[{ x, y }] }; c.strokes.push(pen.pts);
+}
+function inkUp(){
+  if(!pen) return;
+  const k = pen.cell; pen = null;
+  clearTimeout(inkTimer);
+  inkTimer = setTimeout(() => { inkTimer = null; judgeCell(k); }, INK_WAIT);
+}
+// 1ます よみとって しらべる。 きめた数字 d を わたすと その数字を 書いた ことにする（テスト用）
+function judgeCell(k, d){
+  const c = S.cells[k]; if(!c || c.st === 'ok') return;
+  if(inkCell === k){ inkCell = null; clearTimeout(inkTimer); inkTimer = null; }
+  let r;
+  if(d !== undefined) r = { digit:d, mirrored:false };
+  else {
+    const strokes = c.strokes.filter(s => s.length);
+    r = strokes.length ? Ink.recognize(strokes) : null;
+    if(!strokes.length){ c.st = 'empty'; return; }
+  }
+  c.at = now();
+  if(!r){ c.st = 'bad'; c.val = null; wsay('よめなかったよ。もういちど かいてね', k); return; }
+  c.val = r.digit;
+  const want = cellWant(k);
+  if(r.digit === want && r.mirrored){ c.st = 'bad'; S.miss++; wsay('おしい！ ' + want + ' が かがみもじに なってるよ', k); return; }
+  if(r.digit !== want){ c.st = 'bad'; S.miss++; const m = whyWrong(k, r.digit); wsay(m.t, m.pulse || k); return; }
+  c.st = 'ok'; c.strokes = [];
+  const wl = WL(), rc = wl.cells[k];
+  burst(rc.x + rc.w/2, rc.y + rc.h/2, 14);
+  if(cellKeys().every(q => S.cells[q].st === 'ok')){ wsay(''); finish(); return; }
+  // こたえは 書けたのに くり上がりが まだ
+  const ans = ['o','t','h'].filter(q => S.cells[q]);
+  if(ans.every(q => S.cells[q].st === 'ok') && S.cells.cT.st !== 'ok')
+    wsay(P.op === '+' ? 'くり上がりの 1 も わすれずに かいておこう' : 'くり下がって へった 十のくらいの 数も かいておこう', 'cT');
+  else wsay('');
+}
+// まちがいの わけ（こたえは いわずに、どこを 見なおせば いいかを いう）
+function whyWrong(k, v){
+  const aT = Math.floor(P.a/10), aO = P.a%10, bT = Math.floor(P.b/10), bO = P.b%10;
+  if(P.op === '+'){
+    if(k === 'cT') return { t:'一のくらいが 10 を こえたら、十のくらいへ いくつ くり上がる？' };
+    if(k === 'o') return { t:'一のくらい：' + aO + ' + ' + bO + ' は？\n10 を こえたら 一のくらいの 数を かくよ' };
+    if(k === 't'){
+      if(v === (aT + bT) % 10) return { t:'くり上がりの 1 を たしわすれているよ', pulse:'cT' };
+      return { t:'十のくらい：' + aT + ' + ' + bT + ' + くり上がりの 1 は？' + (P.ans >= 100 ? '\n10 を こえたら 一のくらいの 数を かくよ' : '') };
+    }
+    return { t:'十のくらいから 百のくらいへ くり上がった 数を かこう' };
+  }
+  if(k === 'cT') return v === aT ? { t:'一のくらいに 10 を かしたから、十のくらいは 1 へるよ' } : { t:'十のくらいの ' + aT + ' から 1 へると？' };
+  if(k === 'o'){
+    if(v === bO - aO) return { t:'一のくらい：' + aO + ' から ' + bO + ' は ひけないね\n十のくらいから 10 を かりて ' + (10 + aO) + ' − ' + bO };
+    return { t:'一のくらい：' + (10 + aO) + ' − ' + bO + ' は？' };
+  }
+  if(v === aT - bT) return { t:'くり下がりで 十のくらいが 1 へったのを わすれているよ', pulse:'cT' };
+  return { t:'十のくらい：' + (aT - 1) + ' − ' + bT + ' は？' };
+}
+function eraseInk(){
+  if(S.done) return;
+  clearTimeout(inkTimer); inkTimer = null; inkCell = null; pen = null;
+  for(const k in S.cells){ const c = S.cells[k]; if(c.st !== 'ok'){ c.strokes = []; c.st = 'empty'; c.val = null; } }
+  wsay('');
+}
+function writeHint(){
+  if(S.done) return S.msg;
+  if(S.wmsg) return S.wmsg;
+  const k = cellKeys().find(q => S.cells[q].st !== 'ok');
+  if(k === 'cT') return P.op === '+' ? '十のくらいの 上に、くり上がりの 数を かこう' : '十のくらいから 10 を かりるよ。\nへった 十のくらいの 数を 上に かこう';
+  return colName(k) + 'の こたえを かこう';
+}
+function inkPath(pts, lw, col){
+  if(!pts.length) return;
+  ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(pts[0].x, pts[0].y);
+  if(pts.length === 1) ctx.lineTo(pts[0].x + 0.1, pts[0].y);
+  for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i].x, pts[i].y);
+  ctx.stroke();
+}
+function drawWrite(l){
+  const wl = WL(), cw = wl.cw, t = now();
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.94)';
+  ctx.beginPath(); ctx.roundRect(wl.px, wl.py, wl.pw, wl.ph, 16); ctx.fill();
+  const aT = Math.floor(P.a/10), aO = P.a%10, bT = Math.floor(P.b/10), bO = P.b%10;
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold ' + Math.round(cw*0.78) + 'px sans-serif'; ctx.fillStyle = '#16233a';
+  ctx.fillText(aT, wl.x.t, wl.yA + cw/2); ctx.fillText(aO, wl.x.o, wl.yA + cw/2);
+  ctx.fillText(bT, wl.x.t, wl.yB + cw/2); ctx.fillText(bO, wl.x.o, wl.yB + cw/2);
+  ctx.fillText(P.op === '+' ? '+' : '−', wl.signX, wl.yB + cw/2);
+  ctx.strokeStyle = '#16233a'; ctx.lineWidth = Math.max(3, cw*0.05); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(wl.px + 12, wl.yLine); ctx.lineTo(wl.px + wl.pw - 12, wl.yLine); ctx.stroke();
+  // ひき算：十のくらいの 数に ななめ線（くり下がりが 書けたら）
+  if(P.op === '-' && S.cells.cT.st === 'ok'){
+    ctx.strokeStyle = '#e0403f'; ctx.lineWidth = Math.max(3, cw*0.05);
+    ctx.beginPath(); ctx.moveTo(wl.x.t - cw*0.3, wl.yA + cw*0.78); ctx.lineTo(wl.x.t + cw*0.3, wl.yA + cw*0.22); ctx.stroke();
+  }
+  // ます
+  const firstOpen = cellKeys().find(q => S.cells[q].st !== 'ok');
+  for(const k in wl.cells){
+    const r = wl.cells[k], c = S.cells[k];
+    const sh = c.st === 'bad' && t - c.at < 450 ? Math.sin((t - c.at)*0.07)*6 : 0;
+    const pulse = S.pulse && S.pulse.k === k && t - S.pulse.at < 2400 ? 0.5 + 0.5*Math.sin((t - S.pulse.at)*0.012) : 0;
+    ctx.save(); ctx.translate(sh, 0);
+    if(c.st !== 'ok'){
+      ctx.fillStyle = c.st === 'bad' ? 'rgba(255,225,225,0.9)' : pulse ? 'rgba(255,236,170,' + (0.4 + 0.5*pulse) + ')' : 'rgba(240,246,255,0.9)';
+      ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 10); ctx.fill();
+      ctx.setLineDash([6, 5]);
+      ctx.strokeStyle = c.st === 'bad' ? '#e0403f' : (!S.done && k === firstOpen) || pulse ? '#f0a020' : 'rgba(120,130,150,0.5)';
+      ctx.lineWidth = (k === firstOpen || pulse) ? 3 : 1.6;
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+    if(c.st === 'ok'){
+      ctx.fillStyle = k === 'cT' ? '#e0403f' : '#1f6fd8';
+      ctx.font = 'bold ' + Math.round((k === 'cT' ? 0.55 : 0.78)*cw) + 'px sans-serif';
+      ctx.fillText(cellWant(k), r.x + r.w/2, r.y + r.h/2 + 2);
+    } else {
+      const col = c.st === 'bad' ? '#e0403f' : '#22314a';
+      for(const s of c.strokes) inkPath(s, Math.max(4, cw*0.075), col);
+    }
+    ctx.restore();
+  }
+  // ひとこと
+  const msg = writeHint() || '';
+  const lines = msg.split('\n');
+  ctx.font = 'bold 16px sans-serif'; ctx.lineJoin = 'round';
+  lines.forEach((s, i) => {
+    const y = wl.msgY + 14 + i*22;
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.strokeText(s, W/2, y);
+    ctx.fillStyle = S.done ? '#c0398a' : S.wmsg ? '#c8322f' : '#2b3a52'; ctx.fillText(s, W/2, y);
+  });
+  ctx.restore();
+  // できた！ 式の ところに こたえの キャラが 出て とびはねる（こたえの 行は 見えたまま）
+  if(S.done){
+    const e = Math.min(1, (t - S.doneAt)/400), sp = blockSpec(P.ans);
+    const top = wl.py + 4, bot = wl.yLine - 4;
+    ctx.save(); ctx.fillStyle = 'rgba(255,255,255,' + 0.8*e + ')'; ctx.beginPath(); ctx.roundRect(wl.px, wl.py, wl.pw, bot - wl.py, [16, 16, 0, 0]); ctx.fill(); ctx.restore();
+    const bs = Math.min(15, (bot - top - 40)/sp.rows, (wl.pw*0.7)/sp.cols);
+    const by = bot - 6 - Math.abs(Math.sin((t - S.doneAt)*0.006))*18*e;
+    ctx.save(); ctx.globalAlpha = e;
+    drawNumberblock(ctx, P.ans, W/2 - sp.cols*bs/2, by - sp.rows*bs, bs, { t, animate:true });
+    ctx.restore();
+  }
+}
+
+// ─── おぼえる：その子の 字を お手本に する ─────────────────────────
+// 0〜9 を 2かいずつ 書いてもらう。書いた 字は この 端末に のこり、よみとりに つかわれる。
+let train = null;   // { i, strokes, timer }
+const TRAIN_SEQ = [0,1,2,3,4,5,6,7,8,9,0,1,2,3,4,5,6,7,8,9];
+function trainBox(){ const s = Math.min(W - 60, H - 300, 300); return { x: W/2 - s/2, y: 150, w: s, h: s }; }
+function openTrain(){ train = { i:0, strokes:[], timer:null }; }
+function closeTrain(){ if(train) clearTimeout(train.timer); train = null; }
+function trainDone(){
+  if(!train) return;
+  const s = train.strokes.filter(q => q.length);
+  if(s.length && Ink.learn(TRAIN_SEQ[train.i], s)) train.i++;
+  train.strokes = [];
+  if(train.i >= TRAIN_SEQ.length) closeTrain();
+}
+function drawTrain(){
+  const b = trainBox();
+  ctx.save();
+  ctx.fillStyle = 'rgba(30,40,60,0.55)'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(16, 60, W - 32, b.y + b.h + 90 - 60, 18); ctx.fill();
+  ctx.fillStyle = '#16233a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 20px sans-serif';
+  ctx.fillText('「' + TRAIN_SEQ[train.i] + '」を かいてね', W/2, 92);
+  ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = '#5a6a80';
+  ctx.fillText((train.i + 1) + ' / ' + TRAIN_SEQ.length + '　（おぼえた 字：' + Ink.samples() + '）', W/2, 122);
+  ctx.fillStyle = '#f0f6ff'; ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 14); ctx.fill();
+  ctx.setLineDash([6,5]); ctx.strokeStyle = 'rgba(120,130,150,0.6)'; ctx.lineWidth = 1.6; ctx.stroke(); ctx.setLineDash([]);
+  for(const s of train.strokes) inkPath(s, Math.max(6, b.w*0.05), '#22314a');
+  ctx.restore();
+  const by = b.y + b.h + 16, bw = (W - 32 - 24 - 12)/3;
+  btn(28, by, bw, 48, 'かきなおす', false, () => { clearTimeout(train.timer); train.strokes = []; });
+  btn(28 + bw + 6, by, bw, 48, 'わすれる', false, () => { Ink.forget(); });
+  btn(28 + 2*(bw + 6), by, bw, 48, 'おわる', true, closeTrain);
+}
+
 // ─── ボタン ─────────────────────────────────────────────────────
 let btns = [];
 function btn(x, y, w, h, label, on, act, style){ btns.push({ x, y, w, h, act }); drawBtn(x, y, w, h, label, on, style); }
@@ -463,7 +695,13 @@ function drawRooms(l){
 function drawBottom(l){
   const y0 = l.bottom + 8, x0 = 8, w = W - 16;
   if(S.done){
-    btn(x0, y0 + 20, w, 64, 'つぎの もんだい', true, newProblem, { font:20 });
+    btn(x0, y0 + (modeId === 'write' ? 4 : 20), w, modeId === 'write' ? 58 : 64, 'つぎの もんだい', true, newProblem, { font:20 });
+    return;
+  }
+  if(modeId === 'write'){
+    const bw = (w - 8)/2;
+    btn(x0, y0 + 4, bw, 54, 'けす', false, eraseInk, { font:20 });
+    btn(x0 + bw + 8, y0 + 4, bw, 54, 'おぼえる（字を おしえる）', false, openTrain, { font:14 });
     return;
   }
   if(modeId === 'room' || modeId === 'auto'){
@@ -518,9 +756,9 @@ function drawTop(l){
   KINDS.forEach((k, i) => btn(8 + 64 + 8 + i*(kw + 6), y, kw, h, k.label, kindId === k.id, () => { kindId = k.id; saveChoice(); newProblem(); }));
   btn(W - 8 - 64, y, 64, h, 'つぎ', false, newProblem);
   // 2だんめ：こたえかた
-  const y2 = y + h + 6, mw = (W - 16 - 3*6)/4;
+  const y2 = y + h + 6, mw = (W - 16 - (MODES.length - 1)*6)/MODES.length;
   MODES.forEach((m, i) => btn(8 + i*(mw + 6), y2, mw, 36, m.label, modeId === m.id, () => { modeId = m.id; saveChoice(); newProblem(); },
-    { on:'#f0a020', font:13 }));
+    { on:'#f0a020', font: W < 420 ? 12 : 13 }));
 }
 function draw(){
   btns = [];
@@ -530,6 +768,7 @@ function draw(){
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#dde9ef'; ctx.fillRect(0, l.bottom, W, H - l.bottom);
   drawTop(l);
+  if(modeId === 'write'){ drawWrite(l); drawParts(); drawBottom(l); if(train){ btns = []; drawTrain(); } return; }
   drawWritten(l);
   // ひとこと
   ctx.save(); ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -550,12 +789,15 @@ function draw(){
     ctx.strokeText(tx, cx, l.rooms.t.y + 40); ctx.fillStyle = '#e8622a'; ctx.fillText(tx, cx, l.rooms.t.y + 40);
     ctx.restore();
   }
+  drawParts();
+  drawBottom(l);
+}
+function drawParts(){
   // かみふぶき
   for(const p of parts){ p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life -= 0.02; }
   parts = parts.filter(p => p.life > 0);
   for(const p of parts){ ctx.globalAlpha = p.life; ctx.fillStyle = p.col; ctx.fillRect(p.x, p.y, 5, 5); }
   ctx.globalAlpha = 1;
-  drawBottom(l);
 }
 function loop(){ try{ draw(); }catch(e){ window.__err = String(e && e.stack || e); } requestAnimationFrame(loop); }
 
@@ -564,12 +806,24 @@ cv.addEventListener('pointerdown', e => {
   const x = e.clientX, y = e.clientY;
   const b = btns.slice().reverse().find(b => hitRect(x, y, b));
   if(b){ b.act(); return; }
+  if(train){
+    if(hitRect(x, y, trainBox())){ clearTimeout(train.timer); pen = { train:true, pts:[{ x, y }] }; train.strokes.push(pen.pts); cv.setPointerCapture && cv.setPointerCapture(e.pointerId); }
+    return;
+  }
+  if(modeId === 'write'){ inkDown(x, y); if(pen) cv.setPointerCapture && cv.setPointerCapture(e.pointerId); return; }
   startDrag(x, y);
   if(drag){ drag.x = x; drag.y = y; cv.setPointerCapture && cv.setPointerCapture(e.pointerId); }
 });
-cv.addEventListener('pointermove', e => { if(drag){ drag.x = e.clientX; drag.y = e.clientY; } });
-cv.addEventListener('pointerup', e => { if(drag) endDrag(e.clientX, e.clientY); });
-cv.addEventListener('pointercancel', () => { drag = null; });
+cv.addEventListener('pointermove', e => {
+  if(pen){ const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : []; (evs.length ? evs : [e]).forEach(q => pen.pts.push({ x:q.clientX, y:q.clientY })); return; }
+  if(drag){ drag.x = e.clientX; drag.y = e.clientY; }
+});
+cv.addEventListener('pointerup', e => {
+  if(pen && pen.train){ pen = null; clearTimeout(train.timer); train.timer = setTimeout(trainDone, INK_WAIT); return; }
+  if(pen){ inkUp(); return; }
+  if(drag) endDrag(e.clientX, e.clientY);
+});
+cv.addEventListener('pointercancel', () => { drag = null; if(pen && !pen.train) inkUp(); else pen = null; });
 ['gesturestart','gesturechange','dblclick','contextmenu'].forEach(ev => document.addEventListener(ev, e => e.preventDefault(), { passive:false }));
 
 newProblem();
