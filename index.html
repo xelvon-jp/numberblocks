@@ -3797,8 +3797,8 @@ function handleSettingsTap(x, y){
     if(!ptInRect(x,y,b.x,b.y,b.w,b.h)) continue;
     if(b.val==='size')       setBlockSize(b.v);
     else if(b.val==='quiz')  setQuizOn(b.v);
-    else if(b.val==='zukan') location.href = 'zukan.html';
-    else if(b.val==='hissan') location.href = 'hissan.html';
+    else if(b.val==='zukan') location.href = 'zukan.html?v=' + Date.now();   // キャッシュの 古い版を ひらかない
+    else if(b.val==='hissan') location.href = 'hissan.html?v=' + Date.now();
     else if(b.val==='fs')    toggleFullscreen();
     else if(b.val==='arc')   { setOpen = false; openArcTuner(); }
     else if(b.val==='ptune') { setOpen = false; openParadeTuner(); }

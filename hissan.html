@@ -16,9 +16,13 @@
 </head>
 <body>
 <canvas id="c"></canvas>
-<script src="overrides.js"></script>
-<script src="engine.js"></script>
-<script src="ink.js"></script>
+<script>
+// ページと いっしょに 新しい スクリプトを 読む（古い キャッシュと まざらないように。index.html と おなじ しくみ）
+(function(){
+  var v = encodeURIComponent(document.lastModified);
+  ['overrides.js', 'engine.js', 'ink.js'].forEach(function(f){ document.write('<script src="' + f + '?v=' + v + '"><\/script>'); });
+})();
+</script>
 <script>
 // ─── ひっさん（ためし）────────────────────────────────────────────
 // 2けたどうしの くり上がり・くり下がり の ある ひっさんを、キャラで あそぶ ためしの ページ。
@@ -748,10 +752,15 @@ function drawBottom(l){
     });
   }
 }
+// ゲームから きたなら その画面に もどる（あそんでいた ようすも そのまま）。ちがえば 新しい 版を ひらく
+function goBack(){
+  if(history.length > 1 && /index\.html|\/$/.test(document.referrer.split('?')[0])) history.back();
+  else location.href = 'index.html?v=' + Date.now();
+}
 function drawTop(l){
   // 1だんめ：もどる／しゅるい／つぎ
   const y = 8, h = 38;
-  btn(8, y, 64, h, '← もどる', false, () => { location.href = 'index.html'; }, { font:12 });
+  btn(8, y, 64, h, '← もどる', false, goBack, { font:12 });
   const kw = (W - 8 - 64 - 8 - 8 - 64 - 8 - 12) / 3;
   KINDS.forEach((k, i) => btn(8 + 64 + 8 + i*(kw + 6), y, kw, h, k.label, kindId === k.id, () => { kindId = k.id; saveChoice(); newProblem(); }));
   btn(W - 8 - 64, y, 64, h, 'つぎ', false, newProblem);

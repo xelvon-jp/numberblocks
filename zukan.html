@@ -211,7 +211,7 @@
       <h1>ナンバーブロックス ずかん</h1>
       <div class="sub">1 〜 100 ／ タップでくわしく</div>
     </div>
-    <a id="gameBtn" href="index.html" title="ゲームへ">ゲーム</a>
+    <a id="gameBtn" href="index.html" onclick="this.href='index.html?v='+Date.now()" title="ゲームへ">ゲーム</a>
   </div>
   <div id="zukanScroll"><div id="grid"></div></div>
 </div>
@@ -332,8 +332,13 @@
 <!-- 描画エンジン本体（キャラの見た目の定義・描画関数）は共通ファイル。
      numberblocks（ゲーム側）も同じものを読み込むので、ここを直せば両方に反映される。 -->
 <!-- 陽太さんの確定ぶん（自動生成）。エンジンより先に読ませる -->
-<script src="overrides.js"></script>
-<script src="engine.js"></script>
+<script>
+// ページと いっしょに 新しい スクリプトを 読む（古い キャッシュと まざらないように。index.html と おなじ しくみ）
+(function(){
+  var v = encodeURIComponent(document.lastModified);
+  ['overrides.js', 'engine.js'].forEach(function(f){ document.write('<script src="' + f + '?v=' + v + '"><\/script>'); });
+})();
+</script>
 <script>
 /* ここから下は、このツール（ずかん／編集パネル）専用の UI ロジックだけ。 */
 
