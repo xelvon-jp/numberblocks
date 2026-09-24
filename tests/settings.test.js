@@ -176,4 +176,19 @@ module.exports = {
     t.eq(await p.evaluate(() => [JSON.stringify(paradePath(0)), localStorage.getItem('nb_parade_tune'), paradeTuning]),
          [d0, null, false], 'もとにもどす／とじる が きかない');
   },
+
+  'パレードの あいだ：おく と てまえ で べつべつに きめられる（まえの「あいだ」1つの値は りょうほうに使う）': async t => {
+    const p = await t.open({ storage:{ nb_parade_tune: JSON.stringify({ gap:0.06, x0:0.16 }) } });
+    const r = await p.evaluate(() => {
+      const old = paradeSettings();
+      paradeTune = Object.assign(paradeSettings(), { gap0:0.02, gap1:0.15 });
+      const o = paradeSettings(), us = paradeLine(1.0, o, 10);
+      const d = us.slice(1).map((u, i) => us[i] - u);            // 1と2、2と3、… の あいだ
+      return { old: [old.gap0, old.gap1, old.x0, 'gap' in old], nearWide: d[0] > d[d.length-1] * 3,
+               first: +d[0].toFixed(3), sliders: PARADE_SLIDERS.map(x => x.k).filter(k => /gap/.test(k)) };
+    });
+    t.eq(r.old, [0.06, 0.06, 0.16, false], 'まえの あいだ が 引きつがれない');
+    t.ok(r.nearWide, 'てまえの あいだ が おく より ひろくならない');
+    t.eq([r.first, r.sliders], [0.15, ['gap0', 'gap1']], 'あいだ の スライダー');
+  },
 };
