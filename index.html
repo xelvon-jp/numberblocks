@@ -194,7 +194,11 @@ function safeBottom(){
 }
 function getPadH(){ return (isLandscape() ? 56 : 110) + safeBottom(); }
 // 画面下に出るパネルの高さ（モードで変わる）
+// いま ごほうびの パレードの あいだか（nextTask を見る）。あいだは 下の キーの段を 出さないので、
+// 草はらを 画面の下まで ひろげる（下の段の ぶんだけ 空くと 不自然なので）。
+let paradeBreak = false;
 function bottomPanelH(){
+  if(paradeBreak)     return 26+safeBottom();
   if(mode==='factor') return FACTOR_H+safeBottom();
   if(mode==='quiz')   return QUIZ_H+safeBottom();
   if(mode==='clock')  return 26+safeBottom();   // とけいは文字盤を大きく見せたい
@@ -507,7 +511,6 @@ let sinceClock = 0;       // まえの とけいから けいさんを 何問 �
 let lastClockGoal = -1;   // つづけて同じ時こくにしないため
 let lastLevelUp = 0;      // この とけいの おだいで レベルが上がったら そのレベル
 let pendingParade = null; // つぎへ いくときに 出す パレード（数の ならび。nextTask を見る）
-let paradeBreak = false;  // いま パレードの あいだ
 let paradeHold = null;    // パレードを とばす ながおし {pid, t0, x, y}
 const PARADE_HOLD_MS = 1200;
 

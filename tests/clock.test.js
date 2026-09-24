@@ -711,4 +711,18 @@ module.exports = {
          'パレードの とばしかたが ちがう');
   },
 
+
+  'パレードの あいだは 下の キーの段を 出さず、草はらを 画面の下まで ひろげる': async t => {
+    const p = await t.open({ who:'hinata' });
+    const r = await p.evaluate(() => {
+      taskOn = true; setMode('+'); prize().n = 4; prize().made = [1, 2, 3, 4];
+      startTask(7); spawnBlock(TASKS[7].n); checkTask();
+      const before = bottomPanelH();
+      nextTask();
+      const during = bottomPanelH(), floor = calcFloor();
+      endParadeBreak();
+      return { before, during, low: during < before, floorLow: floor > sh - 120, after: bottomPanelH() === before };
+    });
+    t.eq([r.low, r.floorLow, r.after], [true, true, true], 'パレードの あいだの 草はらが ひろがらない: ' + JSON.stringify(r));
+  },
 };
