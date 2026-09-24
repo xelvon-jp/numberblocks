@@ -451,6 +451,9 @@ try{
                              prize: (r.prize && r.prize.made) ? { n: r.prize.n|0, made: r.prize.made.slice(-5) } : { n:0, made:[] },
                              clock: (r.clock && r.clock.lv) ? { lv: Math.min(CLOCK_MAX, r.clock.lv|0) || 1, hist: r.clock.hist || [] }
                                                              : { lv:1, hist:[] },
+                             // ひっさんの レベル（HISSAN_LEVELS は まだ 読まれていないので 3 と 書く）
+                             hissan: (r.hissan && r.hissan.lv) ? { lv: Math.min(3, r.hissan.lv|0) || 1, hist: r.hissan.hist || [] }
+                                                               : { lv:1, hist:[] },
                              beg: { idx:b.idx|0, cleared:b.cleared||{}, logs:b.logs||{}, rainbow:b.rainbow||{} } };
       }
       const i = PROFILES.findIndex(pr=>pr.id === v.cur);
@@ -507,6 +510,8 @@ function clockStatsOf(id){
 }
 function clockStats(){ return clockStatsOf(profile().id); }
 let genTask = null;       // いま出している とけいの おだい（なければ けいさん）
+let hissanTask = null;    // いま出している ひっさんの おだい { lv, frame }（ひっさんの 画面を 上に かさねて 出す）
+let nextSpecial = 'clock';// まぜまぜで つぎに はさむのは とけい か ひっさん か（かわりばんこ）
 let sinceClock = 0;       // まえの とけいから けいさんを 何問 すすめたか
 let lastClockGoal = -1;   // つづけて同じ時こくにしないため
 let lastLevelUp = 0;      // この とけいの おだいで レベルが上がったら そのレベル
@@ -515,6 +520,7 @@ let paradeHold = null;    // パレードを とばす ながおし {pid, t0, x,
 const PARADE_HOLD_MS = 1200;
 
 function loadProfileState(){
+  closeHissan();
   genTask = null; paradeBreak = false; pendingParade = null;
   const r = curRec();
   taskIdx = Math.min(TASKS.length-1, r.idx|0);
@@ -807,18 +813,83 @@ function endParadeBreak(){
   advanceTask();
 }
 function advanceTask(){
-  if(genTask){ startTask((taskIdx + 1) % TASKS.length); return; }
-  if(mixMode() && ++sinceClock >= CLOCK_EVERY - 1){ sinceClock = 0; startClockTask(); return; }
+  if(genTask || hissanTask){ closeHissan(); startTask((taskIdx + 1) % TASKS.length); return; }
+  if(mixMode() && ++sinceClock >= CLOCK_EVERY - 1){
+    sinceClock = 0;
+    if(nextSpecial === 'hissan'){ nextSpecial = 'clock'; startHissanTask(); }
+    else { nextSpecial = 'hissan'; startClockTask(); }
+    return;
+  }
   startTask((taskIdx + 1) % TASKS.length);
 }
 // まぜまぜを 入れる／切る（いちらんの「けいさん／まぜまぜ」）
 function setMix(v){
   const r = recOf(profile().id, false);
   if(!!r.mix === !!v) return;
-  r.mix = !!v; sinceClock = 0;
+  r.mix = !!v; sinceClock = 0; nextSpecial = 'clock';
   if(!v && genTask) startTask(taskIdx);     // とけいの とちゅうで やめたら、けいさんへ もどる
   saveTask();
 }
+// ── まぜまぜの ひっさん ─────────────────────────────────────────
+// とけいと おなじように、けいさんの あいだに はさむ（とけい と かわりばんこ）。
+// ひっさんの ページ（hissan.html の「E かく」）を 画面いっぱいに かさねて 1もん とく。
+// レベルは 人ごと：直近10問で 8問 まちがえずに できたら つぎへ（とけいと おなじ きまり）。
+const HISSAN_LEVELS = [
+  { name:'たし算', kind:'add', big:false },   // くり上がり 1かい、こたえは 2けた
+  { name:'ひき算', kind:'sub', big:false },   // くり下がり 1かい
+  { name:'まぜ',   kind:'mix', big:true  }    // たし算・ひき算、こたえ 3けたも
+];
+function hissanStatsOf(id){
+  const r = taskStore[id] || (taskStore[id] = emptyRec());
+  return r.hissan || (r.hissan = { lv:1, hist:[] });
+}
+function hissanStats(){ return hissanStatsOf(profile().id); }
+function startHissanTask(){
+  closeHissan();
+  if(!isCalcMode()) setMode('calc');
+  resetTaskState();
+  const st = hissanStats(), lv = HISSAN_LEVELS[st.lv - 1];
+  hissanTask = { lv: st.lv, frame: null };
+  const f = document.createElement('iframe');
+  f.src = 'hissan.html?embed=1&kind=' + lv.kind + '&big=' + (lv.big ? 1 : 0) +
+          '&label=' + encodeURIComponent('ひっさん' + st.lv + '（' + lv.name + '）') + '&v=' + Date.now();
+  f.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;border:0;z-index:50;background:#bfe8f0';
+  document.body.appendChild(f);
+  hissanTask.frame = f;
+  updateTargets();
+}
+function closeHissan(){
+  if(hissanTask && hissanTask.frame) hissanTask.frame.remove();
+  hissanTask = null;
+}
+function noteHissanAnswer(ok){
+  const t = hissanTask; if(!t) return;
+  const st = hissanStats();
+  if(t.lv !== st.lv) return;
+  st.hist = (st.hist || []).concat([!!ok]).slice(-CLOCK_WINDOW);
+  if(st.hist.filter(Boolean).length >= CLOCK_UP && st.lv < HISSAN_LEVELS.length){
+    st.lv++; st.hist = []; lastLevelUp = st.lv; pendingParade = [1,2,3,4,5,6,7,8,9,10];
+  }
+  saveTask();
+}
+// ひっさんの ページからの しらせ：できた（まちがい なしか）／もどる（とばして つぎの けいさんへ）
+function onHissanMessage(m){
+  if(!hissanTask || !m || m.from !== 'hissan') return;
+  if(m.type === 'done'){
+    noteHissanAnswer(m.miss === 0);
+    notePrize(m.ans > 100 ? m.ans - 100 : m.ans);     // ごほうびの パレードにも 数える（こたえの キャラ）
+    if(hissanTask.frame) hissanTask.frame.remove();
+    hissanTask.frame = null;                           // hissanTask は のこす（つぎへ で けいさんに もどる）
+    nextTask();
+  } else if(m.type === 'quit'){
+    closeHissan(); startTask((taskIdx + 1) % TASKS.length);
+  }
+}
+window.addEventListener('message', e => {
+  if(hissanTask && hissanTask.frame && e.source !== hissanTask.frame.contentWindow) return;
+  onHissanMessage(e.data);
+});
+
 // とけいの おだいで、1かいめの こたえが あたったかを 記録する。
 // いまの レベルの おだいだけ 数える。直近10問で 8問 あたれば レベルアップ。
 function noteClockAnswer(ok){
@@ -3335,6 +3406,8 @@ function drawCardBtn(ctx, x, y, w, h, label, fill, fg){
   ctx.beginPath(); ctx.roundRect(x,y,w,h,9); ctx.fill();
   ctx.fillStyle = fg;
   ctx.font='bold 13px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  // はばに 入りきらない ときは 字を 小さく する（まぜまぜ（とけい3・ひっさん2）など）
+  for(let fs=12; fs>=9 && ctx.measureText(label).width > w-10; fs--) ctx.font='bold '+fs+'px sans-serif';
   ctx.fillText(label, x+w/2, y+h/2+1);
   ctx.restore();
 }
@@ -3594,8 +3667,8 @@ function drawStageSelect(ctx, t){
   // まぜまぜの ボタンには、いまの とけいの レベルも出す。
   {
     const cy3 = g.cat.y, ch3 = g.cat.h, cg = 6, cw3 = (g.cat.w - cg) / 2;
-    const st = clockStats();
-    [{ v:false, text:'けいさん' }, { v:true, text:'まぜまぜ（とけい' + st.lv + '）' }].forEach((c, i) => {
+    const st = clockStats(), hs = hissanStats();
+    [{ v:false, text:'けいさん' }, { v:true, text:'まぜまぜ（とけい' + st.lv + '・ひっさん' + hs.lv + '）' }].forEach((c, i) => {
       const x = g.cat.x + i*(cw3+cg), on = (mixMode() === c.v);
       drawCardBtn(ctx, x, cy3, cw3, ch3, c.text,
                   on ? 'rgba(255,205,70,0.96)' : 'rgba(255,255,255,0.10)', on ? '#4a3300' : '#b9c8dc');
@@ -3680,7 +3753,7 @@ function toggleFullscreen(){
 // （パパやママが気づかず ひなたの記録で遊んでしまわないように）。
 function setTaskOn(v){
   if(taskOn === v) return;
-  taskOn = v; taskDone = false; taskLog = []; clearUndo(); winFx = null; drum = null; genTask = null;
+  taskOn = v; taskDone = false; taskLog = []; clearUndo(); winFx = null; drum = null; genTask = null; closeHissan();
   paradeBreak = false; pendingParade = null;
   stageOpen = false; stageDetail = -1;
   hintOn = false; hintShownAt = 0; taskStartT = Date.now();
@@ -4044,6 +4117,7 @@ function drawRecordPanel(ctx){
   row('ぜんぶ けす', clearedCountOf(id, begOf(id)) + ' / ' + TASKS.length, 'all', -1, 'rgba(255,214,214,0.98)');
   // まぜまぜの とけいの レベルを はじめ（ちょうど）に もどす
   row('とけいの レベルを 1に もどす', 'いま ' + clockStatsOf(id).lv, 'clock', -1);
+  row('ひっさんの レベルを 1に もどす', 'いま ' + hissanStatsOf(id).lv, 'hissan', -1);
   ty += 8;
   // うつす先は1人ずつ。たずねるときに どの行か分かるよう、lv に行き先の番号を入れる
   PROFILES.forEach((pr, i) => {
@@ -4165,6 +4239,7 @@ function handleStageTap(x,y,pid){
           if(recConfirm.kind==='level')     clearLevelRecords(profile().id, recConfirm.lv);
           else if(recConfirm.kind==='all')  clearAllRecords(profile().id);
           else if(recConfirm.kind==='clock'){ const st = clockStats(); st.lv = 1; st.hist = []; saveTask(); }
+          else if(recConfirm.kind==='hissan'){ const st = hissanStats(); st.lv = 1; st.hist = []; saveTask(); }
           else if(recConfirm.kind==='move' && PROFILES[recConfirm.lv]){
             moveRecords(profile().id, PROFILES[recConfirm.lv].id);
           }

@@ -276,6 +276,41 @@ module.exports = {
     t.eq(q, [null, 5, 1, ''], 'ほんとうは？ で なおせない');
   },
 
+  'まぜまぜ：ひっさんを 画面いっぱいに かさねて 出し、できたら つぎの けいさんへ。8問 まちがえずに できたら レベルが 上がる': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(async () => {
+      taskOn = true; setMix(true); startTask(4);
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const until = async f => { for(let i=0;i<100;i++){ try{ if(f()) return true; }catch(e){} await wait(50); } return false; };
+      const out = {};
+      startHissanTask();
+      const f = hissanTask.frame;
+      out.frame = !!f && f.parentNode === document.body && /embed=1&kind=add&big=0/.test(f.src);
+      out.loaded = await until(() => f.contentWindow.eval("P && modeId === 'write'"));
+      const w = f.contentWindow;
+      out.inner = w.eval('[EMBED.kind, P.ans < 100, P.op]');
+      w.setProblem('+', 12, 39); w.judgeCell('o', 1); w.judgeCell('t', 5);
+      out.done = w.eval('S.done');
+      // つぎの もんだい ボタン → ゲームへ しらせる
+      w.eval('btns = []; drawBottom(L()); btns[0].act();');
+      await until(() => !document.querySelector('iframe'));
+      if(paradeBreak) endParadeBreak();
+      out.after = [!!hissanTask, !!document.querySelector('iframe'), taskIdx, isCalcMode(), hissanStats().hist.join()];
+      // レベルアップ：8問 まちがえずに
+      for(let i=0;i<8;i++){ startHissanTask(); onHissanMessage({ from:'hissan', type:'done', ans:51, miss:0 }); if(paradeBreak) endParadeBreak(); }
+      out.lv = hissanStats().lv;
+      startHissanTask(); out.kind2 = /kind=sub/.test(hissanTask.frame.src);
+      // もどる：とばして つぎの けいさんへ（かぞえない）
+      const idx = taskIdx, h = hissanStats().hist.length;
+      onHissanMessage({ from:'hissan', type:'quit' });
+      out.quit = [!!hissanTask, !!document.querySelector('iframe'), taskIdx === (idx + 1) % TASKS.length, hissanStats().hist.length === h];
+      saveTask(); out.saved = JSON.parse(localStorage.getItem(TASK_KEY)).p[profile().id].hissan.lv;
+      return out;
+    });
+    t.eq(r, { frame:true, loaded:true, inner:['add', true, '+'], done:true, after:[false, false, 5, true, 'true'], lv:2, kind2:true,
+              quit:[false, false, true, true], saved:2 }, 'まぜまぜの ひっさんが おかしい');
+  },
+
   'どの画面でも へや・ボタンが 収まり、エラーが 出ない（5つの こたえかた）': async t => {
     for(const [w, h] of [[393, 780], [375, 667], [430, 932]]){
       for(const m of ['room', 'auto', 'drum', 'pick', 'write']){

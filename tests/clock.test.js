@@ -142,12 +142,16 @@ module.exports = {
   },
 
   // ── まぜまぜ ──
-  'まぜまぜ：けいさん2問 → とけい1問 → けいさん の じゅん。とけいの あとは つぎの けいさんから': async t => {
+  'まぜまぜ：けいさん2問 → とけい か ひっさん 1問（かわりばんこ）→ けいさん の じゅん。あとは つぎの けいさんから': async t => {
     const p = await t.open();
     const seq = await p.evaluate(() => {
       taskOn = true; setMix(true); startTask(0);
       const out = [];
       for(let k=0;k<7;k++){
+        if(hissanTask){                                     // ひっさん：できた ことに する
+          out.push('ひ'); onHissanMessage({ from:'hissan', type:'done', ans:51, miss:0 });
+          if(paradeBreak) endParadeBreak(); continue;
+        }
         const c = currentTask();
         out.push(isClockTask(c) ? 'と' : 'け' + taskIdx);
         if(isPickTask(c)){
@@ -161,7 +165,7 @@ module.exports = {
       }
       return out.join(',');
     });
-    t.eq(seq, 'け0,け1,と,け2,け3,と,け4', 'まぜまぜの じゅんばんが ちがう');
+    t.eq(seq, 'け0,け1,と,け2,け3,ひ,け4', 'まぜまぜの じゅんばんが ちがう');
   },
 
   'まぜまぜで ないときは、とけいは 出ない': async t => {
@@ -202,7 +206,7 @@ module.exports = {
       startClockTask();
       openStages(); drawStageSelect(ctx, 0);
       tap(stageBtns.find(b => b.val === 'mix' && b.v === false));
-      return { n: btns.length, label: got.includes('まぜまぜ（とけい4）'), on, off: mixMode(),
+      return { n: btns.length, label: got.includes('まぜまぜ（とけい4・ひっさん1）'), on, off: mixMode(),
                back: !genTask && taskIdx === 3 && isCalcMode(), cells: stageBtns.filter(b => b.val === 'go').length };
     });
     t.eq(r, { n:2, label:true, on:true, off:false, back:true, cells:60 }, 'けいさん／まぜまぜ の切りかえが おかしい');

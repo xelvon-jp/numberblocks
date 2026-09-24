@@ -49,15 +49,21 @@ const MODES = [{ id:'room', label:'A へや' }, { id:'auto', label:'B おまか�
 const KINDS = [{ id:'add', label:'たし算' }, { id:'sub', label:'ひき算' }, { id:'mix', label:'まぜ' }];
 let modeId = 'room', kindId = 'add';
 try{ const v = JSON.parse(localStorage.getItem('nb_hissan_try') || '{}'); if(v.m) modeId = v.m; if(v.k) kindId = v.k; }catch(e){}
+// ゲームの「まぜまぜ」から よばれた とき（iframe）：E かく だけ、1もん。おわったら ゲームに しらせる
+//   hissan.html?embed=1&kind=add|sub|mix&big=0|1&label=…
+const EMBED = (() => { const q = new URLSearchParams(location.search); if(q.get('embed') !== '1') return null;
+  return { kind: q.get('kind') || 'add', big: q.get('big') === '1', label: q.get('label') || 'ひっさん' }; })();
+if(EMBED){ modeId = 'write'; kindId = EMBED.kind; }
+function tellGame(msg){ try{ window.parent && window.parent !== window && window.parent.postMessage(Object.assign({ from:'hissan' }, msg), '*'); }catch(e){} }
 function saveChoice(){ try{ localStorage.setItem('nb_hissan_try', JSON.stringify({ m:modeId, k:kindId })); }catch(e){} }
 
 // ─── もんだい ───────────────────────────────────────────────────
 const R = n => Math.floor(Math.random()*n);
 // たし算：一のくらいで かならず くり上がる。4かいに1かいは こたえが 3けた
 // ひき算：一のくらいで かならず くり下がる（ときどき 60−27 のように 0 から）。こたえは 10 いじょう
-function genProblem(kind){
+function genProblem(kind, noBig){
   const op = kind === 'mix' ? (Math.random() < 0.5 ? '+' : '-') : (kind === 'sub' ? '-' : '+');
-  const wantBig = Math.random() < 0.25;
+  const wantBig = !noBig && Math.random() < 0.25;
   for(let k=0;k<500;k++){
     const a = 10 + R(90), b = 10 + R(90);
     if(op === '+'){
@@ -96,7 +102,7 @@ function colsOf(P){ return P.ans >= 100 ? ['o','t','h'] : ['o','t']; }
 // きまった もんだいで はじめる（テスト・ためし用）
 function setProblem(op, a, b){ newProblem({ op, a, b, ans: op === '+' ? a + b : a - b }); }
 function newProblem(fixed){
-  P = fixed && fixed.op ? fixed : genProblem(kindId);
+  P = fixed && fixed.op ? fixed : genProblem(kindId, EMBED && !EMBED.big);
   const aT = Math.floor(P.a/10), aO = P.a%10, bT = Math.floor(P.b/10), bO = P.b%10;
   S = { tensA:aT, tensB:bT, tensB0:bT, onesA:aO, onesB:bO, carry:0, hund:0,
         capA: P.op === '+' ? aT + bT + 1 : aT,        // 十のへやの 上の段に ならぶ いちばん多い本数（ならびを うごかさない）
@@ -114,7 +120,7 @@ function newProblem(fixed){
 
 // ─── レイアウト ─────────────────────────────────────────────────
 function L(){
-  const top = 8 + 38 + 6 + 36 + 8;
+  const top = EMBED ? 8 + 38 + 8 : 8 + 38 + 6 + 36 + 8;
   const bottomH = (modeId === 'pick' ? 150 : modeId === 'drum' ? 150 : modeId === 'write' ? 76 : 132) + SAFE_B;
   const written = { top, h: 176 };
   const hintY = top + written.h + 10;
@@ -586,8 +592,8 @@ function drawWrite(l){
 // ─── できた！の 計算アニメ（E かく）──────────────────────────────
 // 16 + 74：16 と 74 → 10・6 と 10×7・4 に わかれる → 10 が あつまって 80 → 6 と 4 で 10
 //          → 10 は 十のほうへ ジャンプ → 80 と 10 で 90 → こたえ 90
-// 52 − 27：52 と 27 → 10×5・2 と 10×2・7 → 10 を 1ぴき 一のほうへ（12）→ 7 が 12 から 7 を つれていく → 5
-//          → 下の 10 が 1ぴきずつ 上の 10 を つれていく → のこり 10×2 で 20 → こたえ 25
+// 52 − 27：52 だけ 出て 10×5・2 に わかれる → 10 を 1ぴき 一のほうへ（12）→ 12 の うち 7 が てんめつして きえる → 5
+//          → 10 の うち 2ひき（−20）が てんめつして きえる → のこり 10×2 で 20 → こたえ 25
 let cele = null;   // { id, actors:[], bs, ground }
 function celeActor(n, x, y){ const a = { n, x, y, fx:x, fy:y, t0:0, dur:0, hop:0, alpha:1, fadeAt:0, pop:0 }; cele.actors.push(a); return a; }
 function celePos(a, t){
@@ -613,8 +619,15 @@ function drawCele(t){
     const bounce = a.bounce && t > a.bounce ? Math.abs(Math.sin((t - a.bounce)*0.006))*16 : 0;
     ctx.save();
     ctx.globalAlpha = a.fadeAt && t > a.fadeAt ? Math.max(0, 1 - (t - a.fadeAt)/350) : a.alpha;
+    if(a.blinkAt && t > a.blinkAt) ctx.globalAlpha *= Math.floor((t - a.blinkAt)/170) % 2 ? 0.2 : 1;   // ひく ぶんは てんめつ
     drawNumberblock(ctx, a.n, p.x - sp.cols*bs/2, p.y - bounce - sp.rows*bs, bs, { t, animate:true });
     ctx.restore();
+    if(a.tag){
+      ctx.save(); ctx.font = 'bold ' + Math.round(Math.max(16, bs*2.6)) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+      ctx.lineJoin = 'round'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.globalAlpha = a.fadeAt && t > a.fadeAt ? Math.max(0, 1 - (t - a.fadeAt)/350) : 1;
+      const ty = p.y - sp.rows*bs - 16; ctx.strokeText(a.tag, a.tagX !== undefined ? a.tagX : p.x, ty); ctx.fillStyle = '#e0403f'; ctx.fillText(a.tag, a.tagX !== undefined ? a.tagX : p.x, ty);
+      ctx.restore();
+    }
   }
 }
 async function celebrateWrite(){
@@ -642,17 +655,19 @@ async function celebrateWrite(){
   // 一の キャラを 2ひき ならべた ときの x
   const [xao, xbo] = celeRow(xO, [aO, bO], 10);
   // 1) ふたりが ならんで とうじょう
-  const [xa, xb] = celeRow(xC, [P.a, P.b], 26);
-  const A = celeActor(P.a, xa, G), B = celeActor(P.b, xb, G);
-  A.pop = B.pop = now();
+  // ひき算は ひかれる数 だけ 出す（ひく ぶんは あとで てんめつして きえる）
+  const sub = P.op === '-';
+  const [xa, xb] = sub ? [xC, xC] : celeRow(xC, [P.a, P.b], 26);
+  const A = celeActor(P.a, xa, G), B = sub ? null : celeActor(P.b, xb, G);
+  A.pop = now(); if(B) B.pop = now();
   await wait(1000); if(!ok()) return;
   // 2) 位ごとに わかれる：十は 10 が なんびきか に、一は そのまま
-  celeDrop(A); celeDrop(B);
-  const [ra, rb] = rodXs([aT, bT]);
+  celeDrop(A); if(B) celeDrop(B);
+  const [ra, rb] = sub ? rodXs([aT]).concat([[]]) : rodXs([aT, bT]);
   const Ar = ra.map(x => { const q = celeActor(10, xa, G); celeMove(q, x, G, 700, 30 + Math.random()*20); return q; });
   const Br = rb.map(x => { const q = celeActor(10, xb, G); celeMove(q, x, G, 700, 30 + Math.random()*20); return q; });
-  const Ao = celeActor(aO, xa, G), Bo = celeActor(bO, xb, G);
-  celeMove(Ao, xao, G, 700, 50); celeMove(Bo, xbo, G, 700, 50);
+  const Ao = celeActor(aO, xa, G), Bo = sub ? null : celeActor(bO, xb, G);
+  celeMove(Ao, sub ? xO : xao, G, 700, 50); if(Bo) celeMove(Bo, xbo, G, 700, 50);
   await wait(1200); if(!ok()) return;
   let T, O;
   if(P.op === '+'){
@@ -683,37 +698,31 @@ async function celebrateWrite(){
   } else {
     // 3) 一が ひけないので、十の 10 を 1ぴき 一の ほうへ（2 → 12）
     const K = Ar.pop();
-    celeMove(K, xao - celeWidth(aO)/2 - bs, G, 850, 80);
+    celeMove(K, xO - celeWidth(aO)/2 - bs, G, 850, 80);
     await wait(950); if(!ok()) return;
-    celeMove(K, xao, G, 300); celeMove(Ao, xao, G, 300);
+    celeMove(K, xO, G, 300); celeMove(Ao, xO, G, 300);
     await wait(330); if(!ok()) return;
     celeDrop(K); celeDrop(Ao);
-    const Ao2 = celeActor(10 + aO, xao, G); Ao2.pop = now(); poof(Ao2, 10);
+    const Ao2 = celeActor(10 + aO, xO, G); Ao2.pop = now(); poof(Ao2, 10);
     await wait(800); if(!ok()) return;
-    // 4) 一：下の 7 が 12 から 7 を つれて いっしょに でていく（のこり 5）
-    celeMove(Bo, xao + celeWidth(Ao2.n)/2 + celeWidth(bO)/2 + 8, G, 450, 30);
-    await wait(480); if(!ok()) return;
+    // 4) 一：12 の うち ひく 7 が てんめつして きえる（のこり 5）
     celeDrop(Ao2);
-    O = celeActor(10 + aO - bO, xao - celeWidth(bO)/2 - 4, G);
-    const X = celeActor(bO, xao + celeWidth(O.n)/2 + 4, G);
-    O.pop = now(); poof(X, 8);
-    await wait(400); if(!ok()) return;
-    const leave = (qs, dx) => qs.forEach((q, i) => { celeMove(q, W + 40 + i*bs*2 + dx, G - 30, 900, 40); q.fadeAt = now() + 500; });
-    leave([X, Bo], 0);
-    celeMove(O, xao, G, 500);
-    await wait(1000); if(!ok()) return;
-    for(const q of [X, Bo]) celeDrop(q);
-    // 5) 十：下の 10 が 1ぴきずつ 上の 10 を 1ぴき つれて でていく
-    const took = Ar.slice(Ar.length - bT);
-    Br.forEach((q, i) => celeMove(q, took[i].x + bs + rodGap*0.3, G, 500, 30));
-    await wait(560); if(!ok()) return;
-    for(const q of took) poof(q, 4);
-    await wait(250); if(!ok()) return;
-    leave(took.concat(Br), 0);
-    await wait(1000); if(!ok()) return;
-    for(const q of took.concat(Br)) celeDrop(q);
-    // のこった 10 が がったい（10 と 10 → 20）
-    const left = Ar.slice(0, Ar.length - bT);
+    const [xr, xx] = celeRow(xO, [10 + aO - bO, bO], 8);
+    O = celeActor(10 + aO - bO, xr, G);
+    const X = celeActor(bO, xx, G); X.blinkAt = now(); X.tag = '−' + bO;
+    await wait(1400); if(!ok()) return;
+    poof(X, 10); X.fadeAt = now();
+    await wait(380); if(!ok()) return;
+    celeDrop(X); celeMove(O, xO, G, 400);
+    await wait(600); if(!ok()) return;
+    // 5) 十：ひく ぶんの 10 が てんめつして きえる → のこった 10 が あつまる
+    const took = Ar.slice(Ar.length - bT), left = Ar.slice(0, Ar.length - bT);
+    took.forEach((q, i) => { q.blinkAt = now(); });
+    if(took.length){ const c = took[took.length >> 1]; c.tag = '−' + bT*10; c.tagX = (took[0].x + took[took.length - 1].x)/2; }
+    await wait(1400); if(!ok()) return;
+    for(const q of took){ poof(q, 5); q.fadeAt = now(); }
+    await wait(380); if(!ok()) return;
+    for(const q of took) celeDrop(q);
     for(const q of left) celeMove(q, xT, G, 450, 16);
     await wait(480); if(!ok()) return;
     for(const q of left) celeDrop(q);
@@ -964,7 +973,7 @@ function drawRooms(l){
 function drawBottom(l){
   const y0 = l.bottom + 8, x0 = 8, w = W - 16;
   if(S.done){
-    btn(x0, y0 + (modeId === 'write' ? 4 : 20), w, modeId === 'write' ? 58 : 64, 'つぎの もんだい', true, newProblem, { font:20 });
+    btn(x0, y0 + (modeId === 'write' ? 4 : 20), w, modeId === 'write' ? 58 : 64, 'つぎの もんだい', true, EMBED ? () => tellGame({ type:'done', op:P.op, a:P.a, b:P.b, ans:P.ans, miss:S.miss }) : newProblem, { font:20 });
     return;
   }
   if(modeId === 'write'){
@@ -1024,6 +1033,13 @@ function goBack(){
   else location.href = 'index.html?v=' + Date.now();
 }
 function drawTop(l){
+  if(EMBED){
+    // ゲームの中：もどる（とばす）と、なんの もんだいか だけ
+    btn(8, 8, 64, 38, '← もどる', false, () => tellGame({ type:'quit' }), { font:12 });
+    ctx.save(); ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#16233a'; ctx.fillText(EMBED.label, W/2, 27); ctx.restore();
+    return;
+  }
   // 1だんめ：もどる／しゅるい／つぎ
   const y = 8, h = 38;
   btn(8, y, 64, h, '← もどる', false, goBack, { font:12 });
