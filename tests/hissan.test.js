@@ -171,6 +171,17 @@ module.exports = {
     t.eq(r, [9, 9, 7], 'しっぽの ながい 9 が よめない');
   },
 
+  'よみとり：たて線の みじかい 5（よこ線から すぐ おなか）を 5 と よむ（84−26 で あった 字）': async t => {
+    const p = await openH(t, 'write', 'sub');
+    const r = await p.evaluate(() => {
+      const d = pts => { const o = []; for(let i=0;i<pts.length-1;i++) for(let k=0;k<8;k++) o.push({ x:pts[i][0] + (pts[i+1][0]-pts[i][0])*k/8, y:pts[i][1] + (pts[i+1][1]-pts[i][1])*k/8 }); return o; };
+      const one = [[470,1188],[420,1188],[380,1196],[366,1212],[385,1235],[420,1262],[440,1300],[438,1340],[420,1370],[400,1380]];
+      const q = Ink.recognize([d(one)]);
+      return [q.digit, q.sure];
+    });
+    t.eq(r, [5, true], 'たて線の みじかい 5 が よめない');
+  },
+
   'E かく：12+39 を 指で 書く（線の上は メモ → 一 → 十）': async t => {
     const p = await openH(t, 'write', 'add');
     await p.evaluate(() => setProblem('+', 12, 39));
