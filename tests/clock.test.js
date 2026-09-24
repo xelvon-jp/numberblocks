@@ -505,6 +505,26 @@ module.exports = {
     t.eq(r, { kinds:['parade'], all:[1,2,3,4,5,6,7,8,9,10], stays:true }, 'パレードが おかしい');
   },
 
+  'パレード：左の おくから 右の てまえへ。すすむほど 右・下・大きく、おくの キャラから 先に描く': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      taskOn = true; castParade();
+      const pr = cast.find(a => a.kind === 'parade');
+      const frame = age => { const got = []; const orig = drawCastChar;
+        drawCastChar = (ctx, n, x, bottom, bs) => { got.push({ n, x, bottom, bs }); return 0; };
+        try{ pr.draw(ctx, age); } finally { drawCastChar = orig; } return got; };
+      // 1（せんとう）を 追いかける
+      const one = [800, 1600, 2400].map(a => frame(a).find(g => g.n === 1));
+      const grows = one[0].x < one[1].x && one[1].x < one[2].x && one[0].bottom < one[1].bottom && one[1].bottom < one[2].bottom
+                    && one[0].bs < one[1].bs && one[1].bs < one[2].bs;
+      const f = frame(3000);
+      const backFirst = f.every((g, k) => k === 0 || f[k-1].bs <= g.bs + 1e-9);
+      const startLeftFar = paradePath(0).x < sw*0.1 && paradePath(0).y < paradePath(1).y && paradePath(1).x > sw;
+      return { grows, backFirst, startLeftFar, many: f.length >= 5 };
+    });
+    t.eq(r, { grows:true, backFirst:true, startLeftFar:true, many:true }, 'パレードの うごきが ちがう');
+  },
+
   '虹の すべりだい：1〜5 の だれかが 虹の上を 右の足もとまで すべる（画面の外へも そのまま）': async t => {
     const p = await t.open();
     const r = await p.evaluate(() => {

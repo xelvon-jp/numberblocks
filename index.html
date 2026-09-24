@@ -2816,22 +2816,32 @@ function castRun(goal){
     }});
   });
 }
-// パレード：1〜10 が 1れつで 左から右へ（1が せんとう）
+// パレード：1〜10 が 1れつで、左の おくから 右の てまえへ 行進してくる（1が せんとう）。
+// おくは 小さく 高いところ（お山の ふもと）、てまえは 大きく 低いところ。
+// 1本の みちの上を すすむので、うしろの キャラから 先に描いて、てまえの キャラが かさなるようにする。
+const PARADE_MS = 5200, PARADE_GAP = 0.075;          // ぜんたいの長さ／キャラどうしの あいだ（みちの わりあい）
+function paradePath(u){                               // u：みちの どこか（0＝左おく、1＝右てまえ）
+  const e = u*u*(3 - 2*u)*0.35 + u*0.65;              // てまえに 来るほど すこし はやく 見える
+  const y0 = groundTopY() - arcPlayH()*0.28, y1 = calcFloor() + 18;
+  return { x: -30 + (sw + 70)*e, y: y0 + (y1 - y0)*e, s: 0.32 + 0.98*e };
+}
 function castParade(){
   cast = cast.filter(a => a.kind !== 'parade');
-  const floor = calcFloor(), bs = Math.max(5, Math.min(11, (floor - TAB_H) * 0.28 / 10));
-  const nums = [1,2,3,4,5,6,7,8,9,10], gap = bs*1.4;
-  const ws = nums.map(n => blockSpec(n).cols*bs);
-  const total = ws.reduce((a, b) => a + b, 0) + gap*(nums.length - 1);
-  cast.push({ kind:'parade', t0: castNow(), dur: 4200, draw(ctx, age){
-    const head = -20 + (sw + total + 40) * (age / 4200);   // せんとう（1）の 右はし
-    let x = head;
-    nums.forEach((n, i) => {
-      x -= ws[i];
+  const nums = [1,2,3,4,5,6,7,8,9,10];
+  const base = Math.max(5, Math.min(11, (calcFloor() - TAB_H) * 0.28 / 10));
+  cast.push({ kind:'parade', t0: castNow(), dur: PARADE_MS, draw(ctx, age){
+    const head = (1 + PARADE_GAP*nums.length) * (age / PARADE_MS);
+    // うしろ（10）から描く
+    for(let i = nums.length - 1; i >= 0; i--){
+      const u = head - i*PARADE_GAP;
+      if(u < 0 || u > 1.05) continue;
+      const p = paradePath(Math.min(1, u)), n = nums[i], bs = base * p.s;
       const hop = Math.abs(Math.sin(age*0.011 + i*0.8)) * bs*0.9;
-      if(x < sw && x + ws[i] > 0) drawCastChar(ctx, n, x, floor - hop, bs, true);
-      x -= gap;
-    });
+      const w = blockSpec(n).cols*bs;
+      ctx.save(); ctx.globalAlpha = Math.min(1, u/0.06);              // おくから ふわっと あらわれる
+      drawCastChar(ctx, n, p.x - w/2, p.y - hop, bs, true);
+      ctx.restore();
+    }
   }});
 }
 // 虹の すべりだい。虹が かかりきったら 1〜5 の だれかが てっぺんから 右の足もとまで すべりおりる。
