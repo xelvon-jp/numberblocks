@@ -592,8 +592,8 @@ function drawWrite(l){
 // ─── できた！の 計算アニメ（E かく）──────────────────────────────
 // 16 + 74：16 と 74 → 10・6 と 10×7・4 に わかれる → 10 が あつまって 80 → 6 と 4 で 10
 //          → 10 は 十のほうへ ジャンプ → 80 と 10 で 90 → こたえ 90
-// 52 − 27：52 だけ 出て 10×5・2 に わかれる → 10 を 1ぴき 一のほうへ（12）→ 12 の うち 7 が てんめつして きえる → 5
-//          → 10 の うち 2ひき（−20）が てんめつして きえる → のこり 10×2 で 20 → こたえ 25
+// 52 − 27：52 だけ 出て 10×5・2 に わかれる → 10 を 1ぴき 一のほうへ → 10 が 1×10 に わかれ、7こ（−7）が てんめつして きえる
+//          → 1×3 が 3 に → 3 と 2 で 5 → 10 の うち 2ひき（−20）が てんめつして きえる → のこり 10×2 で 20 → こたえ 25
 let cele = null;   // { id, actors:[], bs, ground }
 function celeActor(n, x, y){ const a = { n, x, y, fx:x, fy:y, t0:0, dur:0, hop:0, alpha:1, fadeAt:0, pop:0 }; cele.actors.push(a); return a; }
 function celePos(a, t){
@@ -642,7 +642,8 @@ async function celebrateWrite(){
   const nRods = aT + bT + 1;
   cele.bs = Math.max(3, Math.min(12, H0/11, (wl.pw*0.6 - 24)/(nRods*1.6), (wl.pw*0.9 - 30)/(cols(P.a) + cols(P.b))));
   const bs = cele.bs, rodGap = bs*0.6, grpGap = bs*2.2;
-  const xT = wl.px + wl.pw*0.36, xO = wl.px + wl.pw*0.82, xC = W/2;
+  // ひき算は 一のほうで 1 を 10こ ならべるので、十を 左に よせて 一の ばしょを ひろく とる
+  const xT = wl.px + wl.pw*(P.op === '-' ? 0.26 : 0.36), xO = wl.px + wl.pw*0.82, xC = W/2;
   const poof = (a, n) => { const p = celePos(a, now()); burst(p.x, p.y - blockSpec(Math.max(1, a.n)).rows*bs/2, n || 10); };
   const fitBig = n => n > 100 ? Math.min(1, (G - wl.py - 30)/((10 + blockSpec(n - 100).rows + 1)*bs)) : 1;
   // 10 の キャラを ならべた ときの x（上の数の 十、すこし あけて 下の数の 十、…）
@@ -696,25 +697,42 @@ async function celebrateWrite(){
       T = celeActor((aT + bT + 1)*10, xT, G); T.pop = now(); T.big = fitBig(T.n); poof(T, 18);
     }
   } else {
-    // 3) 一が ひけないので、十の 10 を 1ぴき 一の ほうへ（2 → 12）
+    // 3) 一が ひけないので、十の 10 を 1ぴき 一の ほうへ。一の 2 は 左はしに よける
     const K = Ar.pop();
-    celeMove(K, xO - celeWidth(aO)/2 - bs, G, 850, 80);
-    await wait(950); if(!ok()) return;
-    celeMove(K, xO, G, 300); celeMove(Ao, xO, G, 300);
-    await wait(330); if(!ok()) return;
-    celeDrop(K); celeDrop(Ao);
-    const Ao2 = celeActor(10 + aO, xO, G); Ao2.pop = now(); poof(Ao2, 10);
-    await wait(800); if(!ok()) return;
-    // 4) 一：12 の うち ひく 7 が てんめつして きえる（のこり 5）
-    celeDrop(Ao2);
-    const [xr, xx] = celeRow(xO, [10 + aO - bO, bO], 8);
-    O = celeActor(10 + aO - bO, xr, G);
-    const X = celeActor(bO, xx, G); X.blinkAt = now(); X.tag = '−' + bO;
+    const rodsR = Ar.length ? Ar[Ar.length - 1].x + bs : xT;
+    const onesL = Math.max(wl.px + wl.pw*0.46, rodsR + 14), onesR = wl.px + wl.pw - 10;
+    const ub = Math.max(2.5, Math.min(bs, (onesR - onesL - celeWidth(aO) - 12) / 14.6)), step = ub*1.45;
+    const xAo = onesL + celeWidth(aO)/2, ux0 = onesL + celeWidth(aO) + (aO ? 12 : 0) + ub/2, xK = ux0 + 4.5*step;
+    celeMove(Ao, xAo, G, 400);
+    celeMove(K, xK, G, 850, 80);
+    await wait(1000); if(!ok()) return;
+    // 4) 10 が 1 × 10 に わかれる（10 − 7 は 1 を 7 こ とる）
+    celeDrop(K);
+    const units = [];
+    for(let i=0;i<10;i++){ const u = celeActor(1, xK, G); u.big = ub/bs; celeMove(u, ux0 + i*step, G, 550, 18 + (i%3)*6); units.push(u); }
+    await wait(1000); if(!ok()) return;
+    const tookO = units.slice(10 - bO), restO = units.slice(0, 10 - bO);
+    tookO.forEach(u => { u.blinkAt = now(); });
+    const mid = tookO[tookO.length >> 1]; mid.tag = '−' + bO; mid.tagX = (tookO[0].x + tookO[tookO.length - 1].x)/2;
     await wait(1400); if(!ok()) return;
-    poof(X, 10); X.fadeAt = now();
+    for(const u of tookO){ poof(u, 3); u.fadeAt = now(); }
     await wait(380); if(!ok()) return;
-    celeDrop(X); celeMove(O, xO, G, 400);
-    await wait(600); if(!ok()) return;
+    for(const u of tookO) celeDrop(u);
+    // のこった 1 が あつまって 1つに（1 × 3 → 3）
+    const xr = ux0 + (restO.length - 1)*step/2;
+    for(const u of restO) celeMove(u, xr, G, 450, 14);
+    await wait(480); if(!ok()) return;
+    for(const u of restO) celeDrop(u);
+    const Rn = 10 - bO, Rk = celeActor(Rn, xr, G); Rk.big = Math.min(1, ub/bs*1.6); Rk.pop = now(); poof(Rk, 8);
+    await wait(750); if(!ok()) return;
+    // 一の 2 と がったい（3 と 2 → 5）
+    if(aO > 0){
+      celeMove(Rk, xO, G, 450, 20); celeMove(Ao, xO, G, 450, 20);
+      await wait(480); if(!ok()) return;
+      celeDrop(Rk); celeDrop(Ao);
+      O = celeActor(Rn + aO, xO, G); O.pop = now(); poof(O, 10);
+    } else { celeDrop(Ao); O = Rk; O.big = 1; celeMove(O, xO, G, 400); }
+    await wait(800); if(!ok()) return;
     // 5) 十：ひく ぶんの 10 が てんめつして きえる → のこった 10 が あつまる
     const took = Ar.slice(Ar.length - bT), left = Ar.slice(0, Ar.length - bT);
     took.forEach((q, i) => { q.blinkAt = now(); });
