@@ -226,6 +226,20 @@ module.exports = {
       return [n, i, Ink.samples(), !!train];
     });
     t.eq(r, [1, 1, 0, false], 'おぼえる が うごかない');
+    // まちがえて おぼえさせた 字を けす：ひとつ もどる／おぼえた字 から えらんで けす
+    const u = await p.evaluate(() => {
+      openTrain(); const b = trainBox(), st = [[{ x:b.x + 50, y:b.y + 10 }, { x:b.x + 52, y:b.y + 200 }]];
+      train.strokes = st.map(q => q.slice()); trainDone();
+      train.strokes = st.map(q => q.slice()); trainDone();
+      const before = [train.i, Ink.samples()];
+      btns = []; drawTrain(); btns.find(q => q.x > 28 && q.y === btns[0].y && q !== btns[0] && q !== btns[2]).act();   // ひとつ もどる
+      const after = [train.i, Ink.samples()];
+      train.view = 'mine'; btns = []; drawMine(); btns[0].act(); const sel = train.sel;
+      btns = []; drawMine(); btns[1].act();        // この字を けす
+      return [before, after, sel, Ink.samples(), window.__err || ''];
+    });
+    t.eq(u, [[2, 2], [1, 1], 0, 0, ''], 'まちがえた 字を けせない');
+    await p.evaluate(() => closeTrain());
     // きろくを なおす
     await p.evaluate(() => setProblem('+', 12, 39));
     await writeDigit(p, 't', 4);

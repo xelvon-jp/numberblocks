@@ -158,6 +158,8 @@
     saveSamples(list.slice(-80)); build(); return true;
   }
   function forget(){ saveSamples([]); build(); }
+  // おぼえた 字を 1つ けす（まちがえて べつの 数字を 書いたとき）。i を はぶくと さいごの 1つ
+  function unlearn(i){ const list = loadSamples(); if(!list.length) return false; list.splice(i === undefined ? list.length - 1 : i, 1); saveSamples(list); build(); return true; }
 
   // ─── きろく：じっさいに 書いた 字と、なにと よんだか（あとで 見なおして なおすため）───
   const LOG = 'nb_ink_log', LOG_MAX = 60;
@@ -179,5 +181,5 @@
   }
   function clearRecords(){ saveRecords([]); }
   build();
-  root.Ink = { recognize, rank, learn, forget, samples: () => loadSamples().length, record, records, fixRecord, clearRecords, BASE, N, REJECT };
+  root.Ink = { recognize, rank, learn, forget, samples: () => loadSamples().length, mine: loadSamples, unlearn, record, records, fixRecord, clearRecords, BASE, N, REJECT };
 })(typeof window !== 'undefined' ? window : globalThis);

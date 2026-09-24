@@ -585,7 +585,7 @@ function drawTrain(){
   const b = trainBox();
   ctx.save();
   ctx.fillStyle = 'rgba(30,40,60,0.55)'; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(16, 60, W - 32, b.y + b.h + 90 - 60, 18); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(16, 60, W - 32, b.y + b.h + 132 - 60, 18); ctx.fill();
   ctx.fillStyle = '#16233a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = 'bold 20px sans-serif';
   ctx.fillText('「' + TRAIN_SEQ[train.i] + '」を かいてね', W/2, 92);
@@ -597,9 +597,49 @@ function drawTrain(){
   ctx.restore();
   const by = b.y + b.h + 16, bw = (W - 32 - 24 - 12)/3;
   btn(28, by, bw, 48, 'かきなおす', false, () => { clearTimeout(train.timer); train.strokes = []; });
-  btn(28 + bw + 6, by, bw, 48, 'わすれる', false, () => { Ink.forget(); });
+  // ひとつ もどる：さっき おぼえた 字を けして、その 数字から 書きなおす
+  btn(28 + bw + 6, by, bw, 48, 'ひとつ もどる', false, () => {
+    clearTimeout(train.timer); train.strokes = [];
+    if(train.i > 0 && Ink.unlearn()) train.i--;
+  }, { font:13, fg: train.i > 0 ? '#22314a' : '#b0b8c4' });
   btn(28 + 2*(bw + 6), by, bw, 48, 'おわる', true, closeTrain);
-  btn(28, by + 56, W - 56, 40, 'きろくを 見る（書いた 字 ' + Ink.records().length + '）', false, () => { train.view = 'rec'; train.sel = null; }, { font:13 });
+  const hw = (W - 56 - 6)/2;
+  btn(28, by + 56, hw, 40, 'きろく（' + Ink.records().length + '）', false, () => { train.view = 'rec'; train.sel = null; }, { font:13 });
+  btn(28 + hw + 6, by + 56, hw, 40, 'おぼえた 字（' + Ink.samples() + '）', false, () => { train.view = 'mine'; train.sel = null; }, { font:13 });
+}
+// おぼえた 字の 一らん。まちがえて おぼえさせた 字は えらんで けせる
+function drawMine(){
+  const list = Ink.mine(), n = list.length;
+  ctx.save();
+  ctx.fillStyle = '#f5f8fc'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#16233a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 17px sans-serif'; ctx.fillText('おぼえた 字（あたらしい じゅん）', W/2, 26);
+  ctx.font = '12px sans-serif'; ctx.fillStyle = '#5a6a80';
+  ctx.fillText('まちがえた 字は おして「この字を けす」', W/2, 48);
+  ctx.restore();
+  const bottomH = 110 + SAFE_B, cols = 5, gap = 6, tw = (W - 16 - gap*(cols - 1))/cols, th = tw + 18;
+  const rows = Math.max(1, Math.floor((H - 66 - bottomH) / (th + gap)));
+  for(let j=0;j<Math.min(n, rows*cols);j++){
+    const i = n - 1 - j, c = list[i].cloud, x = 8 + (j%cols)*(tw + gap), y = 64 + Math.floor(j/cols)*(th + gap);
+    btns.push({ x, y, w:tw, h:th, act: () => { train.sel = i; } });
+    ctx.save();
+    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(x, y, tw, th, 8); ctx.fill();
+    if(train.sel === i){ ctx.strokeStyle = '#e0403f'; ctx.lineWidth = 3; ctx.stroke(); }
+    // お手本は 点で のこっているので 点で かく（まんなか そろえ）
+    const sc = (tw - 16), cx = x + tw/2, cy = y + (tw - 4)/2;
+    ctx.fillStyle = '#22314a';
+    for(const q of c){ ctx.beginPath(); ctx.arc(cx + q.x*sc*0.9, cy + q.y*sc*0.9, 2.2, 0, Math.PI*2); ctx.fill(); }
+    ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = '#1f6fd8';
+    ctx.fillText('「' + list[i].digit + '」', x + tw/2, y + th - 9);
+    ctx.restore();
+  }
+  if(!n){ ctx.save(); ctx.fillStyle = '#5a6a80'; ctx.font = '14px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('まだ ありません', W/2, 120); ctx.restore(); }
+  const bw = (W - 16 - 12)/3, yb = H - bottomH + 40;
+  const sel = train.sel !== null && list[train.sel];
+  btn(8, yb, bw, 46, 'この字を けす', false, () => { if(train.sel !== null){ Ink.unlearn(train.sel); train.sel = null; } }, { font:13, fg: sel ? '#c8322f' : '#b0b8c4' });
+  btn(8 + bw + 6, yb, bw, 46, 'ぜんぶ けす', false, () => { if(train.sure && now() - train.sure < 3000){ Ink.forget(); train.sure = 0; } else train.sure = now(); }, { font:13 });
+  btn(8 + 2*(bw + 6), yb, bw, 46, 'もどる', true, () => { train.view = null; train.sel = null; }, { font:14 });
+  if(train.sure && now() - train.sure < 3000){ ctx.save(); ctx.fillStyle = '#c8322f'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center'; ctx.fillText('もう一度 おすと ぜんぶ けします', W/2, yb - 14); ctx.restore(); }
 }
 // きろく：ゲームで 書いた 字と、なにと よんだか。まちがって よんだ 字は「ほんとうは？」で なおすと お手本に なる
 function drawRecords(){
@@ -836,7 +876,7 @@ function draw(){
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   ctx.fillStyle = '#dde9ef'; ctx.fillRect(0, l.bottom, W, H - l.bottom);
   drawTop(l);
-  if(modeId === 'write'){ drawWrite(l); drawParts(); drawBottom(l); if(train){ btns = []; if(train.view === 'rec') drawRecords(); else drawTrain(); } return; }
+  if(modeId === 'write'){ drawWrite(l); drawParts(); drawBottom(l); if(train){ btns = []; if(train.view === 'rec') drawRecords(); else if(train.view === 'mine') drawMine(); else drawTrain(); } return; }
   drawWritten(l);
   // ひとこと
   ctx.save(); ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
