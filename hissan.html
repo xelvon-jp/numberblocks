@@ -109,7 +109,7 @@ function newProblem(fixed){
         markT:false, markH:false, borrow:false,        // ひっさんの 小さな「1」と、くり下がりの ななめ線
         res:{ o:null, t:null, h:null }, miss:0, done:false, doneAt:0,
         drum: [0,0,0], picked:null, bad:new Set(), shake:{},
-        msg:'', msgAt:0, hideOnesB:false, cells:null, memo:[], wmsg:'', pulse:null };
+        msg:'', msgAt:0, hideOnesB:false, cells:null, memo:[], wmsg:'', pulse:null, ask:null };
   S.cells = makeCells(); cele = null;
   clearTimeout(inkTimer); inkTimer = null; inkCell = null; pen = null;
   drag = null; anims = []; parts = []; busy = 0; askCol = null; askResolve = null;
@@ -390,7 +390,7 @@ function WL(){
   const l = L();
   const cols = colsOf(P).slice().reverse();          // 左から 百・十・一
   const nc = cols.length + 0.7;                      // 左はしに ＋・− の ぶん
-  const msgH = 64, availH = l.bottom - l.top - msgH - 12;
+  const msgH = 90, availH = l.bottom - l.top - msgH - 12;
   const cw = Math.max(48, Math.min(120, (W - 28)/nc, availH/4.05));
   const pw = nc*cw + 16, px = W/2 - pw/2;
   const ph = cw*4.05, py = l.top + Math.max(0, (availH - ph)*0.35);
@@ -429,6 +429,7 @@ function inkDown(x, y){
   if(inkCell && inkCell !== k) judgeCell(inkCell);     // べつの ますに うつったら 前の ますを すぐ よむ
   clearTimeout(inkTimer); inkTimer = null;
   if(c.st === 'bad'){ c.strokes = []; c.st = 'empty'; c.val = null; }
+  if(c.st === 'ask'){ S.ask = null; c.strokes = []; c.st = 'empty'; c.val = null; wsay(''); }
   c.unk = 0; if(S.wunk){ S.wunk = false; wsay(''); }
   c.st = 'wait'; inkCell = k;
   pen = { cell:k, pts:[{ x, y }] }; c.strokes.push(pen.pts);
@@ -452,11 +453,18 @@ function judgeCell(k, d){
     if(!strokes.length){ c.st = 'empty'; return; }
   }
   c.at = now();
-  if(d === undefined) Ink.record(c.strokes, WL().cells[k], { want: cellWant(k), got: r ? r.digit : null, m: r && r.mirrored ? 1 : 0, o: r && r.byOrder ? 1 : 0 });
+  if(d === undefined) Ink.record(c.strokes, WL().cells[k], { want: cellWant(k), got: r ? r.digit : null, m: r && r.mirrored ? 1 : 0, o: r && r.byOrder ? 1 : 0, u: r && r.sure === false ? 1 : 0 });
   // よめない：ますに「？」を 出して ゆらし、書いた 線は けす（まちがい では ないので かぞえない）
   if(!r){ c.st = 'empty'; c.val = null; c.strokes = []; c.unk = now(); wsay('もういちど かいてね'); S.wunk = true; return; }
+  // じしんが ない：書いた 線は のこして、こうほの 数字（3つまで）と「かきなおす」を 出す。えらんだら その 数字で しらべる
+  if(d === undefined && r.sure === false){
+    if(S.ask && S.ask.k !== k) askCancel();
+    c.st = 'ask'; c.val = null; S.ask = { k, cands: r.cands.slice(0, 3), strokes: c.strokes.map(q => q.slice()) };
+    wsay('どれを かいたのかな？'); return;
+  }
   c.val = r.digit;
   const want = cellWant(k);
+  if(S.ask && S.ask.k === k) S.ask = null;
   // ちがう 数字と よんだら、書いた 線の かわりに よんだ 数字を 赤で 出して ゆらす（きかいが どう よんだか わかるように）
   if(r.digit !== want || r.mirrored){ c.strokes = []; c.mir = !!r.mirrored; }
   if(r.digit === want && r.mirrored){ c.st = 'bad'; S.miss++; wsay('おしい！ ' + want + ' が かがみもじに なってるよ', k); return; }
@@ -485,9 +493,24 @@ function whyWrong(k, v){
   if(v === aT - bT) return { t:'くり下がりで 十のくらいが 1 へったのを わすれているよ', pulse:'carry' };
   return { t:'十のくらい：' + (aT - 1) + ' − ' + bT + ' は？' };
 }
+// こうほから えらんだ：その 数字を 書いた ことに する。こたえと おなじなら、その字を お手本として おぼえる
+function askPick(dg){
+  const a = S.ask; if(!a) return;
+  S.ask = null;
+  const c = S.cells[a.k];
+  if(dg === cellWant(a.k)) Ink.learn(dg, a.strokes);
+  c.st = 'wait'; judgeCell(a.k, dg);
+}
+function askCancel(){
+  const a = S.ask; if(!a) return;
+  S.ask = null;
+  const c = S.cells[a.k]; if(c && c.st === 'ask'){ c.st = 'empty'; c.strokes = []; c.val = null; }
+  wsay('');
+}
 function eraseMemo(){ S.memo = []; if(pen && pen.memo) pen = null; }
 function eraseInk(){
   if(S.done) return;
+  S.ask = null;
   clearTimeout(inkTimer); inkTimer = null; inkCell = null; pen = null;
   for(const k in S.cells){ const c = S.cells[k]; if(c.st !== 'ok'){ c.strokes = []; c.st = 'empty'; c.val = null; } }
   wsay('');
@@ -536,7 +559,7 @@ function drawWrite(l){
     const pulse = S.pulse && S.pulse.k === k && t - S.pulse.at < 2400 ? 0.5 + 0.5*Math.sin((t - S.pulse.at)*0.012) : 0;
     ctx.save(); ctx.translate(sh, 0);
     if(c.st !== 'ok'){
-      ctx.fillStyle = c.st === 'bad' ? 'rgba(255,225,225,0.9)' : pulse ? 'rgba(255,236,170,' + (0.4 + 0.5*pulse) + ')' : 'rgba(240,246,255,0.9)';
+      ctx.fillStyle = c.st === 'bad' ? 'rgba(255,225,225,0.9)' : c.st === 'ask' ? 'rgba(255,240,215,0.95)' : pulse ? 'rgba(255,236,170,' + (0.4 + 0.5*pulse) + ')' : 'rgba(240,246,255,0.9)';
       ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 10); ctx.fill();
       ctx.setLineDash([6, 5]);
       ctx.strokeStyle = c.st === 'bad' ? '#e0403f' : (!S.done && k === firstOpen) || pulse ? '#f0a020' : 'rgba(120,130,150,0.5)';
@@ -569,6 +592,13 @@ function drawWrite(l){
     }
     ctx.restore();
   }
+  // じしんが ない とき：こうほの 数字と「かきなおす」
+  if(S.ask && !S.done){
+    const n = S.ask.cands.length, bw = Math.min(64, (W - 40 - 110)/Math.max(1, n)), bh = 50;
+    const tot = n*(bw + 8) + 110, x0 = W/2 - tot/2, y0 = wl.msgY + 26;
+    S.ask.cands.forEach((dg, i) => btn(x0 + i*(bw + 8), y0, bw, bh, String(dg), false, () => askPick(dg), { font:28 }));
+    btn(x0 + n*(bw + 8), y0, 110, bh, 'かきなおす', false, askCancel, { font:15, off:'#fff3e8' });
+  }
   // ひとこと
   const msg = writeHint() || '';
   const lines = msg.split('\n');
@@ -578,7 +608,7 @@ function drawWrite(l){
   lines.forEach((s, i) => {
     const y = wl.msgY + 14 + i*22;
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.strokeText(s, W/2, y);
-    ctx.fillStyle = S.done ? '#c0398a' : S.wunk ? '#c07a10' : S.wmsg ? '#c8322f' : '#2b3a52'; ctx.fillText(s, W/2, y);
+    ctx.fillStyle = S.done ? '#c0398a' : S.ask ? '#2b3a52' : S.wunk ? '#c07a10' : S.wmsg ? '#c8322f' : '#2b3a52'; ctx.fillText(s, W/2, y);
   });
   ctx.restore();
   // できた！ 式の ところで キャラが 位ごとに わかれて 計算し、こたえの キャラに なる（こたえの 行は 見えたまま）
@@ -858,7 +888,7 @@ function drawRecords(){
     const ok = r.got === r.want;
     ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = r.fixed !== undefined ? '#1f6fd8' : ok ? '#2f8a3a' : '#c8322f';
-    const lab = r.fixed !== undefined ? r.fixed + ' と おぼえた' : r.got === null ? 'よめない' : 'よんだ ' + r.got + (r.m ? '（かがみ）' : '');
+    const lab = r.fixed !== undefined ? r.fixed + ' と おぼえた' : r.got === null ? 'よめない' : r.u ? 'まよった（' + r.got + '？）' : 'よんだ ' + r.got + (r.m ? '（かがみ）' : '');
     ctx.fillText(lab, x + tw/2, y + th - 22);
     ctx.fillStyle = '#5a6a80'; ctx.font = '11px sans-serif'; ctx.fillText('こたえ ' + r.want, x + tw/2, y + th - 8);
     ctx.restore();

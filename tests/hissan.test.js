@@ -207,7 +207,7 @@ module.exports = {
     r = await writeDigit(p, 'o', 7, { mirror:true });
     t.ok(r.st === 'bad' && /かがみもじ/.test(r.msg), 'かがみもじを おしえない: ' + JSON.stringify(r));
     // らくがきは よめない
-    await p.evaluate(() => { const c = WL().cells.t; S.cells.t.strokes = [[0,.3,.1,.9,.2,.1,.8,.9,.5,.2,.95,.6].reduce((a, v, i, s) => (i%2 ? a : a.concat({ x:c.x + c.w*v, y:c.y + c.h*s[i+1] })), [])]; S.cells.t.st = 'wait'; judgeCell('t'); });
+    await p.evaluate(() => { const c = WL().cells.t; /* ちょんと ついた だけ（よめない）*/ S.cells.t.strokes = [[{ x:c.x + 20, y:c.y + 20 }, { x:c.x + 20, y:c.y + 20 }]]; S.cells.t.st = 'wait'; judgeCell('t'); });
     const u = await p.evaluate(() => ({ msg: S.wmsg, st: S.cells.t.st, n: S.cells.t.strokes.length, unk: S.cells.t.unk > 0 }));
     t.ok(u.msg === 'もういちど かいてね' && u.st === 'empty' && u.n === 0 && u.unk, 'よめない ときは「？」を 出して けす: ' + JSON.stringify(u));
     await p.evaluate(() => { inkDown(WL().cells.t.x + 10, WL().cells.t.y + 10); inkUp(); clearTimeout(inkTimer); S.cells.t.strokes = []; S.cells.t.st = 'empty'; });
@@ -217,6 +217,33 @@ module.exports = {
     t.eq(await p.evaluate(() => [S.cells.o.st, S.cells.o.strokes.length, S.cells.t.st, S.memo.length]), ['empty', 0, 'empty', 1], 'こたえを けす');
     await p.evaluate(() => eraseMemo());
     t.eq(await p.evaluate(() => S.memo.length), 0, 'けしゴムで メモが きえない');
+  },
+
+  'E かく：じしんが ない ときは こうほ（3つまで）と「かきなおす」。えらんだ 字が こたえなら おぼえる': async t => {
+    const p = await openH(t, 'write', 'add');
+    await p.evaluate(() => { Ink.forget(); setProblem('+', 13, 19); });   // 一のくらい 2
+    // ひなたの 2（小さな かぎ・まっすぐ 下・ながい よこ線）
+    const put = () => p.evaluate(() => {
+      const c = WL().cells.o, pts = [[42,15],[55,20],[62,40],[58,60],[45,72],[35,75],[55,78],[80,80]];
+      const st = []; for(let i=0;i<pts.length-1;i++) for(let k=0;k<8;k++) st.push({ x:c.x + c.w*(pts[i][0] + (pts[i+1][0]-pts[i][0])*k/8)/100, y:c.y + c.h*(pts[i][1] + (pts[i+1][1]-pts[i][1])*k/8)/100 });
+      S.cells.o.strokes = [st]; S.cells.o.st = 'wait'; judgeCell('o');
+      btns = []; draw();
+      return { st: S.cells.o.st, cands: S.ask && S.ask.cands, msg: S.wmsg, labels: btns.filter(b => b.y > WL().msgY && b.y < L().bottom).length, err: window.__err || '' };
+    });
+    let r = await put();
+    t.ok(r.st === 'ask' && r.cands.length <= 3 && r.cands.includes(2) && r.msg === 'どれを かいたのかな？' && r.labels === r.cands.length + 1 && !r.err, 'こうほが 出ない: ' + JSON.stringify(r));
+    // かきなおす
+    await p.evaluate(() => askCancel());
+    t.eq(await p.evaluate(() => [S.cells.o.st, S.cells.o.strokes.length, S.ask]), ['empty', 0, null], 'かきなおす で きえない');
+    // こうほの 2 を えらぶ → あっている・おぼえる
+    r = await put();
+    await p.evaluate(() => askPick(2));
+    t.eq(await p.evaluate(() => [S.cells.o.st, S.miss, Ink.samples(), Ink.mine()[0].digit]), ['ok', 0, 1, 2], 'えらんだら せいかいに ならない／おぼえない');
+    // おぼえた あとは じしんを もって よめる
+    await p.evaluate(() => setProblem('+', 13, 19));
+    r = await put();
+    t.eq(r.st, 'ok', 'おぼえた 2 が よめない');
+    await p.evaluate(() => Ink.forget());
   },
 
   'E かく：ひき算 52−27（一 5、十 2）と くり下がり わすれ・3けた': async t => {
