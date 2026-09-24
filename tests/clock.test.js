@@ -691,16 +691,24 @@ module.exports = {
     t.eq(r.after, { brk:false, idx: r.idx + 1, done:false }, 'パレードの あとに つぎの おだいへ すすまない');
   },
 
-  'パレードの とちゅうで 画面を おすと、すぐ つぎの おだいへ（カードは 出さない）': async t => {
+  'パレードの とちゅうは、ちょんと おしても すすまない。ながおし で つぎの おだいへ（カードは 出さない）': async t => {
     const p = await t.open({ who:'hinata' });
     const r = await p.evaluate(() => {
       taskOn = true; setMix(false); prize().n = 4; prize().made = [1, 2, 3, 4];
       startTask(7); spawnBlock(TASKS[7].n); checkTask(); nextTask();
       taskBtns = []; drawFrame(performance.now());
       const card = taskBtns.length;
-      handleStart(sw/2, sh/2, 'm'); handleEnd(sw/2, sh/2, 'm');
-      return { card, brk: paradeBreak, idx: taskIdx, parade: cast.some(a => a.kind === 'parade') };
+      handleStart(sw/2, sh/2, 'm'); handleEnd(sw/2, sh/2, 'm');          // ちょん
+      const tap = [paradeBreak, taskIdx];
+      handleStart(sw/2, sh/2, 'm'); paradeHold.t0 -= 600; drawFrame(performance.now());
+      const half = [paradeBreak, taskIdx];                               // まだ はんぶん
+      handleMove(sw/2 + 60, sh/2, 'm'); paradeHold && (paradeHold.t0 -= 5000); drawFrame(performance.now());
+      const moved = [paradeBreak, taskIdx];                              // 指が うごいたら やめ
+      handleStart(sw/2, sh/2, 'm'); paradeHold.t0 -= PARADE_HOLD_MS + 10; drawFrame(performance.now());
+      return { card, tap, half, moved, done: [paradeBreak, taskIdx], parade: cast.some(a => a.kind === 'parade') };
     });
-    t.eq(r, { card:0, brk:false, idx:8, parade:false }, 'パレードを とばせない');
+    t.eq(r, { card:0, tap:[true, 7], half:[true, 7], moved:[true, 7], done:[false, 8], parade:false },
+         'パレードの とばしかたが ちがう');
   },
+
 };

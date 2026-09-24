@@ -508,6 +508,8 @@ let lastClockGoal = -1;   // つづけて同じ時こくにしないため
 let lastLevelUp = 0;      // この とけいの おだいで レベルが上がったら そのレベル
 let pendingParade = null; // つぎへ いくときに 出す パレード（数の ならび。nextTask を見る）
 let paradeBreak = false;  // いま パレードの あいだ
+let paradeHold = null;    // パレードを とばす ながおし {pid, t0, x, y}
+const PARADE_HOLD_MS = 1200;
 
 function loadProfileState(){
   genTask = null; paradeBreak = false; pendingParade = null;
@@ -797,7 +799,7 @@ function nextTask(){
 }
 function endParadeBreak(){
   if(!paradeBreak) return;
-  paradeBreak = false;
+  paradeBreak = false; paradeHold = null;
   cast = cast.filter(a => a.kind !== 'parade');
   advanceTask();
 }
@@ -4431,8 +4433,9 @@ function handleStart(x,y,pid){
   }
   // いちらんを出しているあいだは、ほかのボタンには触れさせない
   if(stageOpen){ handleStageTap(x,y,pid); return; }
-  // パレードの とちゅうは、どこを おしても つぎの おだいへ（タブと 歯車は そのまま きく）
-  if(paradeBreak && y > TAB_H){ endParadeBreak(); return; }
+  // パレードの とちゅうは、ながおし で つぎの おだいへ（ちょんと おしただけでは すすまない。
+  // ひなたが さいごまで 見られるように）。タブと 歯車は そのまま きく。
+  if(paradeBreak && y > TAB_H){ paradeHold = { pid, t0: Date.now(), x, y }; return; }
   for(const ob of opBarBtns){
     if(!ptInRect(x,y,ob.x,ob.y,ob.w,ob.h)) continue;
     if(ob.op==='undo') doUndo(); else setMode(ob.op);
@@ -4540,6 +4543,10 @@ function duplicateAtMirror(b){
 }
 
 function handleMove(x,y,pid){
+  if(paradeHold && paradeHold.pid===pid){
+    if(Math.hypot(x-paradeHold.x, y-paradeHold.y) > 24) paradeHold = null;   // 指が うごいたら やめ
+    return;
+  }
   if(stageHold && stageHold.pid===pid){
     if(Math.hypot(x-stageHold.sx, y-stageHold.sy) > 16) stageHold = null;
     return;
@@ -4556,6 +4563,7 @@ function handleMove(x,y,pid){
 }
 
 function handleEnd(x,y,pid){
+  if(paradeHold && paradeHold.pid===pid){ paradeHold = null; return; }  // 途中で離した＝中止
   if(stageHold && stageHold.pid===pid){ stageHold = null; return; }   // 途中で離した＝中止
   if(mode==='clock'){ if(drum && drum.drag) drumEnd(x, y); clockDrag=null; return; }
   if(clrHold && clrHold.pid===pid){ clrHold=null; return; }   // 途中で離した＝中止
@@ -4726,7 +4734,19 @@ function drawFrame(ts){
     fxParticles = fxParticles.filter(fp=>fp.life>0);
     drawCast(ctx);
     for(const fp of fxParticles) fp.draw(ctx);
-    if(!cast.some(a => a.kind === 'parade')) endParadeBreak();
+    // ながおしの ゲージ（ゆびの まわりに たまっていく わ）。いっぱいで つぎへ
+    if(paradeHold){
+      const hp = Math.min(1, (Date.now() - paradeHold.t0) / PARADE_HOLD_MS);
+      ctx.save();
+      ctx.lineWidth = 6; ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)';
+      ctx.beginPath(); ctx.arc(paradeHold.x, paradeHold.y, 34, 0, Math.PI*2); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,190,50,0.95)';
+      ctx.beginPath(); ctx.arc(paradeHold.x, paradeHold.y, 34, -Math.PI/2, -Math.PI/2 + Math.PI*2*hp); ctx.stroke();
+      ctx.restore();
+      if(hp >= 1){ paradeHold = null; endParadeBreak(); }
+    }
+    if(paradeBreak && !cast.some(a => a.kind === 'parade')) endParadeBreak();
   } else if(mode==='clock'){
     updateWinFx(dt);
     drawWinLines(ctx);
