@@ -366,15 +366,11 @@ module.exports = {
       for(let i=0;i<8;i++){ startHissanTask(); onHissanMessage({ from:'hissan', type:'done', ans:51, miss:0 }); if(paradeBreak) endParadeBreak(); }
       out.lv = hissanStats().lv;
       startHissanTask(); out.kind2 = /kind=sub/.test(hissanTask.frame.src);
-      // もどる：とばして つぎの けいさんへ（かぞえない）
-      const idx = taskIdx, h = hissanStats().hist.length;
-      onHissanMessage({ from:'hissan', type:'quit' });
-      out.quit = [!!hissanTask, !!document.querySelector('iframe'), taskIdx === (idx + 1) % TASKS.length, hissanStats().hist.length === h];
       saveTask(); out.saved = JSON.parse(localStorage.getItem(TASK_KEY)).p[profile().id].hissan.lv;
       return out;
     });
     t.eq(r, { frame:true, loaded:true, inner:['add', true, '+'], done:true, after:[false, false, 5, true, 'true'], lv:2, kind2:true,
-              quit:[false, false, true, true], saved:2 }, 'まぜまぜの ひっさんが おかしい');
+              saved:2 }, 'まぜまぜの ひっさんが おかしい');
   },
 
   'どの画面でも へや・ボタンが 収まり、エラーが 出ない（5つの こたえかた）': async t => {

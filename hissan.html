@@ -1086,8 +1086,7 @@ function goBack(){
 }
 function drawTop(l){
   if(EMBED){
-    // ゲームの中：もどる（とばす）と、なんの もんだいか だけ
-    btn(8, 8, 64, 38, '← もどる', false, () => tellGame({ type:'quit' }), { font:12 });
+    // ゲームの中：なんの もんだいか だけ（とばす ボタンは おかない。とちゅうで にげずに とく）
     ctx.save(); ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = '#16233a'; ctx.fillText(EMBED.label, W/2, 27); ctx.restore();
     return;

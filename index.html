@@ -881,8 +881,6 @@ function onHissanMessage(m){
     if(hissanTask.frame) hissanTask.frame.remove();
     hissanTask.frame = null;                           // hissanTask は のこす（つぎへ で けいさんに もどる）
     nextTask();
-  } else if(m.type === 'quit'){
-    closeHissan(); startTask((taskIdx + 1) % TASKS.length);
   }
 }
 window.addEventListener('message', e => {
