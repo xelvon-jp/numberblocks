@@ -626,10 +626,9 @@ function drawWrite(l){
 }
 
 // ─── けいさん中の ぶたい（E かく）────────────────────────────────
-// ひっさんの 下で、もんだいの 数の キャラ（左 と 右）が まっている。
-// 書けた ますからは その 数字の キャラが とびだして、まんなかに 位の じゅんで ならぶ。
-// 書いている あいだは しずか。書けたら みんなで ぴょん、まちがえたら ぷるぷる
-const POP_MS = 750;
+// ひっさんの 下に、キャラで しきを ならべる：[95] − [77] = [  ]。
+// 右がわ（こたえ）は ぜんぶ 書けるまで からっぽの わく。書けたら こたえの キャラが とびこむ。
+// 書いている あいだは しずか、1けた 書けたら みんなで ぴょん、まちがえたら ぷるぷる
 function drawStage(l, wl, t){
   const top = wl.msgY + (S.ask && !S.done ? 84 : 46), gy = l.bottom - 6, h = gy - top;
   if(h < 36) return;
@@ -637,34 +636,41 @@ function drawStage(l, wl, t){
   const last = Math.max(0, ...Object.values(pops));
   const bad = cellKeys().map(k => S.cells[k]).filter(c => c.st === 'bad').reduce((m, c) => Math.max(m, c.at), 0);
   const writing = !!(pen && !pen.memo);
-  // ぴょん（書けた とき・できた あと）と ぷるぷる（まちがえた とき）
-  const hop = (phase) => {
-    if(S.done) return Math.abs(Math.sin((t - S.doneAt)*0.006 + phase))*h*0.12;
-    const e = t - last; return last && e < 600 ? Math.sin(e/600*Math.PI)*h*0.18 : 0;
+  const hop = phase => {
+    if(S.done) return Math.abs(Math.sin((t - S.doneAt)*0.006 + phase))*h*0.1;
+    const e = t - last; return last && e < 600 ? Math.sin(e/600*Math.PI)*h*0.15 : 0;
   };
   const shake = bad && t - bad < 600 ? Math.sin((t - bad)*0.05)*4*(1 - (t - bad)/600) : 0;
   const breathe = phase => writing ? 0 : Math.sin(t*0.003 + phase)*1.5;
-  const put = (n, cx, bs, dy) => { const sp = blockSpec(n); drawNumberblock(ctx, n, cx - sp.cols*bs/2, gy - dy - sp.rows*bs, bs, { t, animate:true }); };
-  const fitBs = (n, maxW, cap) => { const sp = blockSpec(n); return Math.max(1.5, Math.min(cap || 9, (h - 4)/sp.rows, maxW/sp.cols)); };
-  // もんだいの 数：左と 右
-  const sideW = Math.min(W*0.3, wl.px + wl.pw*0.3);
-  [[P.a, W*0.17, 0], [P.b, W*0.83, 1.7]].forEach(([n, cx, ph]) => {
-    ctx.save(); ctx.translate(shake, 0); put(n, cx, fitBs(n, sideW), hop(ph) + breathe(ph)); ctx.restore();
-  });
-  // 書けた 数字：ますから とびだして まんなかへ（0 は キャラが いないので ぱっと ひかる だけ）
-  const keys = cellKeys().slice().reverse(), slotW = Math.min(W*0.14, 70);
-  const bsD = Math.min(fitBs(9, slotW*0.8, 14), fitBs(8, slotW*0.8, 14));   // いちばん 大きい 9・8 に あわせて そろえる
-  keys.forEach((k, i) => {
-    const at = pops[k]; if(!at) return;
-    const dg = cellWant(k); if(dg === 0) return;
-    const sx = W/2 + (i - (keys.length - 1)/2)*slotW;
-    const r = wl.cells[k], e = Math.min(1, (t - at)/POP_MS), q = e < 0.5 ? 2*e*e : 1 - Math.pow(-2*e + 2, 2)/2;
-    const fx = r.x + r.w/2, fyUp = gy - (r.y + r.h*0.9);          // ますの 下から
-    const x = fx + (sx - fx)*q, up = fyUp*(1 - q) + Math.sin(e*Math.PI)*h*0.5;
-    ctx.save(); if(e < 1) ctx.globalAlpha = Math.min(1, e*4);
-    put(dg, x, bsD*(0.6 + 0.4*q), up + (e >= 1 ? hop(i) + breathe(2.5 + i) : 0));
-    ctx.restore();
-  });
+  // おおきさは 3にん おなじ（数の 大きさが そのまま くらべられる）
+  const sa = blockSpec(P.a), sb = blockSpec(P.b), sc = blockSpec(P.ans);
+  const symW = Math.max(22, Math.min(34, W*0.08)), gap = 6;
+  const colsSum = sa.cols + sb.cols + sc.cols;
+  const bs = Math.max(1.5, Math.min(9, (h - 6)/Math.max(sa.rows, sb.rows, sc.rows), (W - 24 - 2*symW - 4*gap)/colsSum));
+  const ws = [sa.cols*bs, symW, sb.cols*bs, symW, sc.cols*bs];
+  let x = W/2 - (ws.reduce((q, w) => q + w, 0) + gap*4)/2;
+  const cx = ws.map(w => { const c = x + w/2; x += w + gap; return c; });
+  const put = (n, c, dy, k) => { const sp = blockSpec(n), b = bs*(k || 1); drawNumberblock(ctx, n, c - sp.cols*b/2, gy - dy - sp.rows*b, b, { t, animate:true }); };
+  const sym = (ch, c) => {
+    ctx.save(); ctx.font = 'bold ' + Math.round(Math.min(symW*1.1, h*0.4)) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; const y = gy - Math.min(h*0.35, 40);
+    ctx.strokeText(ch, c, y); ctx.fillStyle = '#16233a'; ctx.fillText(ch, c, y); ctx.restore();
+  };
+  ctx.save(); ctx.translate(shake, 0);
+  put(P.a, cx[0], hop(0) + breathe(0));
+  sym(P.op === '+' ? '+' : '−', cx[1]);
+  put(P.b, cx[2], hop(1.2) + breathe(1.7));
+  ctx.restore();
+  sym('=', cx[3]);
+  // こたえ：書きおわるまでは からっぽの わく（大きさで こたえが わからないように いつも おなじ わく）
+  if(!S.done){
+    const bw = Math.min(ws[4] + 8, h*0.7, 60), bh = Math.min(h - 8, 70);
+    ctx.save(); ctx.setLineDash([6, 5]); ctx.strokeStyle = 'rgba(80,95,120,0.55)'; ctx.lineWidth = 2; ctx.fillStyle = 'rgba(255,255,255,0.45)';
+    ctx.beginPath(); ctx.roundRect(cx[4] - bw/2, gy - bh, bw, bh, 10); ctx.fill(); ctx.stroke(); ctx.restore();
+  } else {
+    const e = Math.min(1, (t - S.doneAt)/500);
+    put(P.ans, cx[4], hop(2.4) + (1 - e)*h*0.6, 0.4 + 0.6*e);
+  }
 }
 
 // ─── できた！の 計算アニメ（E かく）──────────────────────────────
@@ -690,7 +696,11 @@ function celeRow(cx, ns, gap){
 function drawCele(t){
   if(!cele) return;
   for(const a of cele.actors){
-    if(a.n <= 0) continue;
+    if(a.n <= 0){
+      // 0：10 が 十へ ジャンプした あとの 一のくらいに ゼロが のこる
+      if(a.n === 0 && a.zero){ const p = celePos(a, t), zb = cele.bs*3; ctx.save(); ctx.globalAlpha = a.fadeAt && t > a.fadeAt ? Math.max(0, 1 - (t - a.fadeAt)/350) : a.alpha; drawZero(ctx, p.x, p.y - zeroHeight(zb), zb, t, true); ctx.restore(); }
+      continue;
+    }
     const p = celePos(a, t), sp = blockSpec(a.n);
     const pop = a.pop && t - a.pop >= 0 && t - a.pop < 300 ? 1 + 0.15*Math.sin((t - a.pop)/300*Math.PI) : 1;
     const bs = cele.bs*(a.big || 1)*pop;
@@ -765,7 +775,7 @@ async function celebrateWrite(){
     // 5) 10 に なったら 十の ほうへ ジャンプして がったい（80 と 10 → 90）
     if(O.n >= 10){
       const rest = O.n - 10; celeDrop(O);
-      const C = celeActor(10, xO, G); O = celeActor(rest, xO, G);
+      const C = celeActor(10, xO, G); O = celeActor(rest, xO, G); if(!rest){ O.zero = true; O.pop = now(); }
       const [xt2, xc] = celeRow(xT, [T.n, 10], 14);
       celeMove(T, xt2, G, 400); celeMove(C, xc, G, 850, 80);
       await wait(1100); if(!ok()) return;
@@ -826,7 +836,7 @@ async function celebrateWrite(){
   }
   await wait(900); if(!ok()) return;
   // 6) こたえの キャラに なる（90 と 0 → 90、20 と 5 → 25）
-  celeMove(T, xC, G, 500, 20); if(O && O.n > 0) celeMove(O, xC, G, 500, 20);
+  celeMove(T, xC, G, 500, 20); if(O && (O.n > 0 || O.zero)) celeMove(O, xC, G, 500, 20);
   await wait(530); if(!ok()) return;
   celeDrop(T); if(O) celeDrop(O);
   const ans = celeActor(P.ans, xC, G);
