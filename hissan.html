@@ -442,6 +442,7 @@ function inkUp(){
   inkTimer = setTimeout(() => { inkTimer = null; judgeCell(k); }, INK_WAIT);
 }
 // 1ます よみとって しらべる。 きめた数字 d を わたすと その数字を 書いた ことにする（テスト用）
+const LENIENT = 0.3;   // こたえの 数字が 1ばんと これより ちかければ せいかい（tools/ink_cal.js の ゆがめた 字で、ちがう 字を とおすのは 1〜2%）
 function judgeCell(k, d){
   const c = S.cells[k]; if(!c || c.st === 'ok') return;
   if(inkCell === k){ inkCell = null; clearTimeout(inkTimer); inkTimer = null; }
@@ -456,9 +457,11 @@ function judgeCell(k, d){
   if(d === undefined) Ink.record(c.strokes, WL().cells[k], { want: cellWant(k), got: r ? r.digit : null, m: r && r.mirrored ? 1 : 0, o: r && r.byOrder ? 1 : 0, u: r && r.sure === false ? 1 : 0 });
   // よめない：ますに「？」を 出して ゆらし、書いた 線は けす（まちがい では ないので かぞえない）
   if(!r){ c.st = 'empty'; c.val = null; c.strokes = []; c.unk = now(); wsay('もういちど かいてね'); S.wunk = true; return; }
-  // じしんが なくても、いちばん にている 数字が こたえ なら 書けた ことに する（ひなたは らくがきも かがみもじも まず 書かない）。
-  // あいまいな 字なので お手本には しない
-  if(d === undefined && r.sure === false && r.digit === cellWant(k)) r = { digit:r.digit, mirrored:false };
+  // あまめに よむ：こたえの 数字が 1ばんと ほぼ おなじくらい にていれば（じしんが なくても）書けた ことに する。
+  // ただしく 書いても よみまちがえる ほうが ずっと おおい。ひなたは らくがきも かがみもじも まず 書かない。
+  // はっきり かがみもじ と よめた ときは「おしい」を のこす。あいまいな 字なので お手本には しない
+  const want0 = cellWant(k);
+  if(d === undefined && !(r.sure && r.mirrored && r.digit === want0) && r.gap && (r.gap[want0] ?? 9) <= LENIENT) r = { digit:want0, mirrored:false };
   // じしんが ない：書いた 線は のこして、こうほの 数字（3つまで）と「かきなおす」を 出す。えらんだら その 数字で しらべる
   else if(d === undefined && r.sure === false){
     if(S.ask && S.ask.k !== k) askCancel();

@@ -5,6 +5,7 @@
 //
 //   Ink.recognize(strokes) → { digit, score, mirrored, sure, cands } か null（よめない）
 //     sure:false … じしんが ない。cands（にている じゅんの 数字 3つまで）から えらんで もらう
+//     gap … 数字ごとの にかたの さ（えらばれた 字が 0。ちいさいほど にている）
 //     strokes … [[{x,y}, …], …]（1画ずつ）
 //   Ink.learn(digit, strokes) … その人の 字を お手本に くわえる（この端末に 保存）
 //   Ink.forget()              … おぼえた 字を けす
@@ -188,7 +189,10 @@
     // じしんが ある：形が じゅうぶん にていて（REJECT いない）、2ばんめの 数字と はっきり ちがう
     const next = top.find(e => e.digit !== best.digit);
     const sure = best.score <= REJECT && (byOrder || !next || next.s - best.s >= SURE_GAP);
-    return { digit:best.digit, score:best.score, mirrored:best.mirrored, byOrder, sure, cands };
+    // 数字ごとの にかた（かがみもじも ふくめて いちばん ちかい もの。えらばれた 字との さ）。甘めに みる ときに つかう
+    const gap = {};
+    for(const e of top) if(!(e.digit in gap)) gap[e.digit] = Math.max(0, e.s - best.s);
+    return { digit:best.digit, score:best.score, mirrored:best.mirrored, byOrder, sure, cands, gap };
   }
   // 1もじ ぶんの 線を、いちばん にている じゅんに（しらべる・テスト用）
   function rank(strokes){

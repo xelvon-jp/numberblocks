@@ -267,6 +267,27 @@ module.exports = {
     await p.evaluate(() => Ink.forget());
   },
 
+  'E かく：あまめに よむ。こたえの 数字が 1ばんと 0.3 いないなら せいかい（84−26 の 5 が 9 に なった ケース）': async t => {
+    const p = await openH(t, 'write', 'sub');
+    const r = await p.evaluate(() => {
+      const real = Ink.recognize, out = [];
+      const tryRead = (q, sure) => {
+        setProblem('-', 84, 26);   // こたえ 58：十のくらいは 5
+        Ink.recognize = () => ({ digit:9, score:2, mirrored:false, sure, cands:[9,5,7], gap:{ 9:0, 5:q, 7:0.25 } });
+        S.cells.t.strokes = [[{ x:1, y:1 }, { x:2, y:2 }]]; S.cells.t.st = 'wait'; judgeCell('t');
+        out.push([S.cells.t.st, S.miss, Ink.samples()]);
+      };
+      Ink.forget();
+      tryRead(0.2, false);   // 2ばんの 5 → せいかい（おぼえない）
+      tryRead(0.2, true);    // じしん ありでも ちかければ せいかい
+      tryRead(0.5, false);   // はなれている → こうほを 出す
+      tryRead(0.5, true);    // はなれていて じしん あり → まちがい
+      Ink.recognize = real;
+      return out;
+    });
+    t.eq(r, [['ok', 0, 0], ['ok', 0, 0], ['ask', 0, 0], ['bad', 1, 0]], 'あまめの はんていが ちがう');
+  },
+
   'E かく：ひき算 52−27（一 5、十 2）と くり下がり わすれ・3けた': async t => {
     const p = await openH(t, 'write', 'sub');
     await p.evaluate(() => setProblem('-', 52, 27));
