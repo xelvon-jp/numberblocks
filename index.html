@@ -5044,11 +5044,12 @@ requestAnimationFrame(loop);
 // 0 に なったら、いま といている もんだいが おわってから「きょうは ここまで」を 出す（すすめる だけ。とじれば つづけられる）。
 // 「もうすこし」で とじたら 5ふん ごとに また 出す。
 // かぞえるのは 画面が 見えている あいだ だけ。1じかん やすんだら（とじていたら）また いっぱいに もどる。たんまつで 1つ。
-const PLAY_KEY = 'nb_play', PLAY_LIMITS = [10, 15, 20, 30, 0], PLAY_DEFAULT = 20;
+const PLAY_KEY = 'nb_play', PLAY_LIMITS = [10, 12, 15, 20, 30, 0], PLAY_DEFAULT = 12;
 const PLAY_REST = 60*60*1000, PLAY_RENAG = 5*60*1000, PLAY_WARN = [3, 1];
 const play = (() => {
   let st = { limit: PLAY_DEFAULT, used: 0, last: Date.now() };
   try{ const v = JSON.parse(localStorage.getItem(PLAY_KEY)); if(v && typeof v === 'object') st = Object.assign(st, v); }catch(e){}
+  if(!st.set) st.limit = PLAY_DEFAULT;   // せっていで えらんで いなければ いまの はじめの ねだん（かわったら それに あわせる）
   let tick = Date.now(), nagAt = 0, saved = 0;
   const bar = document.getElementById('play-bar'), fill = bar.firstElementChild;
   const left = document.getElementById('play-left'), pop = document.getElementById('play-pop'), bye = document.getElementById('play-bye');
@@ -5090,7 +5091,7 @@ const play = (() => {
   setInterval(update, 1000); update();
   return {
     get limit(){ return st.limit; },
-    setLimit(m){ st.limit = m; nagAt = 0; save(); update(); },
+    setLimit(m){ st.limit = m; st.set = true; nagAt = 0; save(); update(); },
     remain, update, busy, st: () => st,
     _set(used, last){ st.used = used; if(last !== undefined) st.last = last; tick = Date.now(); }
   };
