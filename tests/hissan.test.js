@@ -285,6 +285,15 @@ module.exports = {
     t.eq(r, [['ok', 0, 0], ['ok', 0, 0], ['ask', 0, 0], ['bad', 1, 0]], 'あまめの はんていが ちがう');
   },
 
+  'E かく：できた！の アニメが おわって 2びょうで つぎの もんだいへ': async t => {
+    const p = await openH(t, 'write', 'add');
+    await p.evaluate(() => { setProblem('+', 16, 74); judgeCell('o', 0); judgeCell('t', 9); window.__P0 = P; });
+    await p.waitForFunction(() => cele && cele.finished, null, { timeout: 20000 });
+    t.eq(await p.evaluate(() => P === window.__P0), true, 'アニメが おわって すぐに つぎへ いってしまう');
+    await p.waitForFunction(() => P !== window.__P0, null, { timeout: 3500 });
+    t.eq(await p.evaluate(() => [S.done, window.__err || '']), [false, ''], 'つぎの もんだいに ならない');
+  },
+
   'E かく：ひき算 52−27（一 5、十 2）と くり下がり わすれ・3けた': async t => {
     const p = await openH(t, 'write', 'sub');
     await p.evaluate(() => setProblem('-', 52, 27));

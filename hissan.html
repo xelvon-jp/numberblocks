@@ -847,6 +847,8 @@ async function celebrateWrite(){
   ans.pop = now(); ans.bounce = now() + 300;
   for(let i=0;i<50;i++) burst(xC, G - Math.min(sp.rows, rowsH)*bs*ans.big/2, 1);
   cele.finished = true;
+  await wait(AUTO_NEXT); if(!ok()) return;
+  goNext();
 }
 
 // ─── おぼえる：その子の 字を お手本に する ─────────────────────────
@@ -1076,10 +1078,17 @@ function drawRooms(l){
     if(e0 >= 1){ anims.splice(anims.indexOf(a), 1); a.done(); }
   }
 }
+// つぎの もんだいへ（ゲームの中なら ゲームへ しらせる）
+function goNext(){
+  if(!S.done || S.sent) return;
+  if(EMBED){ S.sent = true; tellGame({ type:'done', op:P.op, a:P.a, b:P.b, ans:P.ans, miss:S.miss }); }
+  else newProblem();
+}
+const AUTO_NEXT = 2000;   // E かく：できた！の アニメが おわって この ms で つぎの もんだいへ
 function drawBottom(l){
   const y0 = l.bottom + 8, x0 = 8, w = W - 16;
   if(S.done){
-    btn(x0, y0 + (modeId === 'write' ? 4 : 20), w, modeId === 'write' ? 58 : 64, 'つぎの もんだい', true, EMBED ? () => tellGame({ type:'done', op:P.op, a:P.a, b:P.b, ans:P.ans, miss:S.miss }) : newProblem, { font:20 });
+    btn(x0, y0 + (modeId === 'write' ? 4 : 20), w, modeId === 'write' ? 58 : 64, 'つぎの もんだい', true, goNext, { font:20 });
     return;
   }
   if(modeId === 'write'){
