@@ -326,7 +326,7 @@ const CLOCK_LEVELS = [
   { name:'ごごの 1ぷん',  color:'#d0553f' }    // 14:37
 ];
 const CLOCK_MAX = CLOCK_LEVELS.length;
-const CLOCK_EVERY = 3;          // 3問に1問が とけい（けいさん2問 → とけい1問）
+const MIX_CALC = 1;             // まぜまぜ：けいさん 1問ごとに とけい か ひっさん を はさむ（けいさん → とけい → けいさん → ひっさん …）
 const CLOCK_WINDOW = 10;        // 正答率は そのレベルの 直近10問で見る
 const CLOCK_UP = 8;             // 10問中 8問 1かいめで あたれば レベルアップ
 const CLOCK_TRY = 6;            // 6問から つぎの レベルを おためしで まぜる
@@ -814,7 +814,7 @@ function endParadeBreak(){
 }
 function advanceTask(){
   if(genTask || hissanTask){ closeHissan(); startTask((taskIdx + 1) % TASKS.length); return; }
-  if(mixMode() && ++sinceClock >= CLOCK_EVERY - 1){
+  if(mixMode() && ++sinceClock >= MIX_CALC){
     sinceClock = 0;
     if(nextSpecial === 'hissan'){ nextSpecial = 'clock'; startHissanTask(); }
     else { nextSpecial = 'hissan'; startClockTask(); }
