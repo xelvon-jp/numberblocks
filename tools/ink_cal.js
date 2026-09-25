@@ -1,4 +1,4 @@
-// よみとりの 正解率を はかる：お手本を ゆがめた 字（回転・拡大・せん断・ぶれ、書き順ばらばら）・らくがき・かがみもじ。
+// よみとりの 正解率を はかる：お手本を ゆがめた 字（回転・拡大・せん断・ぶれ、書き順ばらばら）・らくがき。
 // つかいかた：node tools/ink_cal.js（数分 かかる）。じっさいの 子どもの 字では ないので めやす。
 const fs=require('fs'); const vm=require('vm');
 const ctx={Math, console, JSON}; ctx.globalThis=ctx; vm.createContext(ctx);
@@ -16,7 +16,7 @@ for(const [amt, shuf] of [[1,0],[1.6,0],[1,1],[1.6,1]]){
   for(const d in Ink.BASE){ for(const v of Ink.BASE[d]){ for(let k=0;k<40;k++){
     let dd = distort(v, amt); if(shuf){ dd = dd.map(st => rnd() < 0.4 ? st.slice().reverse() : st); if(rnd() < 0.5) dd.reverse(); } const r = Ink.recognize(dd); tot++;
     if(!r || !r.sure){ rej++; if(r){ ask=(typeof ask==='undefined'?0:ask); } if(r && r.cands.includes(+d)) inC++; continue; } scores.push(r.score);
-    if(r.digit==+d && !r.mirrored) ok++; else { const key=d+'→'+r.digit+(r.mirrored?'m':''); conf[key]=(conf[key]||0)+1; }
+    if(r.digit==+d) ok++; else { const key=d+'→'+r.digit; conf[key]=(conf[key]||0)+1; }
   }}}
   scores.sort((a,b)=>a-b);
   console.log('amt',amt,'shuf',shuf,'acc',(ok/tot).toFixed(3),'unsure',rej,'answerInCands',inC,'p50',scores[scores.length>>1].toFixed(2),'p95',scores[Math.floor(scores.length*0.95)].toFixed(2), JSON.stringify(conf));
@@ -25,6 +25,3 @@ for(const [amt, shuf] of [[1,0],[1.6,0],[1,1],[1.6,1]]){
 let acc=0, scAsk=0; const sc=[];
 for(let k=0;k<200;k++){ const n=3+Math.floor(rnd()*6); const s=[]; for(let i=0;i<n;i++) s.push({x:rnd()*200,y:rnd()*200}); const r=Ink.recognize([s]); if(r && r.sure){acc++; sc.push(r.score);} if(r && !r.sure) scAsk=(scAsk||0)+1; }
 console.log('scribble sure', acc, 'ask', scAsk, '/200');
-// かがみもじ
-let mir=0,mt=0; for(const d of [2,3,4,5,6,7,9]) for(const v of Ink.BASE[d]) for(let k=0;k<20;k++){ const s=distort(v,1).map(st=>st.map(p=>({x:400-p.x,y:p.y}))); const r=Ink.recognize(s); mt++; if(r&&r.digit===d&&r.mirrored) mir++; }
-console.log('mirror detect', mir,'/',mt);

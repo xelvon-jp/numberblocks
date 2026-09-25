@@ -33,7 +33,7 @@ async function writeDigit(p, key, d, opt){
   const strokes = await p.evaluate(([key, d, opt]) => {
     const r = WL().cells[key], m = 0.18;
     const v = Ink.BASE[d][opt.variant || 0];
-    return v.map(s => s.map(([x, y]) => [r.x + r.w*(m + (1 - 2*m)*(opt.mirror ? 1 - x : x)*0.7 + 0.15*(1 - 2*m)), r.y + r.h*(m + (1 - 2*m)*y)]));
+    return v.map(s => s.map(([x, y]) => [r.x + r.w*(m + (1 - 2*m)*x*0.7 + 0.15*(1 - 2*m)), r.y + r.h*(m + (1 - 2*m)*y)]));
   }, [key, d, opt]);
   for(const s of strokes){
     await p.mouse.move(s[0][0], s[0][1]); await p.mouse.down();
@@ -201,7 +201,7 @@ module.exports = {
     t.eq(await p.evaluate(() => Ink.records().map(r => [r.want, r.got])), [[1, 1], [5, 5]], 'きろく');
   },
 
-  'E かく：まちがえると どこが ちがうか おしえる（くり上がり わすれ・かがみもじ）、よめない ときは「？」': async t => {
+  'E かく：まちがえると どこが ちがうか おしえる（くり上がり わすれ）、よめない ときは「？」': async t => {
     const p = await openH(t, 'write', 'add');
     await p.evaluate(() => setProblem('+', 12, 39));
     let r = await writeDigit(p, 't', 4);
@@ -214,9 +214,6 @@ module.exports = {
     r = await writeDigit(p, 'o', 2);
     t.ok(r.st === 'bad' && /2 \+ 9 は？/.test(r.msg), '一のくらいの ことば: ' + r.msg);
     t.eq(await p.evaluate(() => S.miss), 2, 'まちがいが かぞえられない');
-    await p.evaluate(() => setProblem('+', 18, 29));   // 一のくらい 7 を かがみもじで
-    r = await writeDigit(p, 'o', 7, { mirror:true });
-    t.ok(r.st === 'bad' && /かがみもじ/.test(r.msg), 'かがみもじを おしえない: ' + JSON.stringify(r));
     // らくがきは よめない
     await p.evaluate(() => { const c = WL().cells.t; /* ちょんと ついた だけ（よめない）*/ S.cells.t.strokes = [[{ x:c.x + 20, y:c.y + 20 }, { x:c.x + 20, y:c.y + 20 }]]; S.cells.t.st = 'wait'; judgeCell('t'); });
     const u = await p.evaluate(() => ({ msg: S.wmsg, st: S.cells.t.st, n: S.cells.t.strokes.length, unk: S.cells.t.unk > 0 }));
@@ -273,7 +270,7 @@ module.exports = {
       const real = Ink.recognize, out = [];
       const tryRead = (q, sure) => {
         setProblem('-', 84, 26);   // こたえ 58：十のくらいは 5
-        Ink.recognize = () => ({ digit:9, score:2, mirrored:false, sure, cands:[9,5,7], gap:{ 9:0, 5:q, 7:0.25 } });
+        Ink.recognize = () => ({ digit:9, score:2, sure, cands:[9,5,7], gap:{ 9:0, 5:q, 7:0.25 } });
         S.cells.t.strokes = [[{ x:1, y:1 }, { x:2, y:2 }]]; S.cells.t.st = 'wait'; judgeCell('t');
         out.push([S.cells.t.st, S.miss, Ink.samples()]);
       };

@@ -3,7 +3,7 @@
 // くらべる やりかた（$P：point-cloud recognizer）なので、書きはじめの いち・むき・画数が ちがっても よめる。
 // ネットに つながらなくても うごく。
 //
-//   Ink.recognize(strokes) → { digit, score, mirrored, sure, cands } か null（よめない）
+//   Ink.recognize(strokes) → { digit, score, sure, cands, gap } か null（よめない）
 //     sure:false … じしんが ない。cands（にている じゅんの 数字 3つまで）から えらんで もらう
 //     gap … 数字ごとの にかたの さ（えらばれた 字が 0。ちいさいほど にている）
 //     strokes … [[{x,y}, …], …]（1画ずつ）
@@ -11,14 +11,12 @@
 //   Ink.forget()              … おぼえた 字を けす
 //   Ink.record / records / fixRecord … 書いた 字の きろく。まちがって よんだ 字を 正しい 数字として おぼえさせる
 //
-// かがみもじ（左右 はんたい）の お手本も もっていて、それに いちばん にていたら mirrored:true。
 // 形で 1ばん・2ばんが きっこう したときは、書きじゅん・線の むきも くらべて きめる（byOrder:true）。
 (function(root){
   const N = 32;                        // 1もじを この数の 点に ならべなおして くらべる
   const REJECT = 1.35;                 // これより にていなければ「じしんが ない」（こうほを 出して えらんでもらう）
   const HARD = 3.0;                    // これより にていなければ「よめない」
   const SURE_GAP = 0.08;               // 1ばんと 2ばんの 数字の さが これより 小さいと「じしんが ない」
-  const MIRROR_W = 0.3;                // かがみもじの お手本に たす（ひなたは めったに 書かない）
   const KEY = 'nb_ink_samples';
   const STRETCH_MIN = 0.3;             // よこ÷たて が これより 小さい（ほそい）字は のばさない
 
@@ -52,8 +50,6 @@
          [[[0.95,0.1],[0.75,0],[0.45,0.02],[0.3,0.14],[0.35,0.26],[0.65,0.26],[0.92,0.16],[0.95,0.05],[0.9,0.2],[0.7,0.5],[0.45,0.8],[0.1,1]]],
          [[[0.95,0.1],[0.75,0],[0.45,0.02],[0.3,0.14],[0.35,0.26],[0.65,0.26],[0.92,0.16],[0.95,0.05]],[[0.9,0.2],[0.7,0.5],[0.45,0.8],[0.1,1]]] ]
   };
-  const MIRROR = [2,3,4,5,6,7,9];      // 左右 はんたいに 書くと べつの 形に なる 数字
-  const NO_MIRROR = ['5:3', '5:4'];    // たて線の みじかい 5 は ひっくりかえすと 7 に にるので かがみもじを 作らない
 
   const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
   function toPoints(strokes){
@@ -113,16 +109,12 @@
     return min;
   }
 
-  // お手本を ならべる（かがみもじ も）
-  const flip = strokes => strokes.map(s => s.map(p => [1 - p[0], p[1]]));
+  // お手本を ならべる（かがみもじは 考えない。ひなたは まず 書かない）
   let TEMPLATES = [];
   function build(){
     TEMPLATES = [];
-    for(const d in BASE) BASE[d].forEach((v, vi) => {
-      TEMPLATES.push({ digit:+d, mirrored:false, cloud: normalize(v) });
-      if(MIRROR.includes(+d) && !NO_MIRROR.includes(d + ':' + vi)) TEMPLATES.push({ digit:+d, mirrored:true, cloud: normalize(flip(v)) });
-    });
-    for(const s of loadSamples()) TEMPLATES.push({ digit:s.digit, mirrored:false, cloud:s.cloud, mine:true, loop: s.loop });
+    for(const d in BASE) for(const v of BASE[d]) TEMPLATES.push({ digit:+d, cloud: normalize(v) });
+    for(const s of loadSamples()) TEMPLATES.push({ digit:s.digit, cloud:s.cloud, mine:true, loop: s.loop });
   }
   function loadSamples(){
     try{ const v = JSON.parse((root.localStorage && root.localStorage.getItem(KEY)) || '[]'); return Array.isArray(v) ? v : []; }
@@ -163,13 +155,12 @@
   function recognize(strokes){
     const c = normalize(strokes); if(!c) return null;
     const loop = hasLoop(strokes);
-    // 数字（かがみもじは べつ）ごとに いちばん にている お手本
+    // 数字ごとに いちばん にている お手本
     const by = {};
     for(const t of TEMPLATES){
-      const k = t.digit + (t.mirrored ? 'm' : ''), r = score(c, t);
+      const k = t.digit, r = score(c, t);
       r.s += loopPenalty(t, loop);   // えらぶ ときだけ（よめない の はんていには つかわない）
-      if(t.mirrored) r.s += MIRROR_W; // かがみもじは めったに 書かないので、はっきり にている ときだけ
-      if(!by[k]) by[k] = { digit:t.digit, mirrored:t.mirrored, score:r.g, s:r.s, list:[] };
+      if(!by[k]) by[k] = { digit:t.digit, score:r.g, s:r.s, list:[] };
       by[k].list.push(t);
       if(r.s < by[k].s){ by[k].s = r.s; by[k].score = r.g; }
     }
@@ -182,23 +173,23 @@
       if(o2*ORDER_RATIO < o1){ best = second; byOrder = true; }
     }
     if(!best || best.score > HARD) return null;          // らくがき・どれとも にていない
-    // こうほ（かがみもじ を のぞいて、にている じゅんに 3つまで）
+    // こうほ（にている じゅんに 3つまで）
     const cands = [];
-    for(const e of top){ if(e.mirrored || cands.includes(e.digit)) continue; cands.push(e.digit); if(cands.length >= 3) break; }
-    if(best !== top[0] && !best.mirrored){ cands.splice(cands.indexOf(best.digit), 1); cands.unshift(best.digit); }
+    for(const e of top){ if(cands.includes(e.digit)) continue; cands.push(e.digit); if(cands.length >= 3) break; }
+    if(best !== top[0]){ cands.splice(cands.indexOf(best.digit), 1); cands.unshift(best.digit); }
     // じしんが ある：形が じゅうぶん にていて（REJECT いない）、2ばんめの 数字と はっきり ちがう
     const next = top.find(e => e.digit !== best.digit);
     const sure = best.score <= REJECT && (byOrder || !next || next.s - best.s >= SURE_GAP);
-    // 数字ごとの にかた（かがみもじも ふくめて いちばん ちかい もの。えらばれた 字との さ）。甘めに みる ときに つかう
+    // 数字ごとの にかた（えらばれた 字との さ）。甘めに みる ときに つかう
     const gap = {};
-    for(const e of top) if(!(e.digit in gap)) gap[e.digit] = Math.max(0, e.s - best.s);
-    return { digit:best.digit, score:best.score, mirrored:best.mirrored, byOrder, sure, cands, gap };
+    for(const e of top) gap[e.digit] = Math.max(0, e.s - best.s);
+    return { digit:best.digit, score:best.score, byOrder, sure, cands, gap };
   }
   // 1もじ ぶんの 線を、いちばん にている じゅんに（しらべる・テスト用）
   function rank(strokes){
     const c = normalize(strokes); if(!c) return [];
     const byDigit = {};
-    for(const t of TEMPLATES){ const s = score(c, t).s; const k = t.digit + (t.mirrored ? 'm' : ''); if(!(k in byDigit) || s < byDigit[k]) byDigit[k] = s; }
+    for(const t of TEMPLATES){ const s = score(c, t).s; const k = t.digit; if(!(k in byDigit) || s < byDigit[k]) byDigit[k] = s; }
     return Object.keys(byDigit).map(k => ({ key:k, score:byDigit[k] })).sort((a,b) => a.score - b.score);
   }
   function learn(digit, strokes){

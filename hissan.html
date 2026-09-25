@@ -447,21 +447,20 @@ function judgeCell(k, d){
   const c = S.cells[k]; if(!c || c.st === 'ok') return;
   if(inkCell === k){ inkCell = null; clearTimeout(inkTimer); inkTimer = null; }
   let r;
-  if(d !== undefined) r = { digit:d, mirrored:false };
+  if(d !== undefined) r = { digit:d };
   else {
     const strokes = c.strokes.filter(s => s.length);
     r = strokes.length ? Ink.recognize(strokes) : null;
     if(!strokes.length){ c.st = 'empty'; return; }
   }
   c.at = now();
-  if(d === undefined) Ink.record(c.strokes, WL().cells[k], { want: cellWant(k), got: r ? r.digit : null, m: r && r.mirrored ? 1 : 0, o: r && r.byOrder ? 1 : 0, u: r && r.sure === false ? 1 : 0 });
+  if(d === undefined) Ink.record(c.strokes, WL().cells[k], { want: cellWant(k), got: r ? r.digit : null, o: r && r.byOrder ? 1 : 0, u: r && r.sure === false ? 1 : 0 });
   // よめない：ますに「？」を 出して ゆらし、書いた 線は けす（まちがい では ないので かぞえない）
   if(!r){ c.st = 'empty'; c.val = null; c.strokes = []; c.unk = now(); wsay('もういちど かいてね'); S.wunk = true; return; }
   // あまめに よむ：こたえの 数字が 1ばんと ほぼ おなじくらい にていれば（じしんが なくても）書けた ことに する。
-  // ただしく 書いても よみまちがえる ほうが ずっと おおい。ひなたは らくがきも かがみもじも まず 書かない。
-  // はっきり かがみもじ と よめた ときは「おしい」を のこす。あいまいな 字なので お手本には しない
+  // ただしく 書いても よみまちがえる ほうが ずっと おおい。ひなたは らくがきを まず 書かない。あいまいな 字なので お手本には しない
   const want0 = cellWant(k);
-  if(d === undefined && !(r.sure && r.mirrored && r.digit === want0) && r.gap && (r.gap[want0] ?? 9) <= LENIENT) r = { digit:want0, mirrored:false };
+  if(d === undefined && r.gap && (r.gap[want0] ?? 9) <= LENIENT) r = { digit:want0 };
   // じしんが ない：書いた 線は のこして、こうほの 数字（3つまで）と「かきなおす」を 出す。えらんだら その 数字で しらべる
   else if(d === undefined && r.sure === false){
     if(S.ask && S.ask.k !== k) askCancel();
@@ -472,8 +471,7 @@ function judgeCell(k, d){
   const want = cellWant(k);
   if(S.ask && S.ask.k === k) S.ask = null;
   // ちがう 数字と よんだら、書いた 線の かわりに よんだ 数字を 赤で 出して ゆらす（きかいが どう よんだか わかるように）
-  if(r.digit !== want || r.mirrored){ c.strokes = []; c.mir = !!r.mirrored; }
-  if(r.digit === want && r.mirrored){ c.st = 'bad'; S.miss++; wsay('おしい！ ' + want + ' が かがみもじに なってるよ', k); return; }
+  if(r.digit !== want) c.strokes = [];
   if(r.digit !== want){ c.st = 'bad'; S.miss++; const m = whyWrong(k, r.digit); wsay('「' + r.digit + '」と よんだよ\n' + m.t, m.pulse || k); return; }
   c.st = 'ok'; c.strokes = [];
   const wl = WL(), rc = wl.cells[k];
@@ -588,8 +586,8 @@ function drawWrite(l){
         ctx.restore();
       }
       if(c.st === 'bad' && c.val !== null && !c.strokes.length){
-        // よんだ 数字（かがみもじは 左右 はんたいに）
-        ctx.save(); ctx.translate(r.x + r.w/2, r.y + r.h/2 + 2); if(c.mir) ctx.scale(-1, 1);
+        // よんだ 数字
+        ctx.save(); ctx.translate(r.x + r.w/2, r.y + r.h/2 + 2);
         ctx.fillStyle = '#e0403f'; ctx.font = 'bold ' + Math.round(0.78*cw) + 'px sans-serif';
         ctx.fillText(c.val, 0, 0); ctx.restore();
       }
@@ -894,7 +892,7 @@ function drawRecords(){
     const ok = r.got === r.want;
     ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = r.fixed !== undefined ? '#1f6fd8' : ok ? '#2f8a3a' : '#c8322f';
-    const lab = r.fixed !== undefined ? r.fixed + ' と おぼえた' : r.got === null ? 'よめない' : r.u ? 'まよった（' + r.got + '？）' : 'よんだ ' + r.got + (r.m ? '（かがみ）' : '');
+    const lab = r.fixed !== undefined ? r.fixed + ' と おぼえた' : r.got === null ? 'よめない' : r.u ? 'まよった（' + r.got + '？）' : 'よんだ ' + r.got;
     ctx.fillText(lab, x + tw/2, y + th - 22);
     ctx.fillStyle = '#5a6a80'; ctx.font = '11px sans-serif'; ctx.fillText('こたえ ' + r.want, x + tw/2, y + th - 8);
     ctx.restore();
