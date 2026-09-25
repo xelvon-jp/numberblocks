@@ -474,6 +474,7 @@ function judgeCell(k, d){
   if(r.digit !== want) c.strokes = [];
   if(r.digit !== want){ c.st = 'bad'; S.miss++; const m = whyWrong(k, r.digit); wsay('「' + r.digit + '」と よんだよ\n' + m.t, m.pulse || k); return; }
   c.st = 'ok'; c.strokes = [];
+  (S.pops || (S.pops = {}))[k] = now();          // ますから その 数字の キャラが とびだす（drawStage）
   const wl = WL(), rc = wl.cells[k];
   burst(rc.x + rc.w/2, rc.y + rc.h/2, 14);
   if(cellKeys().every(q => S.cells[q].st === 'ok')){ wsay(''); finish(); return; }
@@ -615,12 +616,55 @@ function drawWrite(l){
     ctx.fillStyle = S.done ? '#c0398a' : S.ask ? '#2b3a52' : S.wunk ? '#c07a10' : S.wmsg ? '#c8322f' : '#2b3a52'; ctx.fillText(s, W/2, y);
   });
   ctx.restore();
+  drawStage(l, wl, t);
   // できた！ 式の ところで キャラが 位ごとに わかれて 計算し、こたえの キャラに なる（こたえの 行は 見えたまま）
   if(S.done){
     const e = Math.min(1, (t - S.doneAt)/400);
     ctx.save(); ctx.fillStyle = 'rgba(255,255,255,' + 0.85*e + ')'; ctx.beginPath(); ctx.roundRect(wl.px, wl.py, wl.pw, wl.yLine - 4 - wl.py, [16, 16, 0, 0]); ctx.fill(); ctx.restore();
     drawCele(t);
   }
+}
+
+// ─── けいさん中の ぶたい（E かく）────────────────────────────────
+// ひっさんの 下で、もんだいの 数の キャラ（左 と 右）が まっている。
+// 書けた ますからは その 数字の キャラが とびだして、まんなかに 位の じゅんで ならぶ。
+// 書いている あいだは しずか。書けたら みんなで ぴょん、まちがえたら ぷるぷる
+const POP_MS = 750;
+function drawStage(l, wl, t){
+  const top = wl.msgY + (S.ask && !S.done ? 84 : 46), gy = l.bottom - 6, h = gy - top;
+  if(h < 36) return;
+  const pops = S.pops || {};
+  const last = Math.max(0, ...Object.values(pops));
+  const bad = cellKeys().map(k => S.cells[k]).filter(c => c.st === 'bad').reduce((m, c) => Math.max(m, c.at), 0);
+  const writing = !!(pen && !pen.memo);
+  // ぴょん（書けた とき・できた あと）と ぷるぷる（まちがえた とき）
+  const hop = (phase) => {
+    if(S.done) return Math.abs(Math.sin((t - S.doneAt)*0.006 + phase))*h*0.12;
+    const e = t - last; return last && e < 600 ? Math.sin(e/600*Math.PI)*h*0.18 : 0;
+  };
+  const shake = bad && t - bad < 600 ? Math.sin((t - bad)*0.05)*4*(1 - (t - bad)/600) : 0;
+  const breathe = phase => writing ? 0 : Math.sin(t*0.003 + phase)*1.5;
+  const put = (n, cx, bs, dy) => { const sp = blockSpec(n); drawNumberblock(ctx, n, cx - sp.cols*bs/2, gy - dy - sp.rows*bs, bs, { t, animate:true }); };
+  const fitBs = (n, maxW, cap) => { const sp = blockSpec(n); return Math.max(1.5, Math.min(cap || 9, (h - 4)/sp.rows, maxW/sp.cols)); };
+  // もんだいの 数：左と 右
+  const sideW = Math.min(W*0.3, wl.px + wl.pw*0.3);
+  [[P.a, W*0.17, 0], [P.b, W*0.83, 1.7]].forEach(([n, cx, ph]) => {
+    ctx.save(); ctx.translate(shake, 0); put(n, cx, fitBs(n, sideW), hop(ph) + breathe(ph)); ctx.restore();
+  });
+  // 書けた 数字：ますから とびだして まんなかへ（0 は キャラが いないので ぱっと ひかる だけ）
+  const keys = cellKeys().slice().reverse(), slotW = Math.min(W*0.14, 70);
+  const bsD = Math.min(fitBs(9, slotW*0.8, 14), fitBs(8, slotW*0.8, 14));   // いちばん 大きい 9・8 に あわせて そろえる
+  keys.forEach((k, i) => {
+    const at = pops[k]; if(!at) return;
+    const dg = cellWant(k); if(dg === 0) return;
+    const sx = W/2 + (i - (keys.length - 1)/2)*slotW;
+    const r = wl.cells[k], e = Math.min(1, (t - at)/POP_MS), q = e < 0.5 ? 2*e*e : 1 - Math.pow(-2*e + 2, 2)/2;
+    const fx = r.x + r.w/2, fyUp = gy - (r.y + r.h*0.9);          // ますの 下から
+    const x = fx + (sx - fx)*q, up = fyUp*(1 - q) + Math.sin(e*Math.PI)*h*0.5;
+    ctx.save(); if(e < 1) ctx.globalAlpha = Math.min(1, e*4);
+    put(dg, x, bsD*(0.6 + 0.4*q), up + (e >= 1 ? hop(i) + breathe(2.5 + i) : 0));
+    ctx.restore();
+  });
 }
 
 // ─── できた！の 計算アニメ（E かく）──────────────────────────────
