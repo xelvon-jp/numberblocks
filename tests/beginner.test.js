@@ -186,14 +186,21 @@ module.exports = {
     t.eq(rb, true, 'もどしたのに 虹が出ない');
   },
 
-  'ふつうでは 虹は出ない': async t => {
+  'ふつうでは おてほんの 手数いないなら 虹、こえたら じょうず': async t => {
     const p = await t.open({ who:'hinata' });
     const pr = await p.evaluate(() => {
+      const out = {};
       taskOn = true; setMode('+'); startTask(20);
+      out.ref = TASKS[20].ref || TASKS[20].best;
       spawnBlock(3); spawnBlock(7); fuseBlocks(blocks[0], blocks[1]); checkTask();
-      return winFx && winFx.praise ? { text: winFx.praise.text, rainbow: !!winFx.praise.rainbow } : null;
+      out.a = { moves: taskLog.length, text: winFx.praise.text, rainbow: !!winFx.praise.rainbow, mark: !!(curRec().rainbow && curRec().rainbow[20]) };
+      startTask(20);
+      spawnBlock(1); spawnBlock(2); fuseBlocks(blocks[0], blocks[1]); spawnBlock(7); fuseBlocks(blocks[0], blocks[1]); checkTask();
+      out.b = { moves: taskLog.length, text: winFx.praise.text, rainbow: !!winFx.praise.rainbow };
+      return out;
     });
-    t.eq(pr, { text:'じょうず！', rainbow:false }, 'ふつうのクリアで 虹が出た');
+    t.ok(pr.a.moves <= pr.ref && pr.a.rainbow && pr.a.text === 'レインボー🌈クリア！' && pr.a.mark, 'おてほんどおりで 虹が出ない: ' + JSON.stringify(pr));
+    t.ok(pr.b.moves > pr.ref && !pr.b.rainbow && pr.b.text === 'じょうず！', 'おてほんを こえても 虹が出る: ' + JSON.stringify(pr));
   },
 
   '虹の印は 開き直しても残り、きろくの せいりで消える': async t => {

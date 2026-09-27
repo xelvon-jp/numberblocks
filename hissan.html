@@ -1218,7 +1218,8 @@ function drawParts(){
   for(const p of parts){ ctx.globalAlpha = p.life; ctx.fillStyle = p.col; ctx.fillRect(p.x, p.y, 5, 5); }
   ctx.globalAlpha = 1;
 }
-function loop(){ try{ draw(); }catch(e){ window.__err = String(e && e.stack || e); } requestAnimationFrame(loop); }
+let paused = false;   // ゲームの 中で かくれて いる あいだは かかない
+function loop(){ try{ if(!paused) draw(); }catch(e){ window.__err = String(e && e.stack || e); } requestAnimationFrame(loop); }
 
 // ─── ゆび ──────────────────────────────────────────────────────
 cv.addEventListener('pointerdown', e => {
@@ -1247,6 +1248,18 @@ cv.addEventListener('pointercancel', () => { drag = null; if(pen && !pen.train) 
 
 newProblem();
 requestAnimationFrame(loop);
+// ゲームの 中では 1まいを つかいまわす（まいかい よみこむと 数びょう かかる）。
+// ゲームから「start」が きたら その しゅるいで 1もん はじめ、「hide」で かくれる
+if(EMBED){
+  window.addEventListener('message', e => {
+    const m = e.data; if(!m || m.from !== 'game') return;
+    if(m.type === 'start'){
+      EMBED.kind = m.kind || 'add'; EMBED.big = !!m.big; EMBED.label = m.label || 'ひっさん';
+      kindId = EMBED.kind; closeTrain(); newProblem(); paused = false;
+    } else if(m.type === 'hide'){ paused = true; closeTrain(); newProblem(); }
+  });
+  tellGame({ type:'ready' });
+}
 </script>
 </body>
 </html>

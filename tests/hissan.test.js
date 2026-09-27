@@ -395,18 +395,22 @@ module.exports = {
       out.done = w.eval('S.done');
       // つぎの もんだい ボタン → ゲームへ しらせる
       w.eval('btns = []; drawBottom(L()); btns[0].act();');
-      await until(() => !document.querySelector('iframe'));
+      await until(() => !hissanTask || !hissanTask.frame);
       if(paradeBreak) endParadeBreak();
-      out.after = [!!hissanTask, !!document.querySelector('iframe'), taskIdx, isCalcMode(), hissanStats().hist.join()];
+      out.after = [!!hissanTask, hissanFrame.style.visibility === 'visible', taskIdx, isCalcMode(), hissanStats().hist.join()];
       // レベルアップ：8問 まちがえずに
       for(let i=0;i<8;i++){ startHissanTask(); onHissanMessage({ from:'hissan', type:'done', ans:51, miss:0 }); if(paradeBreak) endParadeBreak(); }
       out.lv = hissanStats().lv;
-      startHissanTask(); out.kind2 = /kind=sub1&/.test(hissanTask.frame.src);
+      startHissanTask(); out.kind2 = hissanTask.kind === 'sub1';
+      // 画面は 1まいを つかいまわす（よみこみなおさない）
+      out.one = document.querySelectorAll('iframe').length === 1 && hissanTask.frame === f;
+      await until(() => f.contentWindow.eval("EMBED.kind === 'sub1' && P.b < 10 && !paused"));
+      out.reused = f.contentWindow.eval("[EMBED.kind, P.b < 10, S.done]");
       saveTask(); out.saved = JSON.parse(localStorage.getItem(TASK_KEY)).p[profile().id].hissan.lv;
       return out;
     });
     t.eq(r, { frame:true, loaded:true, inner:['add', true, '+'], done:true, after:[false, false, 5, true, 'true'], lv:2, kind2:true,
-              saved:2 }, 'まぜまぜの ひっさんが おかしい');
+              one:true, reused:['sub1', true, false], saved:2 }, 'まぜまぜの ひっさんが おかしい');
   },
 
   'どの画面でも へや・ボタンが 収まり、エラーが 出ない（5つの こたえかた）': async t => {

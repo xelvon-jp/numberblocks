@@ -578,6 +578,7 @@ function clockStatsOf(id){
 function clockStats(){ return clockStatsOf(profile().id); }
 let genTask = null;       // いま出している とけいの おだい（なければ けいさん）
 let hissanTask = null;    // いま出している ひっさんの おだい { lv, frame }（ひっさんの 画面を 上に かさねて 出す）
+let hissanFrame = null, hissanReady = false, hissanPending = null;   // かくして つかいまわす ひっさんの 画面（startHissanTask）
 let nextSpecial = 'clock';// まぜまぜで つぎに はさむのは とけい か ひっさん か（かわりばんこ）
 let sinceClock = 0;       // まえの とけいから けいさんを 何問 すすめたか
 let lastClockGoal = -1;   // つづけて同じ時こくにしないため
@@ -847,6 +848,7 @@ function startTask(i){
   if(!isCalcMode()) setMode('calc');
   resetTaskState();
   saveTask(); updateTargets();
+  setTimeout(preloadHissan, 300);   // よみこみの さいちゅうにも よばれるので あとで
 }
 // とけいの おだいを はじめる（spec を わたせば その おだい。テスト用）
 function startClockTask(spec){
@@ -912,23 +914,43 @@ function hissanStatsOf(id){
   return r.hissan || (r.hissan = { lv:1, hist:[], v:2 });
 }
 function hissanStats(){ return hissanStatsOf(profile().id); }
+// ひっさんの 画面は 1まいを かくして おいて つかいまわす（まいかい よみこむと 数びょう 止まって 見える）。
+// まぜまぜの けいさんを はじめた ときに さきに よみこんで おく
+function hissanStartMsg(){
+  const st = hissanStats(), lv = HISSAN_LEVELS[st.lv - 1];
+  return { from:'game', type:'start', kind: lv.kind, big: lv.big, label: 'ひっさん' + st.lv + '（' + lv.name + '）', lv: st.lv };
+}
+function hissanFrameEl(){
+  if(hissanFrame && hissanFrame.isConnected) return hissanFrame;
+  const m = hissanStartMsg();
+  hissanReady = false;
+  const f = document.createElement('iframe');
+  f.src = 'hissan.html?embed=1&kind=' + m.kind + '&big=' + (m.big ? 1 : 0) + '&label=' + encodeURIComponent(m.label) + '&v=' + Date.now();
+  f.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;border:0;z-index:50;background:#bfe8f0;visibility:hidden;pointer-events:none';
+  document.body.appendChild(f);
+  return (hissanFrame = f);
+}
+function hissanPost(m){ try{ hissanFrame.contentWindow.postMessage(m, '*'); }catch(e){} }
+function showHissan(on){
+  if(!hissanFrame) return;
+  hissanFrame.style.visibility = on ? 'visible' : 'hidden';
+  hissanFrame.style.pointerEvents = on ? 'auto' : 'none';
+  if(!on && hissanReady) hissanPost({ from:'game', type:'hide' });
+}
+function preloadHissan(){ if(mixMode()) hissanFrameEl(); }
 function startHissanTask(){
   closeHissan();
   if(!isCalcMode()) setMode('calc');
   resetTaskState();
-  const st = hissanStats(), lv = HISSAN_LEVELS[st.lv - 1];
-  hissanTask = { lv: st.lv, frame: null };
-  const f = document.createElement('iframe');
-  f.src = 'hissan.html?embed=1&kind=' + lv.kind + '&big=' + (lv.big ? 1 : 0) +
-          '&label=' + encodeURIComponent('ひっさん' + st.lv + '（' + lv.name + '）') + '&v=' + Date.now();
-  f.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;border:0;z-index:50;background:#bfe8f0';
-  document.body.appendChild(f);
-  hissanTask.frame = f;
+  const m = hissanStartMsg(), f = hissanFrameEl();
+  hissanTask = { lv: m.lv, kind: m.kind, frame: f };
+  if(hissanReady) hissanPost(m); else hissanPending = m;
+  showHissan(true);
   updateTargets();
 }
 function closeHissan(){
-  if(hissanTask && hissanTask.frame) hissanTask.frame.remove();
-  hissanTask = null;
+  if(hissanTask && hissanTask.frame) showHissan(false);
+  hissanTask = null; hissanPending = null;
 }
 function noteHissanAnswer(ok){
   const t = hissanTask; if(!t) return;
@@ -946,12 +968,20 @@ function onHissanMessage(m){
   if(m.type === 'done'){
     noteHissanAnswer(m.miss === 0);
     notePrize(m.ans > 100 ? m.ans - 100 : m.ans);     // ごほうびの パレードにも 数える（こたえの キャラ）
-    if(hissanTask.frame) hissanTask.frame.remove();
+    showHissan(false);
     hissanTask.frame = null;                           // hissanTask は のこす（つぎへ で けいさんに もどる）
     nextTask();
   }
 }
 window.addEventListener('message', e => {
+  const d = e.data;
+  if(d && d.from === 'hissan' && d.type === 'ready'){
+    if(!hissanFrame || e.source !== hissanFrame.contentWindow) return;
+    hissanReady = true;
+    if(hissanPending){ hissanPost(hissanPending); hissanPending = null; }
+    else if(!(hissanTask && hissanTask.frame)) hissanPost({ from:'game', type:'hide' });
+    return;
+  }
   if(hissanTask && hissanTask.frame && e.source !== hissanTask.frame.contentWindow) return;
   onHissanMessage(e.data);
 });
@@ -4358,7 +4388,8 @@ function checkTask(){
     const kept = taskLogs[taskIdx];
     const prevOwn = kept ? kept.length : null;
     const moves = taskLog.length;
-    const rainbow = begMode() && !usedOther;
+    // レインボー：ビギナーは ふつうの キーだけで 作れたら、ふつうは おてほんの 手数いないで 作れたら
+    const rainbow = begMode() ? !usedOther : moves <= (t.ref || t.best);
     const praise = rainbow ? { text:RAINBOW_TEXT, color:'#c0398a', big:true, rainbow:true }
                            : judgeClear(taskIdx, moves, prevOwn);
     lastRainbow = rainbow;
