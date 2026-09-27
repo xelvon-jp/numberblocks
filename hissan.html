@@ -46,11 +46,11 @@ const SAFE_B = (() => { const d = document.createElement('div'); d.style.cssText
   document.body.appendChild(d); const h = d.getBoundingClientRect().height; d.remove(); return h || 0; })();
 
 const MODES = [{ id:'room', label:'A へや' }, { id:'auto', label:'B おまかせ' }, { id:'drum', label:'C ドラム' }, { id:'pick', label:'D えらぶ' }, { id:'write', label:'E かく' }];
-const KINDS = [{ id:'add', label:'たし算' }, { id:'sub', label:'ひき算' }, { id:'mix', label:'まぜ' }];
+const KINDS = [{ id:'add', label:'たし算' }, { id:'sub1', label:'ひき算1けた' }, { id:'sub', label:'ひき算' }, { id:'mix', label:'まぜ' }];
 let modeId = 'room', kindId = 'add';
 try{ const v = JSON.parse(localStorage.getItem('nb_hissan_try') || '{}'); if(v.m) modeId = v.m; if(v.k) kindId = v.k; }catch(e){}
 // ゲームの「まぜまぜ」から よばれた とき（iframe）：E かく だけ、1もん。おわったら ゲームに しらせる
-//   hissan.html?embed=1&kind=add|sub|mix&big=0|1&label=…
+//   hissan.html?embed=1&kind=add|sub1|sub|mix&big=0|1&label=…
 const EMBED = (() => { const q = new URLSearchParams(location.search); if(q.get('embed') !== '1') return null;
   return { kind: q.get('kind') || 'add', big: q.get('big') === '1', label: q.get('label') || 'ひっさん' }; })();
 if(EMBED){ modeId = 'write'; kindId = EMBED.kind; }
@@ -61,7 +61,17 @@ function saveChoice(){ try{ localStorage.setItem('nb_hissan_try', JSON.stringify
 const R = n => Math.floor(Math.random()*n);
 // たし算：一のくらいで かならず くり上がる。4かいに1かいは こたえが 3けた
 // ひき算：一のくらいで かならず くり下がる（ときどき 60−27 のように 0 から）。こたえは 10 いじょう
+// ひき算1けた（sub1）：2けた − 1けた（23 − 7）。くり下がり 1かい、こたえは 10 いじょう
 function genProblem(kind, noBig){
+  if(kind === 'sub1'){
+    for(let k=0;k<500;k++){
+      const a = 20 + R(80), b = 2 + R(8);
+      if(a%10 >= b || a - b < 10) continue;
+      if(a%10 === 0 && Math.random() > 0.3) continue;
+      return { op:'-', a, b, ans: a - b };
+    }
+    return { op:'-', a:23, b:7, ans:16 };
+  }
   const op = kind === 'mix' ? (Math.random() < 0.5 ? '+' : '-') : (kind === 'sub' ? '-' : '+');
   const wantBig = !noBig && Math.random() < 0.25;
   for(let k=0;k<500;k++){
@@ -496,6 +506,7 @@ function whyWrong(k, v){
     return { t:'一のくらい：' + (10 + aO) + ' − ' + bO + ' は？' };
   }
   if(v === aT - bT) return { t:'くり下がりで 十のくらいが 1 へったのを わすれているよ', pulse:'carry' };
+  if(!bT) return { t:'十のくらい：' + aT + ' から 10 を 1つ かしたよ\nのこりは いくつ？', pulse:'carry' };
   return { t:'十のくらい：' + (aT - 1) + ' − ' + bT + ' は？' };
 }
 // こうほから えらんだ：その 数字を 書いた ことに する。こたえと おなじなら、その字を お手本として おぼえる
@@ -544,7 +555,8 @@ function drawWrite(l){
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = 'bold ' + Math.round(cw*0.78) + 'px sans-serif'; ctx.fillStyle = '#16233a';
   ctx.fillText(aT, wl.x.t, wl.yA + cw/2); ctx.fillText(aO, wl.x.o, wl.yA + cw/2);
-  ctx.fillText(bT, wl.x.t, wl.yB + cw/2); ctx.fillText(bO, wl.x.o, wl.yB + cw/2);
+  if(P.b >= 10) ctx.fillText(bT, wl.x.t, wl.yB + cw/2);
+  ctx.fillText(bO, wl.x.o, wl.yB + cw/2);
   ctx.fillText(P.op === '+' ? '+' : '−', wl.signX, wl.yB + cw/2);
   ctx.strokeStyle = '#16233a'; ctx.lineWidth = Math.max(3, cw*0.05); ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(wl.px + 12, wl.yLine); ctx.lineTo(wl.px + wl.pw - 12, wl.yLine); ctx.stroke();
@@ -991,7 +1003,8 @@ function drawBtn(x, y, w, h, label, on, style){
   ctx.beginPath(); ctx.roundRect(x, y, w, h, 10); ctx.fill();
   ctx.strokeStyle = 'rgba(60,80,110,0.25)'; ctx.lineWidth = 1.2; ctx.stroke();
   ctx.fillStyle = on ? '#fff' : (style.fg || '#22314a');
-  ctx.font = 'bold ' + (style.font || 14) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  let fs = style.font || 14; ctx.font = 'bold ' + fs + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  while(fs > 9 && ctx.measureText(label).width > w - 6){ fs--; ctx.font = 'bold ' + fs + 'px sans-serif'; }   // はばに おさめる
   ctx.fillText(label, x + w/2, y + h/2 + 1);
   ctx.restore();
 }
@@ -1008,7 +1021,8 @@ function drawWritten(l){
   const dA = { t: Math.floor(P.a/10), o: P.a%10 }, dB = { t: Math.floor(P.b/10), o: P.b%10 };
   ctx.font = 'bold 42px sans-serif'; ctx.fillStyle = '#16233a';
   ctx.fillText(dA.t, xs('t'), yA); ctx.fillText(dA.o, xs('o'), yA);
-  ctx.fillText(dB.t, xs('t'), yB); ctx.fillText(dB.o, xs('o'), yB);
+  if(P.b >= 10) ctx.fillText(dB.t, xs('t'), yB);
+  ctx.fillText(dB.o, xs('o'), yB);
   ctx.fillText(P.op === '+' ? '+' : '−', xs('h') - 22, yB);
   ctx.strokeStyle = '#16233a'; ctx.lineWidth = 3;
   ctx.beginPath(); ctx.moveTo(xs('h') - 44, yLine); ctx.lineTo(xs('o') + 26, yLine); ctx.stroke();
@@ -1157,7 +1171,7 @@ function drawTop(l){
   // 1だんめ：もどる／しゅるい／つぎ
   const y = 8, h = 38;
   btn(8, y, 64, h, '← もどる', false, goBack, { font:12 });
-  const kw = (W - 8 - 64 - 8 - 8 - 64 - 8 - 12) / 3;
+  const kw = (W - 8 - 64 - 8 - 8 - 64 - 8 - 6*(KINDS.length - 1)) / KINDS.length;
   KINDS.forEach((k, i) => btn(8 + 64 + 8 + i*(kw + 6), y, kw, h, k.label, kindId === k.id, () => { kindId = k.id; saveChoice(); newProblem(); }));
   btn(W - 8 - 64, y, 64, h, 'つぎ', false, newProblem);
   // 2だんめ：こたえかた

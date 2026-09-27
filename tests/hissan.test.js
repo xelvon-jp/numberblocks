@@ -60,6 +60,8 @@ module.exports = {
         if(q.ans >= 100) big++;
         const s = genProblem('sub');
         if(!(s.op === '-' && s.a > s.b && s.a - s.b >= 10 && s.a%10 < s.b%10 && s.b >= 10 && s.a < 100 && s.ans === s.a - s.b)) bad++;
+        const u = genProblem('sub1');   // 2けた − 1けた
+        if(!(u.op === '-' && u.a >= 10 && u.a < 100 && u.b >= 1 && u.b < 10 && u.a%10 < u.b && u.ans >= 10 && u.ans === u.a - u.b)) bad++;
         const w = wrongAnswers(q).concat(wrongAnswers(s));
         if(w.length !== 4 || w.includes(q.ans) && wrongAnswers(q).includes(q.ans)) bad++;
       }
@@ -294,6 +296,20 @@ module.exports = {
     t.eq(await p.evaluate(() => [S.done, window.__err || '']), [false, ''], 'つぎの もんだいに ならない');
   },
 
+  'E かく：ひき算 2けた − 1けた（23 − 7）。下の 十は かかない。まちがいの ことばと できた！の アニメ': async t => {
+    const p = await openH(t, 'write', 'sub1');
+    await p.evaluate(() => setProblem('-', 23, 7));
+    let r = await writeDigit(p, 'o', 6);
+    t.eq(r.st, 'ok', '一のくらい 6 が せいかいに ならない');
+    r = await writeDigit(p, 't', 2);
+    t.ok(r.st === 'bad' && /くり下がり/.test(r.msg), 'くり下がり わすれの ことば: ' + JSON.stringify(r));
+    t.ok(/十のくらい：2 から 10 を 1つ かした/.test(await p.evaluate(() => whyWrong('t', 3).t)), '1けたの ときの 十のくらいの ことば');
+    r = await writeDigit(p, 't', 1);
+    t.eq(r.st, 'ok', '十のくらい 1 が せいかいに ならない');
+    await p.waitForFunction(() => cele && cele.finished, null, { timeout: 20000 });
+    t.eq(await p.evaluate(() => window.__err || ''), '', 'アニメで エラー');
+  },
+
   'E かく：ひき算 52−27（一 5、十 2）と くり下がり わすれ・3けた': async t => {
     const p = await openH(t, 'write', 'sub');
     await p.evaluate(() => setProblem('-', 52, 27));
@@ -351,6 +367,17 @@ module.exports = {
     t.eq(q, [null, 5, 1, ''], 'ほんとうは？ で なおせない');
   },
 
+  'まぜまぜ：まえの ひっさんの レベル 2（ひき算）は 3 に ずれる（2けた − 1けた が 2 に 入った）': async t => {
+    const old = JSON.stringify({ v:2, tv:4, on:true, cur:'hinata', p:{ hinata:{ idx:0, mix:true, hissan:{ lv:2, hist:[true] } } } });
+    const key = 'nbg.task.v1';
+    let p = await t.open({ storage:{ [key]: old } });
+    t.eq(await p.evaluate(() => [hissanStats().lv, HISSAN_LEVELS[hissanStats().lv - 1].kind]), [3, 'sub'], 'レベルが ずれない');
+    // いちど ずらしたら もう ずらさない
+    const saved = await p.evaluate(() => { saveTask(); return localStorage.getItem(TASK_KEY); });
+    p = await t.open({ storage:{ [key]: saved } });
+    t.eq(await p.evaluate(() => hissanStats().lv), 3, '2かい ずれて しまう');
+  },
+
   'まぜまぜ：ひっさんを 画面いっぱいに かさねて 出し、できたら つぎの けいさんへ。8問 まちがえずに できたら レベルが 上がる': async t => {
     const p = await t.open();
     const r = await p.evaluate(async () => {
@@ -374,7 +401,7 @@ module.exports = {
       // レベルアップ：8問 まちがえずに
       for(let i=0;i<8;i++){ startHissanTask(); onHissanMessage({ from:'hissan', type:'done', ans:51, miss:0 }); if(paradeBreak) endParadeBreak(); }
       out.lv = hissanStats().lv;
-      startHissanTask(); out.kind2 = /kind=sub/.test(hissanTask.frame.src);
+      startHissanTask(); out.kind2 = /kind=sub1&/.test(hissanTask.frame.src);
       saveTask(); out.saved = JSON.parse(localStorage.getItem(TASK_KEY)).p[profile().id].hissan.lv;
       return out;
     });
