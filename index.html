@@ -126,6 +126,33 @@
       background:linear-gradient(#7fd4e4, #a9dc8c); font:bold 30px sans-serif; color:#16233a; text-align:center; }
     #play-bye.on { display:flex; }
     #play-bye small { font-size:14px; color:#2b3a52; margin-top:24px; opacity:0.7; }
+    #play-lock { position:fixed; inset:0; z-index:71; display:none; align-items:center; justify-content:center; flex-direction:column;
+      background:linear-gradient(#7fd4e4, #a9dc8c); font:bold 30px sans-serif; color:#16233a; text-align:center; }
+    #play-lock.on { display:flex; }
+    #play-lock .sub { font-size:17px; color:#2b3a52; margin-top:14px; line-height:1.6; }
+    #play-lock .parent { position:absolute; bottom:calc(20px + env(safe-area-inset-bottom, 0px)); left:50%; transform:translateX(-50%);
+      border:0; border-radius:12px; padding:10px 18px; background:rgba(255,255,255,0.7); color:#2b3a52; font:bold 14px sans-serif; }
+    #play-pin { position:fixed; inset:0; z-index:72; display:none; align-items:center; justify-content:center; background:rgba(14,24,40,0.6); font-family:sans-serif; }
+    #play-pin.on { display:flex; }
+    #play-pin .box { width:min(320px, calc(100% - 24px)); background:#fdfdff; border-radius:18px; padding:18px 16px 14px; text-align:center; }
+    #play-pin .ttl { font:bold 16px sans-serif; color:#16233a; min-height:22px; }
+    #play-pin .note { font:12px sans-serif; color:#6a7890; margin-top:4px; min-height:16px; }
+    #play-pin .dots { display:flex; justify-content:center; gap:14px; margin:14px 0 12px; }
+    #play-pin .dots i { width:16px; height:16px; border-radius:50%; border:2px solid #3c6ef0; }
+    #play-pin .dots i.f { background:#3c6ef0; }
+    #play-pin .dots.ng { animation:pinNg 0.4s; }
+    @keyframes pinNg { 25% { transform:translateX(-8px); } 75% { transform:translateX(8px); } }
+    #play-pin .keys { display:grid; grid-template-columns:repeat(3, 1fr); gap:8px; }
+    #play-pin .keys button, #play-pin .ext button { height:50px; border:0; border-radius:12px; background:#e4e9f2; color:#16233a; font:bold 22px sans-serif; }
+    #play-pin .keys button.sm { font-size:14px; }
+    #play-pin .ext { display:none; grid-template-columns:repeat(3, 1fr); gap:8px; margin-top:6px; }
+    #play-pin .ext button { background:#3c6ef0; color:#fff; font-size:18px; }
+    #play-pin.choose .ext { display:grid; }
+    #play-pin.choose .keys, #play-pin.choose .dots { display:none; }
+    #play-pin .row2 { display:flex; gap:8px; margin-top:10px; }
+    #play-pin .row2 button { flex:1; height:40px; border:0; border-radius:10px; background:#eef1f6; color:#4a5a72; font:bold 13px sans-serif; }
+    #play-pin .chpin { display:none; }
+    #play-pin.choose .chpin { display:block; }
   </style>
 </head>
 <body>
@@ -139,6 +166,14 @@
   <button class="more" type="button">もうすこし</button>
 </div></div>
 <div id="play-bye">またね！<small>タップすると もどります</small></div>
+<div id="play-lock">きょうは ここまで！<div class="sub">たくさん かんがえたね<br>またね！</div><button class="parent" type="button">おうちの ひと</button></div>
+<div id="play-pin"><div class="box">
+  <div class="ttl"></div><div class="note"></div>
+  <div class="dots"><i></i><i></i><i></i><i></i></div>
+  <div class="keys"></div>
+  <div class="ext"><button type="button" data-m="5">+5ふん</button><button type="button" data-m="10">+10ふん</button><button type="button" data-m="15">+15ふん</button></div>
+  <div class="row2"><button class="chpin" type="button">ばんごうを かえる</button><button class="cancel" type="button">やめる</button></div>
+</div></div>
 <div id="safe-probe"></div>
 <button id="ver-btn" type="button" title="バージョン／再読み込み"></button>
 <div id="ver-hint"><span>↻ よみこみ</span><div class="bar"><i></i></div></div>
@@ -3801,14 +3836,16 @@ function drawSettings(ctx){
       opts: [{ text:'ON', v:true, on:quizOn }, { text:'OFF', v:false, on:!quizOn }] },
     { label:'あそぶ じかん（ふん）', key:'play',
       opts: PLAY_LIMITS.map(m => ({ text: m ? String(m) : 'なし', v:m, on: play.limit === m })) },
+    { label:'じかんぎれ', key:'playmode', bw:78,
+      opts: [{ text:'おやの OK', v:'lock', on: play.mode === 'lock' }, { text:'すすめる', v:'soft', on: play.mode === 'soft' }] },
   ];
   // 横向きなど高さが足りないときは、行とボタンを詰めて収める
   const avail = sh - TAB_H - 16;
   const fullH = 54 + rows.length*54 + 14 + (44 + 12)*3 + 16 + 44 + 16;
   const tight = fullH > avail;
-  const rowH = tight ? 44 : 54, bigH = tight ? 38 : 44, w = Math.min(360, sw-20);
+  const rowH = tight ? 36 : 54, bigH = tight ? 34 : 44, head = tight ? 44 : 54, w = Math.min(360, sw-20);
   // 高さが足りないときは「にじ」と おいわいの プレビューを 1れつに まとめる
-  const h = 54 + rows.length*rowH + 14 + (bigH + (tight ? 8 : 12))*(tight ? 2 : 3) + (tight ? 0 : 16) + bigH + (tight ? 10 : 16);
+  const h = head + rows.length*rowH + 14 + (bigH + (tight ? 8 : 12))*(tight ? 2 : 3) + (tight ? 0 : 16) + bigH + (tight ? 10 : 16);
   const x = (sw-w)/2, y = TAB_H + 8 + Math.max(0, (avail - h)/2);
 
   ctx.save();
@@ -3817,9 +3854,9 @@ function drawSettings(ctx){
   ctx.beginPath(); ctx.roundRect(x,y,w,h,14); ctx.fill();
   ctx.textBaseline='middle'; ctx.textAlign='left';
   ctx.fillStyle='#16233a'; ctx.font='bold 18px sans-serif';
-  ctx.fillText('せってい', x+16, y+28);
+  ctx.fillText('せってい', x+16, y+head/2+1);
 
-  let ty = y+54;
+  let ty = y+head;
   for(const r of rows){
     ctx.textAlign='left'; ctx.fillStyle='#2b3a52'; ctx.font='bold 13px sans-serif';
     // ラベルが長いときは、かっこの中を小さく2行めへ
@@ -3831,7 +3868,7 @@ function drawSettings(ctx){
     } else {
       ctx.fillText(r.label, x+16, ty+rowH/2);
     }
-    const bw = r.opts.length > 4 ? Math.min(38, Math.floor((w - 32 - 96 - 16)/r.opts.length)) : (r.opts.length > 2) ? 38 : 54, gap = 4, bh = 34;
+    const bw = r.bw || (r.opts.length > 4 ? Math.min(38, Math.floor((w - 32 - 96 - 16)/r.opts.length)) : (r.opts.length > 2) ? 38 : 54), gap = 4, bh = Math.min(34, rowH - 4);
     let bx = x + w - 16 - (r.opts.length*bw + (r.opts.length-1)*gap);
     for(const o of r.opts){
       drawCardBtn(ctx, bx, ty+(rowH-bh)/2, bw, bh, o.text,
@@ -3904,6 +3941,7 @@ function handleSettingsTap(x, y){
     if(b.val==='size')       setBlockSize(b.v);
     else if(b.val==='quiz')  setQuizOn(b.v);
     else if(b.val==='play')  play.setLimit(b.v);
+    else if(b.val==='playmode') play.setMode(b.v);
     else if(b.val==='zukan') location.href = 'zukan.html?v=' + Date.now();   // キャッシュの 古い版を ひらかない
     else if(b.val==='hissan') location.href = 'hissan.html?v=' + Date.now();
     else if(b.val==='fs')    toggleFullscreen();
@@ -5043,23 +5081,30 @@ requestAnimationFrame(loop);
 <script>
 // ─── あそぶ じかん ───────────────────────────────────────────────────────────
 // 画面の いちばん上の バーが だんだん みじかく なる。のこり 3ぷん・1ぷんで「あと ○ぷん」を てんめつ。
-// 0 に なったら、いま といている もんだいが おわってから「きょうは ここまで」を 出す（すすめる だけ。とじれば つづけられる）。
-// 「もうすこし」で とじたら 5ふん ごとに また 出す。
-// かぞえるのは 画面が 見えている あいだ だけ。1じかん やすんだら（とじていたら）また いっぱいに もどる。たんまつで 1つ。
+// 0 に なったら、いま といている もんだいが おわってから おしまいに する。おわりかたは 2つ（せってい）：
+//   おやの OK（はじめは これ）… 「きょうは ここまで」画面で とめる。おうちの ひとが 4けたの あんしょう番号で
+//                               5・10・15ふん のばせる。番号は はじめて つかう ときに きめる。
+//                               この ときは、せっていで じかん・おわりかたを かえるのにも 番号が いる。
+//   すすめる だけ          … 「きょうは ここまで にしよう」を 出す。とじれば つづけられる（5ふん ごとに また 出す）。
+// かぞえるのは 画面が 見えている あいだ だけ。1じかん あそばなかったら（とじていた・とまっていた）また いっぱいに もどる。
+// たんまつで 1つ。
 const PLAY_KEY = 'nb_play', PLAY_LIMITS = [10, 12, 15, 20, 30, 0], PLAY_DEFAULT = 12;
 const PLAY_REST = 60*60*1000, PLAY_RENAG = 5*60*1000, PLAY_WARN = [3, 1];
 const play = (() => {
-  let st = { limit: PLAY_DEFAULT, used: 0, last: Date.now() };
+  let st = { limit: PLAY_DEFAULT, used: 0, last: Date.now(), mode: 'lock', pin: '' };
   try{ const v = JSON.parse(localStorage.getItem(PLAY_KEY)); if(v && typeof v === 'object') st = Object.assign(st, v); }catch(e){}
   if(!st.set) st.limit = PLAY_DEFAULT;   // せっていで えらんで いなければ いまの はじめの ねだん（かわったら それに あわせる）
-  let tick = Date.now(), nagAt = 0, saved = 0;
-  const bar = document.getElementById('play-bar'), fill = bar.firstElementChild;
-  const left = document.getElementById('play-left'), pop = document.getElementById('play-pop'), bye = document.getElementById('play-bye');
-  let blinkUntil = 0;
+  if(st.mode !== 'soft') st.mode = 'lock';
+  let tick = Date.now(), nagAt = 0, saved = 0, blinkUntil = 0;
+  const $ = id => document.getElementById(id);
+  const bar = $('play-bar'), fill = bar.firstElementChild, left = $('play-left');
+  const pop = $('play-pop'), bye = $('play-bye'), lock = $('play-lock'), pin = $('play-pin');
+  const stopped = () => bye.classList.contains('on') || lock.classList.contains('on');
   function save(){ try{ localStorage.setItem(PLAY_KEY, JSON.stringify(st)); }catch(e){} saved = Date.now(); }
-  function restIfAway(){ if(Date.now() - st.last >= PLAY_REST){ st.used = 0; nagAt = 0; } }
+  function refill(){ st.used = 0; nagAt = 0; lock.classList.remove('on'); pop.classList.remove('on'); }
+  function restIfAway(){ if(Date.now() - st.last >= PLAY_REST) refill(); }
   function remain(){ return st.limit ? st.limit*60000 - st.used : Infinity; }
-  // いま もんだいを といている とちゅうか（おわるまで ポップアップを まつ）
+  // いま もんだいを といている とちゅうか（おわるまで まつ）
   function busy(){
     if(typeof hissanTask !== 'undefined' && hissanTask && hissanTask.frame) return true;
     try{ return taskActive() && !taskDone; }catch(e){ return false; }
@@ -5067,11 +5112,14 @@ const play = (() => {
   function update(){
     const t = Date.now();
     const dt = Math.min(5000, Math.max(0, t - tick)); tick = t;
-    if(document.visibilityState === 'visible' && !bye.classList.contains('on')){
-      const before = remain();
-      st.used += dt; st.last = t;
-      const r = remain();
-      for(const m of PLAY_WARN) if(before > m*60000 && r <= m*60000){ left.textContent = 'あと ' + m + 'ぷん'; blinkUntil = t + 10000; }
+    if(document.visibilityState === 'visible'){
+      if(stopped()) restIfAway();        // とまって 1じかん たったら また あそべる
+      else {
+        const before = remain();
+        st.used += dt; st.last = t;
+        const r = remain();
+        for(const m of PLAY_WARN) if(before > m*60000 && r <= m*60000){ left.textContent = 'あと ' + m + 'ぷん'; blinkUntil = t + 10000; }
+      }
     }
     if(t - saved > 5000) save();
     const r = remain();
@@ -5081,9 +5129,61 @@ const play = (() => {
       fill.style.width = (k*100).toFixed(2) + '%';
       fill.style.background = r <= 60000 ? '#e0403f' : r <= 180000 ? '#f0a020' : '#3fbf5a';
     }
-    left.classList.toggle('blink', t < blinkUntil);
-    if(st.limit && r <= 0 && !pop.classList.contains('on') && !bye.classList.contains('on') && t >= nagAt && !busy()) pop.classList.add('on');
+    left.classList.toggle('blink', t < blinkUntil && !stopped());
+    if(st.limit && r <= 0 && !stopped() && !pop.classList.contains('on') && !pin.classList.contains('on') && !busy()){
+      if(st.mode === 'lock') lock.classList.add('on');
+      else if(t >= nagAt) pop.classList.add('on');
+    }
   }
+  // ── あんしょう番号 ──
+  let pinJob = null;   // { step:'check'|'new'|'again', first, then }
+  const keys = pin.querySelector('.keys'), dots = pin.querySelector('.dots');
+  let typed = '';
+  ['1','2','3','4','5','6','7','8','9','けす','0',''].forEach(k => {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = k;
+    if(k.length > 1) b.className = 'sm';
+    if(!k) b.style.visibility = 'hidden';
+    b.addEventListener('click', () => pinKey(k)); keys.appendChild(b);
+  });
+  function pinShow(ttl, note){
+    pin.querySelector('.ttl').textContent = ttl; pin.querySelector('.note').textContent = note || '';
+    typed = ''; drawDots(); pin.classList.add('on'); pin.classList.remove('choose');
+  }
+  function drawDots(){ [...dots.children].forEach((d, i) => d.classList.toggle('f', i < typed.length)); }
+  function pinNg(note){ typed = ''; drawDots(); pin.querySelector('.note').textContent = note; dots.classList.remove('ng'); void dots.offsetWidth; dots.classList.add('ng'); }
+  function pinKey(k){
+    if(!pinJob) return;
+    if(k === 'けす'){ typed = typed.slice(0, -1); drawDots(); return; }
+    if(!/^\d$/.test(k) || typed.length >= 4) return;
+    typed += k; drawDots();
+    if(typed.length < 4) return;
+    const v = typed, job = pinJob;
+    setTimeout(() => {
+      if(pinJob !== job) return;
+      if(job.step === 'check'){
+        if(v === st.pin){ job.then(); } else pinNg('ばんごうが ちがいます');
+      } else if(job.step === 'new'){
+        job.first = v; job.step = 'again'; pinShow('もう いちど いれてください', 'たしかめ');
+      } else {
+        if(v === job.first){ st.pin = v; save(); job.then(); }
+        else { job.step = 'new'; pinShow('あんしょう番号を きめてください（4けた）', 'ちがったので もう いちど'); }
+      }
+    }, 120);
+  }
+  function pinClose(){ pinJob = null; pin.classList.remove('on', 'choose'); }
+  // おうちの ひとの かくにん：番号が まだ なければ きめてから then
+  function askParent(then, why){
+    if(!st.pin){ pinJob = { step:'new', then }; pinShow('あんしょう番号を きめてください（4けた）', why || 'おうちの ひと だけが しる 番号'); }
+    else { pinJob = { step:'check', then }; pinShow('おうちの ひとの あんしょう番号', why || ''); }
+  }
+  function extend(m){ st.used = Math.max(0, st.limit*60000 - m*60000); st.last = Date.now(); nagAt = 0; lock.classList.remove('on'); pinClose(); save(); update(); }
+  lock.querySelector('.parent').addEventListener('click', () => askParent(() => {
+    pin.classList.add('choose'); pinJob = { step:'done' };
+    pin.querySelector('.ttl').textContent = 'どれだけ のばしますか？'; pin.querySelector('.note').textContent = '';
+  }));
+  pin.querySelectorAll('.ext button').forEach(b => b.addEventListener('click', () => extend(+b.dataset.m)));
+  pin.querySelector('.cancel').addEventListener('click', pinClose);
+  pin.querySelector('.chpin').addEventListener('click', () => { pinJob = { step:'new', then: () => { pin.classList.add('choose'); pinJob = { step:'done' }; pin.querySelector('.ttl').textContent = 'どれだけ のばしますか？'; pin.querySelector('.note').textContent = 'ばんごうを かえました'; } }; pinShow('あたらしい 番号（4けた）'); });
   pop.querySelector('.end').addEventListener('click', () => { pop.classList.remove('on'); bye.classList.add('on'); nagAt = Date.now() + PLAY_RENAG; });
   pop.querySelector('.more').addEventListener('click', () => { pop.classList.remove('on'); nagAt = Date.now() + PLAY_RENAG; });
   bye.addEventListener('click', () => bye.classList.remove('on'));
@@ -5091,11 +5191,16 @@ const play = (() => {
   window.addEventListener('pagehide', save);
   restIfAway(); tick = Date.now();
   setInterval(update, 1000); update();
+  // せっていを かえる：おやの OK の ときは 番号が いる
+  const guarded = fn => st.mode === 'lock' ? askParent(() => { pinClose(); fn(); }, 'せっていを かえるには 番号が いります') : fn();
   return {
     get limit(){ return st.limit; },
-    setLimit(m){ st.limit = m; st.set = true; nagAt = 0; save(); update(); },
-    remain, update, busy, st: () => st,
-    _set(used, last){ st.used = used; if(last !== undefined) st.last = last; tick = Date.now(); }
+    get mode(){ return st.mode; },
+    setLimit(m){ guarded(() => { st.limit = m; st.set = true; nagAt = 0; save(); update(); }); },
+    setMode(m){ guarded(() => { st.mode = m === 'soft' ? 'soft' : 'lock'; nagAt = 0; save(); update(); }); },
+    remain, update, busy, st: () => st, pinKey,
+    _set(used, last){ st.used = used; if(last !== undefined) st.last = last; tick = Date.now(); },
+    _raw(o){ Object.assign(st, o); save(); }
   };
 })();
 </script>
