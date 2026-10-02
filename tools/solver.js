@@ -1,9 +1,9 @@
 // おだいの手数を計算する道具。ブラウザでもNodeでも動く（DOMを使わない）。
 //
 //   best … 機械の最短手数（追い越して引く、同じ数で割って1を作る、などの裏技も使う）
-//   ref  … おてほん手数（＋ × ×2 ÷2 だけで作る最短）。裏技が必須の問題は best と同じ
+//   ref  … おてほん手数（＋ × ×2 ÷2 しかく だけで作る最短）。裏技が必須の問題は best と同じ
 //
-// 1手 ＝ 数を出す／コピー／×2／÷2／2体を合体。
+// 1手 ＝ 数を出す／コピー／×2／÷2／しかく（2じょう）／2体を合体。
 // ゲームの「じょうず！」は ref＋2 手いない、が基準（index.html の REF_SLACK）。
 //
 // つかいかた（リポジトリの一番上で）:
@@ -35,6 +35,7 @@ function search(use, plain){
       if(seen[a] || cost[a] !== c) continue;
       seen[a] = 1;
       push(a*2, c+1, ['x2', a]);
+      if(a >= 2) push(a*a, c+1, ['sq', a]);           // しかく（2じょう）
       if(a % 2 === 0) push(a/2, c+1, ['h2', a]);
       // 同じ数を k こ ならべる：コピー(k-1)手 ＋ 合体(k-1)手
       let pw = a, mul = a;
@@ -72,7 +73,7 @@ function waypoints(n, use){
   const walk = v => {
     const h = r.how[v];
     if(!h || h[0] === 'new') return;
-    if(h[0] === 'x2' || h[0] === 'h2'){ walk(h[1]); add(v); return; }
+    if(h[0] === 'x2' || h[0] === 'h2' || h[0] === 'sq'){ walk(h[1]); add(v); return; }
     if(h[0] === 'k+' || h[0] === 'kx'){
       walk(h[1]);
       let cur = h[1];

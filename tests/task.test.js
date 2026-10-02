@@ -55,18 +55,35 @@ module.exports = {
     t.eq(await p.evaluate(i => taskLogs[i].length, TEN), 3, '遠回りした記録で上書きされている');
   },
 
+  'しかく（2じょう）：3 を おくと 9。32 は 1000 を こえるので できない。5つの おきばが 画面に おさまる': async t => {
+    for(const [w, h] of [[320, 568], [393, 780]]){
+      const p = await t.open({ width:w, height:h });
+      const r = await p.evaluate(() => {
+        setMode('+'); spawnBlock(3); scaleBlock(blocks[0], 'square');
+        const rs = DROP_TARGETS.map(id => getTargetRect(id));
+        return { nums: blocks.map(b => b.num), log: stepText(taskLog[taskLog.length - 1] || { k:'square', a:3, r:9 }),
+                 can: [canScale('square', 31), canScale('square', 32), canScale('square', 1)],
+                 fit: rs.every((q, i) => q.x >= 0 && q.x + q.w <= sw && (i === 0 || q.x >= rs[i-1].x + rs[i-1].w)) };
+      });
+      t.eq(r.nums, [9], 'しかくで 9 に ならない');
+      t.eq(r.can, [true, false, false], 'しかくの できる・できない');
+      t.ok(r.fit, w + ' はばで おきばが はみ出す／かさなる');
+      t.ok(/しかく/.test(r.log), 'てじゅんの ことば: ' + r.log);
+    }
+  },
+
   'ほめことばは1つだけ、決めた順番どおりに出る': async t => {
     const p = await t.open();
     const got = await p.evaluate(() => {
-      const idx = TASKS.findIndex(x => x.n === 777);      // さいたん7 / おてほん9 → じょうずは11手まで
+      const idx = TASKS.findIndex(x => x.n === 777);      // さいたん6 / おてほん8 → じょうずは10手まで
       const j = (moves, prev, papa) => {
         taskStore.papa.logs = {};
         if(papa !== null) taskStore.papa.logs[idx] = new Array(papa);
         const r = judgeClear(idx, moves, prev);
         return r ? r.text : null;
       };
-      return [ j(9,null,null), j(11,null,null), j(12,null,null), j(12,13,null),
-               j(13,13,null), j(12,13,12), j(14,13,15) ];
+      return [ j(8,null,null), j(10,null,null), j(11,null,null), j(11,12,null),
+               j(12,12,null), j(11,12,11), j(13,12,14) ];
     });
     t.eq(got, ['じょうず！','じょうず！',null,'ちぢんだ！',null,'とってもじょうず！','とってもじょうず！'],
          'ほめことばの出かたが決めた順番とちがう');
