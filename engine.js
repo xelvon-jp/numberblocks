@@ -2246,3 +2246,100 @@ function drawNumberblockFit(ctx, n, bx, by, bw, bh, opts){
 }
 
 /* ===================== ENGINE END ===================== */
+
+/* ── きせつ：ハロウィン ─────────────────────────────────────────────
+   10月の あいだ（せっていで OFF にも できる）、ゲームと ひっさんの 景色を ハロウィンに する。
+   せっていは この端末の localStorage（nb_halloween：'auto' か 'off'）。 */
+function isHalloween(){
+  let v = 'auto';
+  try{ v = localStorage.getItem('nb_halloween') || 'auto'; }catch(e){}
+  if(v === 'off') return false;
+  if(v === 'on') return true;
+  return new Date().getMonth() === 9;
+}
+// ジャック・オー・ランタン。cx・bottom は 下の まんなか、r は よこの はんけい
+function drawPumpkin(ctx, cx, bottom, r, glow){
+  const h = r*1.6, cy = bottom - h/2;
+  ctx.save();
+  if(glow){ ctx.shadowColor = 'rgba(255,170,40,0.7)'; ctx.shadowBlur = r*0.8; }
+  // ふくらみ（たてに 3つ）
+  const lobes = [[-0.55, 0.62], [0.55, 0.62], [0, 0.72]];
+  for(const [dx, k] of lobes){
+    ctx.fillStyle = dx ? '#e8731c' : '#f5862a';
+    ctx.beginPath(); ctx.ellipse(cx + dx*r, cy, r*k, h/2, 0, 0, Math.PI*2); ctx.fill();
+  }
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(150,60,10,0.45)'; ctx.lineWidth = Math.max(1, r*0.07);
+  ctx.beginPath(); ctx.ellipse(cx, cy, r*0.38, h/2*0.96, 0, 0, Math.PI*2); ctx.stroke();
+  // へた
+  ctx.fillStyle = '#4f7a2a';
+  ctx.beginPath(); ctx.roundRect(cx - r*0.1, cy - h/2 - r*0.32, r*0.2, r*0.4, r*0.06); ctx.fill();
+  // かお（にっこり）
+  ctx.fillStyle = '#4a2208';
+  const eye = (sx) => { ctx.beginPath(); ctx.moveTo(cx + sx*r*0.42, cy - h*0.16); ctx.lineTo(cx + sx*r*0.22, cy + h*0.02); ctx.lineTo(cx + sx*r*0.62, cy + h*0.02); ctx.closePath(); ctx.fill(); };
+  eye(-1); eye(1);
+  ctx.beginPath();
+  ctx.moveTo(cx - r*0.6, cy + h*0.12);
+  ctx.quadraticCurveTo(cx, cy + h*0.42, cx + r*0.6, cy + h*0.12);
+  ctx.quadraticCurveTo(cx, cy + h*0.26, cx - r*0.6, cy + h*0.12);
+  ctx.fill();
+  ctx.restore();
+}
+// こうもり。t で はばたく
+function drawBat(ctx, x, y, s, t){
+  const f = Math.sin(t*0.018)*0.5 + 0.5;
+  ctx.save(); ctx.translate(x, y); ctx.fillStyle = '#2a1840';
+  for(const sd of [-1, 1]){
+    ctx.beginPath(); ctx.moveTo(0, 0);
+    ctx.quadraticCurveTo(sd*s*0.6, -s*(0.2 + 0.6*f), sd*s*1.3, -s*0.1*f);
+    ctx.quadraticCurveTo(sd*s*1.0, s*0.05, sd*s*0.85, s*0.25);
+    ctx.quadraticCurveTo(sd*s*0.6, s*0.05, sd*s*0.4, s*0.28);
+    ctx.quadraticCurveTo(sd*s*0.25, s*0.1, 0, s*0.2);
+    ctx.fill();
+  }
+  ctx.beginPath(); ctx.ellipse(0, s*0.08, s*0.22, s*0.28, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-s*0.18, -s*0.1); ctx.lineTo(-s*0.1, -s*0.32); ctx.lineTo(-s*0.02, -s*0.12);
+  ctx.moveTo(s*0.18, -s*0.1); ctx.lineTo(s*0.1, -s*0.32); ctx.lineTo(s*0.02, -s*0.12); ctx.fill();
+  ctx.fillStyle = '#ffd34a';
+  ctx.beginPath(); ctx.arc(-s*0.08, s*0.02, s*0.05, 0, Math.PI*2); ctx.arc(s*0.08, s*0.02, s*0.05, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+// おばけ（ふわふわ うかぶ）
+function drawGhost(ctx, x, y, s, t){
+  const bob = Math.sin(t*0.003)*s*0.12;
+  ctx.save(); ctx.translate(x, y + bob);
+  ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.shadowColor = 'rgba(220,210,255,0.8)'; ctx.shadowBlur = s*0.4;
+  ctx.beginPath();
+  ctx.moveTo(-s*0.5, s*0.5); ctx.lineTo(-s*0.5, 0); ctx.arc(0, 0, s*0.5, Math.PI, 0); ctx.lineTo(s*0.5, s*0.5);
+  const w = Math.sin(t*0.006)*s*0.05;
+  for(let i=0;i<4;i++){ const x1 = s*0.5 - (i + 0.5)*s*0.25, x2 = s*0.5 - (i + 1)*s*0.25; ctx.quadraticCurveTo(x1, s*0.68 + (i%2 ? w : -w), x2, s*0.5); }
+  ctx.closePath(); ctx.fill(); ctx.shadowBlur = 0;
+  ctx.fillStyle = '#2b2b3a';
+  ctx.beginPath(); ctx.ellipse(-s*0.17, -s*0.04, s*0.07, s*0.1, 0, 0, Math.PI*2); ctx.ellipse(s*0.17, -s*0.04, s*0.07, s*0.1, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(0, s*0.16, s*0.08, s*0.06, 0, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+// まじょの ぼうし。cx・bottom は つばの まんなか、w は つばの はば
+function drawWitchHat(ctx, cx, bottom, w){
+  const h = w*0.9;
+  ctx.save();
+  ctx.fillStyle = '#3a2160';
+  ctx.beginPath(); ctx.ellipse(cx, bottom, w/2, w*0.12, 0, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(cx - w*0.28, bottom - w*0.04);
+  ctx.quadraticCurveTo(cx - w*0.05, bottom - h*0.6, cx + w*0.12, bottom - h);
+  ctx.quadraticCurveTo(cx + w*0.08, bottom - h*0.5, cx + w*0.28, bottom - w*0.04);
+  ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#f08a24';
+  ctx.beginPath(); ctx.moveTo(cx - w*0.27, bottom - w*0.06); ctx.lineTo(cx + w*0.27, bottom - w*0.06);
+  ctx.lineTo(cx + w*0.24, bottom - w*0.18); ctx.lineTo(cx - w*0.23, bottom - w*0.18); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+// おつきさま
+function drawMoon(ctx, x, y, r){
+  ctx.save();
+  ctx.shadowColor = 'rgba(255,240,180,0.8)'; ctx.shadowBlur = r*0.9;
+  ctx.fillStyle = '#fff4c2'; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI*2); ctx.fill();
+  ctx.shadowBlur = 0; ctx.fillStyle = 'rgba(230,210,150,0.55)';
+  for(const [dx, dy, k] of [[-0.3, -0.2, 0.18], [0.25, 0.15, 0.13], [-0.05, 0.35, 0.1]]){ ctx.beginPath(); ctx.arc(x + dx*r, y + dy*r, k*r, 0, Math.PI*2); ctx.fill(); }
+  ctx.restore();
+}

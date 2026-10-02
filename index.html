@@ -1713,10 +1713,18 @@ class NumberBlock {
     const n=this.num,x=this.x,y=this.y+bounceY;
     const isMoving=Math.abs(this.vx)>0.5||Math.abs(this.vy)>1.0;
     drawNumberblock(ctx, n, x, y, this.bs, { t:t, animate:isMoving, numberling:false });
+    // ハロウィン：あたまに まじょの ぼうし（数字は ぼうしの 上へ）
+    let ly = y - 3;
+    const fc = halloweenOn ? (blockSpec(n).face || {}) : null;
+    if(halloweenOn && !fc.jesterHat && !fc.tophat && !fc.fedora && !(fc.hair > 0)){   // もともと ぼうし・かみの けが ある キャラは そのまま
+      const hw = Math.max(14, Math.min(this.width*0.75, this.bs*2.2));
+      drawWitchHat(ctx, x + this.width/2, y + this.bs*0.12, hw);
+      ly = y - hw*0.8;
+    }
     // 数字ラベルはゲーム側の見せ方（白フチ黒文字）を維持する
     ctx.save(); ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.font='bold '+Math.max(9,Math.round(BS*0.6))+'px sans-serif';
-    ctx.strokeStyle='white'; ctx.lineWidth=3; ctx.strokeText(String(n),x+this.width/2,y-3);
-    ctx.fillStyle='#111'; ctx.fillText(String(n),x+this.width/2,y-3);
+    ctx.strokeStyle='white'; ctx.lineWidth=3; ctx.strokeText(String(n),x+this.width/2,ly);
+    ctx.fillStyle='#111'; ctx.fillText(String(n),x+this.width/2,ly);
     ctx.restore();
   }
 }
@@ -1725,7 +1733,7 @@ class NumberBlock {
 class Particle {
   constructor(x,y){
     this.x=x; this.y=y; this.vx=(Math.random()-0.5)*10; this.vy=-Math.random()*12-2;
-    this.gravity=0.5; this.hue=Math.random()*360; this.life=1.0;
+    this.gravity=0.5; this.hue=halloweenOn ? [28,32,40,275,285,100][Math.floor(Math.random()*6)] : Math.random()*360; this.life=1.0;
     this.rot=Math.random()*Math.PI*2; this.rotV=(Math.random()-0.5)*0.2;
     this.w=6+Math.random()*6; this.h=4+Math.random()*4;
   }
@@ -2010,7 +2018,11 @@ class Puzzle {
 // ─── Game state ───────────────────────────────────────────────────────────────
 let blocks=[], puzzle=null, dragBlock=null, dragPointers={};
 let dragPtr=null;   // ドラッグ中の指／マウスの位置（マジックミラーの判定用）
+function hwSetting(){ try{ return localStorage.getItem('nb_halloween') || 'auto'; }catch(e){ return 'auto'; } }
 let walkTime=0;
+// ハロウィン（10月の あいだ。せっていで OFF にも できる）。1ぷんごとに みなおす
+let halloweenOn = isHalloween();
+setInterval(() => { halloweenOn = isHalloween(); }, 60000);
 // CLR（ぜんぶ消す）は取り返しがつかないので、押し続けないと実行しない。
 // 押しているあいだリングが溜まっていき、一周したら実行する。
 const CLR_HOLD_MS = 650;
@@ -3878,6 +3890,8 @@ function drawSettings(ctx){
       opts: [{ text:'ON', v:true, on:quizOn }, { text:'OFF', v:false, on:!quizOn }] },
     { label:'あそぶ じかん（ふん）', key:'play',
       opts: PLAY_LIMITS.map(m => ({ text: m ? String(m) : 'なし', v:m, on: play.limit === m })) },
+    { label:'ハロウィン（10がつ）', key:'halloween',
+      opts: [{ text:'じどう', v:'auto', on: hwSetting() !== 'off' }, { text:'OFF', v:'off', on: hwSetting() === 'off' }] },
     { label:'じかんぎれ', key:'playmode', bw:78,
       opts: [{ text:'おやの OK', v:'lock', on: play.mode === 'lock' }, { text:'すすめる', v:'soft', on: play.mode === 'soft' }] },
   ];
@@ -3885,7 +3899,7 @@ function drawSettings(ctx){
   const avail = sh - TAB_H - 16;
   const fullH = 54 + rows.length*54 + 14 + (44 + 12)*3 + 16 + 44 + 16;
   const tight = fullH > avail;
-  const rowH = tight ? 36 : 54, bigH = tight ? 34 : 44, head = tight ? 44 : 54, w = Math.min(360, sw-20);
+  const rowH = tight ? 32 : 54, bigH = tight ? 30 : 44, head = tight ? 42 : 54, w = Math.min(360, sw-20);
   // 高さが足りないときは「にじ」と おいわいの プレビューを 1れつに まとめる
   const h = head + rows.length*rowH + 14 + (bigH + (tight ? 8 : 12))*(tight ? 2 : 3) + (tight ? 0 : 16) + bigH + (tight ? 10 : 16);
   const x = (sw-w)/2, y = TAB_H + 8 + Math.max(0, (avail - h)/2);
@@ -3984,6 +3998,7 @@ function handleSettingsTap(x, y){
     else if(b.val==='quiz')  setQuizOn(b.v);
     else if(b.val==='play')  play.setLimit(b.v);
     else if(b.val==='playmode') play.setMode(b.v);
+    else if(b.val==='halloween'){ try{ localStorage.setItem('nb_halloween', b.v); }catch(e){} halloweenOn = isHalloween(); }
     else if(b.val==='zukan') location.href = 'zukan.html?v=' + Date.now();   // キャッシュの 古い版を ひらかない
     else if(b.val==='hissan') location.href = 'hissan.html?v=' + Date.now();
     else if(b.val==='fs')    toggleFullscreen();
@@ -4474,7 +4489,7 @@ function drawMounds(g, base, list, h, top, bottom){
 }
 
 // まるい木。幹のうえに 葉っぱのかたまりを いくつか重ねる
-function drawTree(g, x, base, H){
+function drawTree(g, x, base, H, autumn){
   const r = H*0.30;
   // 幹
   g.fillStyle = '#b07a4a';
@@ -4494,13 +4509,14 @@ function drawTree(g, x, base, H){
     }
     g.fill();
   };
-  layer('#3f8a4c', [[-0.75,0.25,0.62],[0.75,0.25,0.62],[0,0.35,0.70],[-0.35,-0.45,0.70],[0.45,-0.40,0.68]]);
-  layer('#58a55a', [[-0.55,0.05,0.55],[0.55,0.00,0.55],[0,-0.30,0.66],[0,0.15,0.55]]);
-  layer('#72bd6b', [[-0.30,-0.45,0.34],[0.25,-0.55,0.30],[-0.60,-0.10,0.24]]);
+  const lc = autumn ? ['#b8521f', '#d9772a', '#efa040'] : ['#3f8a4c', '#58a55a', '#72bd6b'];   // ハロウィンは あきの いろ
+  layer(lc[0], [[-0.75,0.25,0.62],[0.75,0.25,0.62],[0,0.35,0.70],[-0.35,-0.45,0.70],[0.45,-0.40,0.68]]);
+  layer(lc[1], [[-0.55,0.05,0.55],[0.55,0.00,0.55],[0,-0.30,0.66],[0,0.15,0.55]]);
+  layer(lc[2], [[-0.30,-0.45,0.34],[0.25,-0.55,0.30],[-0.60,-0.10,0.24]]);
 }
 
 // まるい茂み
-function drawBush(g, x, base, r){
+function drawBush(g, x, base, r, autumn){
   const layer = (color, list) => {
     g.fillStyle = color; g.beginPath();
     for(const [dx, dy, k] of list){
@@ -4509,8 +4525,8 @@ function drawBush(g, x, base, r){
     }
     g.fill();
   };
-  layer('#4d9e50', [[-0.7,-0.25,0.55],[0.7,-0.25,0.55],[0,-0.45,0.72],[0,0,0.6]]);
-  layer('#69b965', [[-0.35,-0.55,0.42],[0.35,-0.50,0.40]]);
+  layer(autumn ? '#7a5a2e' : '#4d9e50', [[-0.7,-0.25,0.55],[0.7,-0.25,0.55],[0,-0.45,0.72],[0,0,0.6]]);
+  layer(autumn ? '#9a7438' : '#69b965', [[-0.35,-0.55,0.42],[0.35,-0.50,0.40]]);
 }
 
 // 草はらの小さな花
@@ -4530,7 +4546,8 @@ function drawFlower(g, x, y, r, petal){
 //   手前（near）… 近くのお山・木・茂み・草はら・花
 let sceneryCache = null, sceneryKey = '';
 function sceneryLayers(groundY){
-  const key = sw + 'x' + sh + ':' + Math.round(groundY);
+  const hw = halloweenOn;
+  const key = sw + 'x' + sh + ':' + Math.round(groundY) + (hw ? ':h' : '');
   if(sceneryCache && sceneryKey === key) return sceneryCache;
   const mk = () => { const c = document.createElement('canvas');
                      c.width = Math.max(1, sw); c.height = Math.max(1, sh); return c; };
@@ -4540,22 +4557,22 @@ function sceneryLayers(groundY){
 
   // 奥のお山（うすい）
   drawMounds(far.getContext('2d'), gTop + 6, [[-0.05,0.42,1.0],[0.42,0.40,0.86],[0.92,0.44,0.95]],
-             H*0.52, '#f1faec', '#d9eecb');
+             H*0.52, hw ? '#8a6fa8' : '#f1faec', hw ? '#6e5a8c' : '#d9eecb');
 
   // ここから手前
   const g = near.getContext('2d');
   drawMounds(g, gTop + 6, [[0.18,0.38,1.0],[0.72,0.40,0.82],[1.12,0.30,0.9]],
-             H*0.30, '#e4f3d6', '#c8e6b1');
+             H*0.30, hw ? '#6f5c86' : '#e4f3d6', hw ? '#57496e' : '#c8e6b1');
 
   // はしっこの木と茂み（まん中は空けておく）
   const treeH = Math.min(260, H*0.46);
-  drawTree(g, sw*0.88, gTop + 8, treeH);
-  drawBush(g, sw*0.03, gTop + 10, Math.min(46, H*0.11));
-  drawBush(g, sw*0.97, gTop + 12, Math.min(38, H*0.09));
+  drawTree(g, sw*0.88, gTop + 8, treeH, hw);
+  drawBush(g, sw*0.03, gTop + 10, Math.min(46, H*0.11), hw);
+  drawBush(g, sw*0.97, gTop + 12, Math.min(38, H*0.09), hw);
 
   // 手前の草はら：上はかすんだ色、下ほど あざやか
   const mg = g.createLinearGradient(0, gTop, 0, groundY + GH);
-  mg.addColorStop(0, '#bfe6a2'); mg.addColorStop(1, '#94ce6d');
+  mg.addColorStop(0, hw ? '#8fae6a' : '#bfe6a2'); mg.addColorStop(1, hw ? '#6f9550' : '#94ce6d');
   g.fillStyle = mg;
   g.beginPath(); g.moveTo(0, sh);
   const L = Math.max(50, sw/4.4);
@@ -4567,7 +4584,10 @@ function sceneryLayers(groundY){
   // 花：キャラの足もとより下の すき間に、ぽつぽつと
   const fy = groundY + 6, fr = Math.max(2.4, Math.min(3.6, sw/130));
   const flowers = [[0.07,'#ff9fb8'],[0.19,'#ffffff'],[0.31,'#ffb347'],[0.63,'#ffffff'],[0.76,'#ff9fb8'],[0.91,'#ffb347']];
-  flowers.forEach(([fx, col], i) => drawFlower(g, fx*sw, fy + (i%2)*9, fr, col));
+  if(hw){
+    // ハロウィン：花の かわりに かぼちゃ
+    [0.06, 0.24, 0.70, 0.94].forEach((fx, i) => drawPumpkin(g, fx*sw, fy + 10 + (i%2)*6, fr*2.6 + (i%2)*2, true));
+  } else flowers.forEach(([fx, col], i) => drawFlower(g, fx*sw, fy + (i%2)*9, fr, col));
 
   sceneryCache = { far, near }; sceneryKey = key;
   return sceneryCache;
@@ -4577,10 +4597,16 @@ function drawBG(ctx){
   const groundY = sh - GH - bottomPanelH();
   // 空：上は あざやかな青みどり、地平線に近いほど白っぽく
   const g = ctx.createLinearGradient(0, 0, 0, groundY);
-  g.addColorStop(0,    '#6fd0e2');
-  g.addColorStop(0.55, '#bde9f0');
-  g.addColorStop(1,    '#eaf8f2');
+  if(halloweenOn){
+    // ハロウィン：ゆうやけの 空（上は むらさき、地平線は オレンジ）
+    g.addColorStop(0, '#3d2b6e'); g.addColorStop(0.55, '#8c5a9e'); g.addColorStop(1, '#f2a65e');
+  } else {
+    g.addColorStop(0,    '#6fd0e2');
+    g.addColorStop(0.55, '#bde9f0');
+    g.addColorStop(1,    '#eaf8f2');
+  }
   ctx.fillStyle = g; ctx.fillRect(0, 0, sw, sh);
+  if(halloweenOn) drawMoon(ctx, sw*0.80, TAB_H + Math.max(60, groundY - TAB_H)*0.22, Math.min(34, sw*0.08));
 
   // 雲：ゆっくり右へ流れて、画面の右から出たら左から また入る（お山のうしろを通る）
   const skyTop = TAB_H, skyH = Math.max(60, groundY - skyTop);
@@ -4588,7 +4614,17 @@ function drawBG(ctx){
   const span = sw + 260*k;
   for(const c of CLOUDS){
     const x = ((c.x*span + walkTime*c.v) % span) - 130*k;
-    drawCloud(ctx, x, skyTop + skyH*c.y, c.s*k);
+    if(halloweenOn){ ctx.save(); ctx.globalAlpha = 0.45; drawCloud(ctx, x, skyTop + skyH*c.y, c.s*k); ctx.restore(); }
+    else drawCloud(ctx, x, skyTop + skyH*c.y, c.s*k);
+  }
+  if(halloweenOn){
+    // こうもり 3びき と おばけ
+    const t = walkTime;
+    for(let i=0;i<3;i++){
+      const sp = sw + 120, bx = ((t*(0.025 + i*0.008) + i*sp/3) % sp) - 60;
+      drawBat(ctx, bx, skyTop + skyH*(0.18 + i*0.12) + Math.sin(t*0.002 + i)*12, 12*k + i*2, t + i*300);
+    }
+    drawGhost(ctx, sw*0.14 + Math.sin(t*0.0007)*sw*0.06, skyTop + skyH*0.42, 30*k, t);
   }
 
   // 奥のお山 → 虹 → 手前のお山・木・茂み・草はら・花（おぼえておいたものを貼るだけ）。

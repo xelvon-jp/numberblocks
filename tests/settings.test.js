@@ -191,4 +191,25 @@ module.exports = {
     t.ok(r.nearWide, 'てまえの あいだ が おく より ひろくならない');
     t.eq([r.first, r.sliders], [0.15, ['gap0', 'gap1']], 'あいだ の スライダー');
   },
+
+  'ハロウィン：10がつ だけ じどうで 出る。せっていで OFF に できる': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      const out = {};
+      const RealDate = Date;
+      const at = m => { window.Date = class extends RealDate { constructor(...a){ super(...(a.length ? a : [2026, m, 15])); } }; const v = isHalloween(); window.Date = RealDate; return v; };
+      out.month = [at(8), at(9), at(10)];
+      setOpen = true; drawSettings(ctx);
+      const off = setBtns.find(b => b.val === 'halloween' && b.v === 'off'); handleStart(off.x + off.w/2, off.y + off.h/2, 's');
+      out.off = [halloweenOn, localStorage.getItem('nb_halloween'), at(9)];
+      localStorage.setItem('nb_halloween', 'on'); halloweenOn = isHalloween();
+      setOpen = false; setMode('+'); spawnBlock(3); spawnBlock(4);
+      for(let i=0;i<3;i++) drawFrame(performance.now());
+      out.on = [halloweenOn, window.loopErr || ''];
+      return out;
+    });
+    t.eq(r.month, [false, true, false], '10がつ だけ に ならない');
+    t.eq(r.off, [false, 'off', false], 'OFF に できない');
+    t.eq(r.on, [true, ''], 'ハロウィンの がめんで エラー');
+  },
 };

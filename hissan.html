@@ -48,6 +48,7 @@ const SAFE_B = (() => { const d = document.createElement('div'); d.style.cssText
 const MODES = [{ id:'room', label:'A へや' }, { id:'auto', label:'B おまかせ' }, { id:'drum', label:'C ドラム' }, { id:'pick', label:'D えらぶ' }, { id:'write', label:'E かく' }];
 const KINDS = [{ id:'add', label:'たし算' }, { id:'sub1', label:'ひき算1けた' }, { id:'sub', label:'ひき算' }, { id:'mix', label:'まぜ' }, { id:'big3', label:'3けた' }];
 let modeId = 'room', kindId = 'add';
+let HW = isHalloween();   // ハロウィン（engine.js）。ゲームから「start」が くるたびに みなおす
 try{ const v = JSON.parse(localStorage.getItem('nb_hissan_try') || '{}'); if(v.m) modeId = v.m; if(v.k) kindId = v.k; }catch(e){}
 // ゲームの「まぜまぜ」から よばれた とき（iframe）：E かく だけ、1もん。おわったら ゲームに しらせる
 //   hissan.html?embed=1&kind=add|sub1|sub|mix|big3&big=0|1&label=…
@@ -1245,7 +1246,7 @@ function drawTop(l){
   if(EMBED){
     // ゲームの中：なんの もんだいか だけ（とばす ボタンは おかない。とちゅうで にげずに とく）
     ctx.save(); ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#16233a'; ctx.fillText(EMBED.label, W/2, 27); ctx.restore();
+    ctx.fillStyle = HW ? '#fff4d6' : '#16233a'; ctx.fillText(EMBED.label, W/2, 27); ctx.restore();
     return;
   }
   // 1だんめ：もどる／しゅるい／つぎ
@@ -1263,8 +1264,15 @@ function draw(){
   btns = [];
   const l = L();
   const g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#7fd4e4'); g.addColorStop(0.6, '#cdeef2'); g.addColorStop(1, '#a9dc8c');
+  if(HW){ g.addColorStop(0, '#3d2b6e'); g.addColorStop(0.6, '#8c5a9e'); g.addColorStop(1, '#e89a5a'); }   // ハロウィン（10月）
+  else { g.addColorStop(0, '#7fd4e4'); g.addColorStop(0.6, '#cdeef2'); g.addColorStop(1, '#a9dc8c'); }
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  if(HW){
+    const t = now();
+    drawMoon(ctx, W - 42, 78, 22);
+    for(let i=0;i<2;i++){ const sp = W + 100, bx = ((t*(0.03 + i*0.012) + i*sp/2) % sp) - 50; drawBat(ctx, bx, 70 + i*40 + Math.sin(t*0.002 + i)*8, 11, t + i*400); }
+    drawPumpkin(ctx, 22, l.bottom - 4, 12, true); drawPumpkin(ctx, W - 22, l.bottom - 4, 12, true);
+  }
   ctx.fillStyle = '#dde9ef'; ctx.fillRect(0, l.bottom, W, H - l.bottom);
   drawTop(l);
   if(modeId === 'write'){ drawWrite(l); drawParts(); drawBottom(l); if(train){ btns = []; if(train.view === 'rec') drawRecords(); else if(train.view === 'mine') drawMine(); else drawTrain(); } return; }
@@ -1335,7 +1343,7 @@ if(EMBED){
     const m = e.data; if(!m || m.from !== 'game') return;
     if(m.type === 'start'){
       EMBED.kind = m.kind || 'add'; EMBED.big = !!m.big; EMBED.label = m.label || 'ひっさん';
-      kindId = EMBED.kind; closeTrain(); newProblem(); paused = false;
+      kindId = EMBED.kind; HW = isHalloween(); closeTrain(); newProblem(); paused = false;
     } else if(m.type === 'hide'){ paused = true; closeTrain(); newProblem(); }
   });
   tellGame({ type:'ready' });
