@@ -134,7 +134,7 @@ let P = null, S = null;
 function digitsOf(P){ return { o: P.ans % 10, t: Math.floor(P.ans/10) % 10, h: Math.floor(P.ans/100) }; }
 function colsOf(P){ return P.ans >= 100 ? ['o','t','h'] : ['o','t']; }
 // きまった もんだいで はじめる（テスト・ためし用）
-function setProblem(op, a, b){ newProblem({ op, a, b, ans: op === '+' ? a + b : a - b }); }
+function setProblem(op, a, b){ newProblem({ op, a, b, ans: op === '+' ? a + b : op === '×' ? a * b : a - b }); }
 function newProblem(fixed){
   P = fixed && fixed.op ? fixed : genProblem(kindId, EMBED && !EMBED.big);
   const aT = Math.floor(P.a/10), aO = P.a%10, bT = Math.floor(P.b/10), bO = P.b%10;
@@ -332,7 +332,7 @@ function finish(){
   S.done = true; S.doneAt = now();
   const l = L();
   for(let i=0;i<60;i++) burst(W/2, (l.rooms.t.y + l.bottom)/2, 1);
-  say(S.miss ? 'できた！' : 'レインボー🌈クリア！');
+  if(P.op === '×') mulFinish(); else say(S.miss ? 'できた！' : 'レインボー🌈クリア！');
   if(modeId === 'write') celebrateWrite();
 }
 
@@ -417,7 +417,7 @@ function hintText(){
 // 線（こたえの 上の よこ線）より 上は メモ：くり上がりの 1、ななめ線、なんでも じゆうに 書ける。よみとらない。
 // こたえの ますは 1ます ずつ、書きおわって 少し たつと よみとって しらべる。ちがえば どこが ちがうかを おしえる。
 const INK_WAIT = 750;                     // さいごの 線から この ms で よみとる
-function cellKeys(){ return ['o', 't'].concat(P.ans >= 100 ? ['h'] : []); }   // 書く じゅん
+function cellKeys(){ return P.ans < 10 ? ['o'] : ['o', 't'].concat(P.ans >= 100 ? ['h'] : []); }   // 書く じゅん（かけざんで こたえが 1けたなら 一だけ）
 function cellWant(k){ return digitsOf(P)[k]; }
 function makeCells(){ const c = {}; for(const k of cellKeys()) c[k] = { strokes:[], st:'empty', val:null, at:0 }; return c; }
 function WL(){
@@ -432,11 +432,8 @@ function WL(){
   const yC = py + 0.06*cw, yA = yC + 0.78*cw, yB = yA + cw, yLine = yB + cw + 0.06*cw, yR = yLine + 0.08*cw;
   const carry = { x: x.t - 0.4*cw, y: yC, w: 0.8*cw, h: 0.72*cw };   // くり上がり・くり下がりを メモする あたり（光らせる ところ）
   const carryH = x.h !== undefined ? { x: x.h - 0.4*cw, y: yC, w: 0.8*cw, h: 0.72*cw } : carry;   // 百のくらいの 上
-  const cells = {
-    o:  { x: x.o - 0.45*cw, y: yR, w: 0.9*cw, h: 0.98*cw },
-    t:  { x: x.t - 0.45*cw, y: yR, w: 0.9*cw, h: 0.98*cw },
-  };
-  if(x.h !== undefined) cells.h = { x: x.h - 0.45*cw, y: yR, w: 0.9*cw, h: 0.98*cw };
+  const cells = {};
+  for(const k of cellKeys()) cells[k] = { x: x[k] - 0.45*cw, y: yR, w: 0.9*cw, h: 0.98*cw };
   return { l, cw, px, py, pw, ph, x, yA, yB, yLine, cells, carry, carryH, signX: px + 8 + 0.35*cw, msgY: py + ph + 12, msgH };
 }
 // ゆびが どの ますに 書いたか（ます より 少し ひろく とる）
@@ -473,6 +470,7 @@ function inkUp(){
   if(!pen) return;
   if(pen.memo){ pen = null; return; }
   const k = pen.cell; pen = null;
+  S.lastInk = now();                                  // さいごに 書きおわった とき（かけざんの はやさ）
   clearTimeout(inkTimer);
   inkTimer = setTimeout(() => { inkTimer = null; judgeCell(k); }, INK_WAIT);
 }
@@ -517,6 +515,7 @@ function judgeCell(k, d){
 }
 // まちがいの わけ（こたえは いわずに、どこを 見なおせば いいかを いう）
 function whyWrong(k, v){
+  if(P.op === '×') return { t: P.a + ' × ' + P.b + ' は？' };
   if(P.a >= 100) return whyWrong3(k, v);
   const aT = Math.floor(P.a/10), aO = P.a%10, bT = Math.floor(P.b/10), bO = P.b%10;
   if(P.op === '+'){
@@ -581,6 +580,7 @@ function writeHint(){
   if(S.done) return S.msg;
   if(S.wmsg) return S.wmsg;
   const k = cellKeys().find(q => S.cells[q].st !== 'ok');
+  if(P.op === '×') return 'こたえを かこう';
   if(k === 'o' && !S.memo.length) return '一のくらいから かこう\n線の 上は メモに じゆうに つかってね';
   return colName(k) + 'の こたえを かこう';
 }
@@ -600,11 +600,19 @@ function drawWrite(l){
   const aT = Math.floor(P.a/10), aO = P.a%10, bT = Math.floor(P.b/10), bO = P.b%10;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = 'bold ' + Math.round(cw*0.78) + 'px sans-serif'; ctx.fillStyle = '#16233a';
+  if(P.op === '×'){
+    // かけざん：それぞれの 数を 右に そろえて（0 から はじまる けたは かかない）
+    const cs = ['o', 't', 'h'];
+    for(let i=0;i<3;i++){ const c = cs[i]; if(wl.x[c] === undefined) continue;
+      if(P.a >= Math.pow(10, i)) ctx.fillText(dg(P.a, i), wl.x[c], wl.yA + cw/2);
+      if(P.b >= Math.pow(10, i)) ctx.fillText(dg(P.b, i), wl.x[c], wl.yB + cw/2); }
+  } else {
   if(P.a >= 100){ ctx.fillText(dg(P.a, 2), wl.x.h, wl.yA + cw/2); ctx.fillText(dg(P.b, 2), wl.x.h, wl.yB + cw/2); }
   ctx.fillText(dg(P.a, 1), wl.x.t, wl.yA + cw/2); ctx.fillText(aO, wl.x.o, wl.yA + cw/2);
   if(P.b >= 10) ctx.fillText(dg(P.b, 1), wl.x.t, wl.yB + cw/2);
   ctx.fillText(bO, wl.x.o, wl.yB + cw/2);
-  ctx.fillText(P.op === '+' ? '+' : '−', wl.signX, wl.yB + cw/2);
+  }
+  ctx.fillText(P.op === '-' ? '−' : P.op, wl.signX, wl.yB + cw/2);
   ctx.strokeStyle = '#16233a'; ctx.lineWidth = Math.max(3, cw*0.05); ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(wl.px + 12, wl.yLine); ctx.lineTo(wl.px + wl.pw - 12, wl.yLine); ctx.stroke();
   // くり上がり・くり下がりを わすれたときは、十のくらいの 上を 光らせる
@@ -672,7 +680,7 @@ function drawWrite(l){
   lines.forEach((s, i) => {
     const y = wl.msgY + 14 + i*22;
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 5; ctx.strokeText(s, W/2, y);
-    ctx.fillStyle = S.done ? '#c0398a' : S.ask ? '#2b3a52' : S.wunk ? '#c07a10' : S.wmsg ? '#c8322f' : '#2b3a52'; ctx.fillText(s, W/2, y);
+    ctx.fillStyle = S.done && S.bolt ? '#d08a00' : S.done ? '#c0398a' : S.ask ? '#2b3a52' : S.wunk ? '#c07a10' : S.wmsg ? '#c8322f' : '#2b3a52'; ctx.fillText(s, W/2, y);
   });
   ctx.restore();
   drawStage(l, wl, t);
@@ -681,6 +689,7 @@ function drawWrite(l){
     const e = Math.min(1, (t - S.doneAt)/400);
     ctx.save(); ctx.fillStyle = 'rgba(255,255,255,' + 0.85*e + ')'; ctx.beginPath(); ctx.roundRect(wl.px, wl.py, wl.pw, wl.yLine - 4 - wl.py, [16, 16, 0, 0]); ctx.fill(); ctx.restore();
     drawCele(t);
+    drawBolt(t);
   }
 }
 
@@ -717,7 +726,7 @@ function drawStage(l, wl, t){
   };
   ctx.save(); ctx.translate(shake, 0);
   put(P.a, cx[0], hop(0) + breathe(0));
-  sym(P.op === '+' ? '+' : '−', cx[1]);
+  sym(P.op === '-' ? '−' : P.op, cx[1]);
   put(P.b, cx[2], hop(1.2) + breathe(1.7));
   ctx.restore();
   sym('=', cx[3]);
@@ -778,6 +787,7 @@ function drawCele(t){
   }
 }
 async function celebrateWrite(){
+  if(P.op === '×') return celebrateMul();
   if(P.a >= 100) return celebrateBig();
   const wl = WL(), myP = P, id = {};
   cele = { id, actors:[], bs: 6, ground: wl.yLine - 10 };
@@ -942,6 +952,83 @@ async function celebrateBig(){
   cele.finished = true;
   await wait(AUTO_NEXT); if(!ok()) return;
   goNext();
+}
+
+// ─── かけざん（まぜまぜ）────────────────────────────────────────
+// ゲームから「start」（kind:'mul'）で もんだいの セット [{ a, b, th }] が くる。1もんずつ E かく で こたえて、
+// こたえる たびに ゲームへ「kake」（a・b・ms・miss）を しらせ、さいごに「done」。
+// ms は もんだいが 出てから さいごの 1かくを 書きおわるまで（よみとりを まつ 0.75びょうは いれない）。
+// まちがえずに 8びょう いない → レインボー🌈クリア。その グループの いつもの はやさ（th）いない → いなずま⚡クリア。
+let MUL = null;   // { set, i, label }
+const MUL_RAINBOW = 8000, MUL_NEXT = 1400;
+function startMul(set, label){
+  MUL = { set: set.length ? set : [{ a:7, b:8, th:null }], i:0, label: label || 'かけざん' };
+  mulShow();
+}
+function mulShow(){
+  const q = MUL.set[MUL.i];
+  setProblem('×', q.a, q.b);
+  S.t0 = now(); S.th = q.th || null;
+  if(EMBED) EMBED.label = MUL.label + '（' + (MUL.i + 1) + '/' + MUL.set.length + '）';
+}
+function mulNext(){
+  if(!MUL) return;
+  if(MUL.i + 1 < MUL.set.length){ MUL.i++; mulShow(); return; }
+  const last = MUL.set[MUL.i]; MUL = null;
+  tellGame({ type:'done', kind:'mul', ans: last.a*last.b, miss:0 });
+}
+function mulFinish(){
+  const ms = Math.max(0, (S.lastInk || now()) - (S.t0 || now()));
+  const clean = !S.miss;
+  S.ms = ms;
+  S.bolt = clean && S.th && ms <= S.th;              // いなずま
+  S.rainbow = clean && ms <= MUL_RAINBOW;
+  say(S.bolt ? 'いなずま⚡クリア！' : S.rainbow ? 'レインボー🌈クリア！' : 'できた！');
+  tellGame({ type:'kake', a:P.a, b:P.b, ms, miss:S.miss });
+}
+// できた！：a の キャラが b にん ならんで（a が b こ）、がったいして こたえの キャラに なる。いなずまは そのあと ビュン！と はしる
+async function celebrateMul(){
+  const wl = WL(), myP = P, id = {};
+  cele = { id, actors:[], bs: 6, ground: wl.yLine - 10 };
+  const ok = () => cele && cele.id === id && P === myP;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const G = cele.ground, H0 = G - (wl.py + 30), sa = blockSpec(P.a), gap = 4;
+  cele.bs = Math.max(1.6, Math.min(10, H0/(sa.rows + 1), (wl.pw*0.92 - gap*(P.b - 1))/(P.b*sa.cols)));
+  const xs = celeRow(W/2, new Array(P.b).fill(P.a), gap);
+  const row = xs.map((x, i) => { const q = celeActor(P.a, x, G); q.alpha = 0; return q; });
+  const step = Math.max(40, Math.min(110, 900/P.b));
+  for(let i=0;i<row.length;i++){ row[i].alpha = 1; row[i].pop = now(); await wait(step); if(!ok()) return; }
+  await wait(450); if(!ok()) return;
+  for(const q of row) celeMove(q, W/2, G, 420, 10);
+  await wait(450); if(!ok()) return;
+  for(const q of row) celeDrop(q);
+  const sp = blockSpec(P.ans), rowsH = P.ans > 100 ? 10 + blockSpec(P.ans - 100).rows + 1 : sp.rows;
+  const big = Math.min(1.8, (G - wl.py - 30)/(rowsH*cele.bs), (wl.pw*0.8)/(sp.cols*cele.bs));
+  const ans = celeActor(P.ans, S.bolt ? wl.px - 60 : W/2, G); ans.big = big;
+  if(S.bolt){ ans.alpha = 1; celeMove(ans, W/2, G, 260, 0); S.boltAt = now(); }   // ビュン！と はしって きて とまる
+  ans.pop = now() + (S.bolt ? 260 : 0); ans.bounce = now() + 300;
+  for(let i=0;i<(S.bolt ? 70 : 40);i++) burst(W/2, G - Math.min(sp.rows, rowsH)*cele.bs*big/2, 1, S.bolt ? '#ffd23a' : undefined);
+  cele.finished = true;
+  await wait(MUL_NEXT + (S.bolt ? 500 : 0)); if(!ok()) return;
+  goNext();
+}
+// いなずまの ひかり と かみなり（drawWrite の さいごに かく）
+function drawBolt(t){
+  if(!S.bolt || !S.boltAt) return;
+  const e = t - S.boltAt;
+  if(e < 0 || e > 1400) return;
+  ctx.save();
+  if(e < 260){ ctx.fillStyle = 'rgba(255,255,240,' + (0.75*(1 - e/260)) + ')'; ctx.fillRect(0, 0, W, H); }
+  const wl = WL(), x0 = W*0.72, y0 = wl.py - 10, y1 = wl.yLine - 20;
+  ctx.globalAlpha = Math.max(0, 1 - e/900);
+  ctx.strokeStyle = '#ffe14a'; ctx.lineWidth = 7; ctx.lineJoin = 'miter'; ctx.shadowColor = '#fff6a0'; ctx.shadowBlur = 18;
+  ctx.beginPath(); ctx.moveTo(x0, y0);
+  const n = 5; for(let i=1;i<=n;i++) ctx.lineTo(x0 + (i%2 ? -28 : 22) - i*6, y0 + (y1 - y0)*i/n);
+  ctx.stroke();
+  // はしってきた あとの せん
+  ctx.globalAlpha = Math.max(0, 1 - e/500); ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(255,210,60,0.9)'; ctx.lineWidth = 3;
+  for(let i=0;i<5;i++){ const y = wl.yLine - 30 - i*14; ctx.beginPath(); ctx.moveTo(wl.px, y); ctx.lineTo(W/2 - 40 - i*8, y); ctx.stroke(); }
+  ctx.restore();
 }
 
 // ─── おぼえる：その子の 字を お手本に する ─────────────────────────
@@ -1176,6 +1263,7 @@ function drawRooms(l){
 // つぎの もんだいへ（ゲームの中なら ゲームへ しらせる）
 function goNext(){
   if(!S.done || S.sent) return;
+  if(MUL){ S.sent = true; mulNext(); return; }
   if(EMBED){ S.sent = true; tellGame({ type:'done', op:P.op, a:P.a, b:P.b, ans:P.ans, miss:S.miss }); }
   else newProblem();
 }
@@ -1280,7 +1368,7 @@ function draw(){
   // ひとこと
   ctx.save(); ctx.font = 'bold 14px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 4;
-  const ht = hintText(); ctx.strokeText(ht, W/2, l.hintY); ctx.fillStyle = S.done ? '#c0398a' : '#2b3a52'; ctx.fillText(ht, W/2, l.hintY);
+  const ht = hintText(); ctx.strokeText(ht, W/2, l.hintY); ctx.fillStyle = S.done && S.bolt ? '#d08a00' : S.done ? '#c0398a' : '#2b3a52'; ctx.fillText(ht, W/2, l.hintY);
   ctx.restore();
   drawRooms(l);
   // できた！
@@ -1343,8 +1431,9 @@ if(EMBED){
     const m = e.data; if(!m || m.from !== 'game') return;
     if(m.type === 'start'){
       EMBED.kind = m.kind || 'add'; EMBED.big = !!m.big; EMBED.label = m.label || 'ひっさん';
-      kindId = EMBED.kind; HW = isHalloween(); closeTrain(); newProblem(); paused = false;
-    } else if(m.type === 'hide'){ paused = true; closeTrain(); newProblem(); }
+      kindId = EMBED.kind; HW = isHalloween(); closeTrain(); paused = false;
+      if(m.kind === 'mul') startMul(m.set || [], m.label); else { MUL = null; newProblem(); }
+    } else if(m.type === 'hide'){ paused = true; MUL = null; closeTrain(); newProblem(); }
   });
   tellGame({ type:'ready' });
 }

@@ -142,14 +142,14 @@ module.exports = {
   },
 
   // ── まぜまぜ ──
-  'まぜまぜ：けいさん1問 → とけい か ひっさん 1問（かわりばんこ）→ けいさん の じゅん（ひっさんは 4問に1問）。あとは つぎの けいさんから': async t => {
+  'まぜまぜ：けいさん1問 → かけざん → けいさん → とけい → けいさん → かけざん → けいさん → ひっさん の じゅん。あとは つぎの けいさんから': async t => {
     const p = await t.open();
     const seq = await p.evaluate(() => {
       taskOn = true; setMix(true); startTask(0);
       const out = [];
-      for(let k=0;k<7;k++){
-        if(hissanTask){                                     // ひっさん：できた ことに する
-          out.push('ひ'); onHissanMessage({ from:'hissan', type:'done', ans:51, miss:0 });
+      for(let k=0;k<9;k++){
+        if(hissanTask){                                     // ひっさん・かけざん：できた ことに する
+          out.push(hissanTask.kind === 'mul' ? 'か' : 'ひ'); onHissanMessage({ from:'hissan', type:'done', ans:51, miss:0 });
           if(paradeBreak) endParadeBreak(); continue;
         }
         const c = currentTask();
@@ -165,7 +165,7 @@ module.exports = {
       }
       return out.join(',');
     });
-    t.eq(seq, 'け0,と,け1,ひ,け2,と,け3', 'まぜまぜの じゅんばんが ちがう');
+    t.eq(seq, 'け0,か,け1,と,け2,か,け3,ひ,け4', 'まぜまぜの じゅんばんが ちがう');
   },
 
   'まぜまぜで ないときは、とけいは 出ない': async t => {

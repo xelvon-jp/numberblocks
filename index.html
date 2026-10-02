@@ -521,6 +521,7 @@ try{
                              // v:2 から「2けた − 1けた」が 2 に 入ったので、まえの 2 いじょうは 1つ ずらす
                              hissan: (r.hissan && r.hissan.lv) ? { lv: Math.min(5, (r.hissan.lv|0) + (r.hissan.v !== 2 && (r.hissan.lv|0) >= 2 ? 1 : 0)) || 1, hist: r.hissan.hist || [], v:2 }
                                                                : { lv:1, hist:[], v:2 },
+                             kake: (r.kake && r.kake.f) ? r.kake : null,
                              beg: { idx:b.idx|0, cleared:b.cleared||{}, logs:b.logs||{}, rainbow:b.rainbow||{} } };
       }
       const i = PROFILES.findIndex(pr=>pr.id === v.cur);
@@ -579,7 +580,7 @@ function clockStats(){ return clockStatsOf(profile().id); }
 let genTask = null;       // いま出している とけいの おだい（なければ けいさん）
 let hissanTask = null;    // いま出している ひっさんの おだい { lv, frame }（ひっさんの 画面を 上に かさねて 出す）
 let hissanFrame = null, hissanReady = false, hissanPending = null;   // かくして つかいまわす ひっさんの 画面（startHissanTask）
-let nextSpecial = 'clock';// まぜまぜで つぎに はさむのは とけい か ひっさん か（かわりばんこ）
+let nextSpecial = 0;      // まぜまぜで つぎに はさむのは MIX_SPECIALS の なんばんめか
 let sinceClock = 0;       // まえの とけいから けいさんを 何問 すすめたか
 let lastClockGoal = -1;   // つづけて同じ時こくにしないため
 let lastLevelUp = 0;      // この とけいの おだいで レベルが上がったら そのレベル
@@ -885,8 +886,8 @@ function advanceTask(){
   if(genTask || hissanTask){ closeHissan(); startTask((taskIdx + 1) % TASKS.length); return; }
   if(mixMode() && ++sinceClock >= MIX_CALC){
     sinceClock = 0;
-    if(nextSpecial === 'hissan'){ nextSpecial = 'clock'; startHissanTask(); }
-    else { nextSpecial = 'hissan'; startClockTask(); }
+    const sp = MIX_SPECIALS[nextSpecial % MIX_SPECIALS.length]; nextSpecial = (nextSpecial + 1) % MIX_SPECIALS.length;
+    if(sp === 'hissan') startHissanTask(); else if(sp === 'kake') startKakeTask(); else startClockTask();
     return;
   }
   startTask((taskIdx + 1) % TASKS.length);
@@ -895,7 +896,7 @@ function advanceTask(){
 function setMix(v){
   const r = recOf(profile().id, false);
   if(!!r.mix === !!v) return;
-  r.mix = !!v; sinceClock = 0; nextSpecial = 'clock';
+  r.mix = !!v; sinceClock = 0; nextSpecial = 0;
   if(!v && genTask) startTask(taskIdx);     // とけいの とちゅうで やめたら、けいさんへ もどる
   saveTask();
 }
@@ -953,6 +954,96 @@ function closeHissan(){
   if(hissanTask && hissanTask.frame) showHissan(false);
   hissanTask = null; hissanPending = null;
 }
+// ── かけざん（まぜまぜ）────────────────────────────────────────────
+// 1×1〜20×20 の 1つずつ（7×8 と 8×7 は べつ）を 人ごとに おぼえる。手がきで こたえる（ひっさんの 画面）。
+// グループ：A 九九やさしい（×2・×5・×10・おなじ数）／B 九九むずかしい／C 2けた×1けた／D 2けた×2けた（2〜20、×1 は 出さない）。
+// だんかい：0 は A・B、1 で C、2 で D が まざる。いまの だんかいの いちばん あたらしい グループの 8わりを
+//           「8びょう いないに 2かい つづけて せいかい」（m）に したら つぎへ。
+// セット：けいさんの あいだに はさむ。1時間 やすんだら 1もん から（1→2→3→4→5、あとは 5もん）。
+// いなずま⚡：その グループの さいきん 20かいの せいかい（まちがい なし）の 中で はやい ほうから 3わり いない（5かい たまるまで なし）。
+const KAKE_MAX = 5, KAKE_WIN = 20, KAKE_MIN = 5, KAKE_FAST = 0.3, KAKE_RB = 8000, KAKE_NEW = 2, KAKE_UNLOCK = 0.8;
+const MIX_SPECIALS = ['kake', 'clock', 'kake', 'hissan'];
+function kakeGroup(a, b){
+  if(a <= 10 && b <= 10){
+    const easy = a === b || [2, 5, 10].includes(a) || [2, 5, 10].includes(b);
+    return easy ? 'A' : 'B';
+  }
+  return a <= 10 || b <= 10 ? 'C' : 'D';
+}
+const KAKE_STAGES = [['A', 'B'], ['C'], ['D']];
+const KAKE_ALL = (() => { const out = []; for(let a=2;a<=20;a++) for(let b=2;b<=20;b++) out.push([a, b]); return out; })();
+function kakeOf(id){
+  const r = taskStore[id] || (taskStore[id] = emptyRec());
+  return r.kake || (r.kake = { f:{}, gh:{ A:[], B:[], C:[], D:[] }, stage:0, rampN:0, lastSet:0 });
+}
+function kake(){ return kakeOf(profile().id); }
+// その グループで いなずまに なる はやさ（ms）。まだ たりなければ null
+function kakeBolt(g){
+  const h = (kake().gh[g] || []).slice().sort((x, y) => x - y);
+  if(h.length < KAKE_MIN) return null;
+  return h[Math.floor(KAKE_FAST*(h.length - 1))];
+}
+function kakeStageGroups(st){ return [].concat(...KAKE_STAGES.slice(0, st + 1)); }
+// つぎの セットを えらぶ：まちがい・おそかった もんだい（じかんが きたもの）→ あたらしい もんだい（2つまで）→ おぼえた もんだいの ふくしゅう 1つ → のこりは ランダム
+function kakePick(n, nowT){
+  const K = kake(), t = nowT || Date.now(), groups = kakeStageGroups(K.stage);
+  const pool = KAKE_ALL.filter(([a, b]) => groups.includes(kakeGroup(a, b)));
+  const key = (a, b) => a + 'x' + b, f = (a, b) => K.f[key(a, b)];
+  const out = [], has = q => out.some(o => o[0] === q[0] && o[1] === q[1]);
+  const take = (list, max) => { for(const q of list){ if(out.length >= n || max <= 0) break; if(!has(q)){ out.push(q); max--; } } };
+  const shuffle = l => { for(let i=l.length-1;i>0;i--){ const j = Math.floor(Math.random()*(i+1)); [l[i], l[j]] = [l[j], l[i]]; } return l; };
+  // 1) ふくしゅう（おぼえて いない もので じかんが きたもの。ふるい じゅん）
+  take(pool.filter(q => { const x = f(...q); return x && !x.g && x.due <= t; }).sort((p, q) => f(...p).due - f(...q).due), n - 1);
+  // 2) あたらしい もんだい：いちばん あたらしい グループから、こたえの ちいさい ほうを まぜて
+  const newest = KAKE_STAGES[K.stage];
+  const fresh = pool.filter(q => !f(...q) && newest.includes(kakeGroup(...q))).sort((p, q) => p[0]*p[1] - q[0]*q[1]);
+  take(shuffle(fresh.slice(0, 12)), KAKE_NEW);
+  if(out.length < KAKE_NEW) take(shuffle(pool.filter(q => !f(...q))), KAKE_NEW - out.length);
+  // 3) おぼえた もんだい（金）の ふくしゅう 1つ
+  take(shuffle(pool.filter(q => { const x = f(...q); return x && x.g && x.due <= t; })), 1);
+  // 4) のこりは ここ さいきん やって いない ものから
+  take(shuffle(pool.filter(q => f(...q) && !f(...q).g)).sort((p, q) => (f(...p).last || 0) - (f(...q).last || 0)), n);
+  take(shuffle(pool.slice()), n);
+  return shuffle(out).map(([a, b]) => ({ a, b, th: kakeBolt(kakeGroup(a, b)) }));
+}
+// こたえを きろく。ok … まちがえずに こたえた
+function noteKake(m){
+  const K = kake(), k = m.a + 'x' + m.b, t = Date.now(), g = kakeGroup(m.a, m.b);
+  const x = K.f[k] || (K.f[k] = { c:0, s:0, m:false, g:false, w:0, due:0, last:0 });
+  const ok = !m.miss, fast = ok && m.ms <= KAKE_RB, th = kakeBolt(g), bolt = ok && th !== null && m.ms <= th;
+  x.last = t;
+  if(!ok){ x.w++; x.s = 0; x.g = false; x.due = t + 60*1000; }
+  else {
+    x.c++; x.s = fast ? x.s + 1 : 0;
+    if(x.s >= 2) x.m = true;
+    if(bolt) x.g = true;
+    x.due = x.g ? t + 24*3600*1000*Math.pow(2, Math.min(4, x.c - 1)) : fast ? t + 10*60*1000*Math.pow(2, Math.min(6, x.s)) : t + 5*60*1000;
+    const h = K.gh[g] || (K.gh[g] = []); h.push(m.ms); if(h.length > KAKE_WIN) h.splice(0, h.length - KAKE_WIN);
+  }
+  // だんかいを すすめる
+  const newest = KAKE_STAGES[K.stage];
+  if(K.stage < KAKE_STAGES.length - 1){
+    const facts = KAKE_ALL.filter(q => newest.includes(kakeGroup(...q)));
+    const done = facts.filter(q => (K.f[q[0] + 'x' + q[1]] || {}).m).length;
+    if(done >= facts.length*KAKE_UNLOCK) K.stage++;
+  }
+  saveTask();
+}
+function startKakeTask(){
+  closeHissan();
+  if(!isCalcMode()) setMode('calc');
+  resetTaskState();
+  const K = kake(), t = Date.now();
+  if(t - (K.lastSet || 0) >= 60*60*1000) K.rampN = 0;     // 1時間 やすんだら 1もん から
+  const n = Math.min(KAKE_MAX, (K.rampN || 0) + 1);
+  K.rampN = (K.rampN || 0) + 1; K.lastSet = t; saveTask();
+  const m = { from:'game', type:'start', kind:'mul', big:false, label:'かけざん', set: kakePick(n, t) };
+  const f = hissanFrameEl();
+  hissanTask = { lv: 0, kind: 'mul', frame: f };
+  if(hissanReady) hissanPost(m); else hissanPending = m;
+  showHissan(true);
+  updateTargets();
+}
 function noteHissanAnswer(ok){
   const t = hissanTask; if(!t) return;
   const st = hissanStats();
@@ -966,8 +1057,9 @@ function noteHissanAnswer(ok){
 // ひっさんの ページからの しらせ：できた（まちがい なしか）／もどる（とばして つぎの けいさんへ）
 function onHissanMessage(m){
   if(!hissanTask || !m || m.from !== 'hissan') return;
+  if(m.type === 'kake'){ noteKake(m); return; }
   if(m.type === 'done'){
-    noteHissanAnswer(m.miss === 0);
+    if(hissanTask.kind !== 'mul') noteHissanAnswer(m.miss === 0);
     notePrize(m.ans > 100 ? m.ans - 100 : m.ans);     // ごほうびの パレードにも 数える（こたえの キャラ）
     showHissan(false);
     hissanTask.frame = null;                           // hissanTask は のこす（つぎへ で けいさんに もどる）
