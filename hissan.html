@@ -546,7 +546,7 @@ function whyWrong3(k, v){
   const pulse = i === 1 ? 'carry' : 'carryH';
   if(P.op === '+'){
     if(c && v === (A + B) % 10) return { t:'くり上がりの 1 を たしわすれているよ', pulse };
-    return { t: name + '：' + A + ' + ' + B + (c ? ' + くり上がりの 1' : '') + ' は？' + (A + B + c >= 10 ? '\n10 を こえたら ' + name + 'には 一のくらいの 数を かくよ' : '') };
+    return { t: name + '：' + A + ' + ' + B + (c ? ' + くり上がりの 1' : '') + ' は？' + (A + B + c >= 10 ? (i === 0 ? '\n10 を こえたら 一のくらいの 数を かくよ' : '\n10 を こえたら 1 は となりの くらいへ') : '') };
   }
   if(c && v === A - B) return { t:'くり下がりで ' + name + 'が 1 へったのを わすれているよ', pulse };
   if(A - c < B){
