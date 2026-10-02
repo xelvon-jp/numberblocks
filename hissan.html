@@ -46,11 +46,11 @@ const SAFE_B = (() => { const d = document.createElement('div'); d.style.cssText
   document.body.appendChild(d); const h = d.getBoundingClientRect().height; d.remove(); return h || 0; })();
 
 const MODES = [{ id:'room', label:'A へや' }, { id:'auto', label:'B おまかせ' }, { id:'drum', label:'C ドラム' }, { id:'pick', label:'D えらぶ' }, { id:'write', label:'E かく' }];
-const KINDS = [{ id:'add', label:'たし算' }, { id:'sub1', label:'ひき算1けた' }, { id:'sub', label:'ひき算' }, { id:'mix', label:'まぜ' }];
+const KINDS = [{ id:'add', label:'たし算' }, { id:'sub1', label:'ひき算1けた' }, { id:'sub', label:'ひき算' }, { id:'mix', label:'まぜ' }, { id:'big3', label:'3けた' }];
 let modeId = 'room', kindId = 'add';
 try{ const v = JSON.parse(localStorage.getItem('nb_hissan_try') || '{}'); if(v.m) modeId = v.m; if(v.k) kindId = v.k; }catch(e){}
 // ゲームの「まぜまぜ」から よばれた とき（iframe）：E かく だけ、1もん。おわったら ゲームに しらせる
-//   hissan.html?embed=1&kind=add|sub1|sub|mix&big=0|1&label=…
+//   hissan.html?embed=1&kind=add|sub1|sub|mix|big3&big=0|1&label=…
 const EMBED = (() => { const q = new URLSearchParams(location.search); if(q.get('embed') !== '1') return null;
   return { kind: q.get('kind') || 'add', big: q.get('big') === '1', label: q.get('label') || 'ひっさん' }; })();
 if(EMBED){ modeId = 'write'; kindId = EMBED.kind; }
@@ -63,6 +63,7 @@ const R = n => Math.floor(Math.random()*n);
 // ひき算：一のくらいで かならず くり下がる（ときどき 60−27 のように 0 から）。こたえは 10 いじょう
 // ひき算1けた（sub1）：2けた − 1けた（23 − 7）。くり下がり 1かい、こたえは 10 いじょう
 function genProblem(kind, noBig){
+  if(kind === 'big3') return genBig3();
   if(kind === 'sub1'){
     for(let k=0;k<500;k++){
       const a = 20 + R(80), b = 2 + R(8);
@@ -88,6 +89,28 @@ function genProblem(kind, noBig){
     }
   }
   return op === '+' ? { op, a:38, b:45, ans:83 } : { op, a:52, b:27, ans:25 };
+}
+// 3けた どうし（big3）：たし算・ひき算を はんぶんずつ。くり上がり・くり下がりは 一 か 十 で ちょうど 1かい、こたえも 3けた。
+// （3けたは E かく だけ）
+const dg = (n, i) => Math.floor(n / Math.pow(10, i)) % 10;   // i … 0 一・1 十・2 百
+function carriesOf(op, a, b){
+  let c = 0, n = 0;
+  for(let i=0;i<3;i++){
+    if(op === '+'){ const s = dg(a,i) + dg(b,i) + c; c = s >= 10 ? 1 : 0; }
+    else { const s = dg(a,i) - dg(b,i) - c; c = s < 0 ? 1 : 0; }
+    n += c;
+  }
+  return n;
+}
+function genBig3(){
+  const op = Math.random() < 0.5 ? '+' : '-';
+  for(let k=0;k<2000;k++){
+    const a = 100 + R(900), b = 100 + R(900);
+    if(op === '+'){ if(a + b > 999 || carriesOf('+', a, b) !== 1) continue; return { op, a, b, ans: a + b }; }
+    if(a - b < 100 || carriesOf('-', a, b) !== 1) continue;
+    return { op, a, b, ans: a - b };
+  }
+  return op === '+' ? { op, a:247, b:135, ans:382 } : { op, a:543, b:128, ans:415 };
 }
 // よくある まちがい（えらぶ の こうほ）
 function wrongAnswers(P){
@@ -407,12 +430,13 @@ function WL(){
   const x = {}; cols.forEach((c, i) => { x[c] = px + 8 + (0.7 + i + 0.5)*cw; });
   const yC = py + 0.06*cw, yA = yC + 0.78*cw, yB = yA + cw, yLine = yB + cw + 0.06*cw, yR = yLine + 0.08*cw;
   const carry = { x: x.t - 0.4*cw, y: yC, w: 0.8*cw, h: 0.72*cw };   // くり上がり・くり下がりを メモする あたり（光らせる ところ）
+  const carryH = x.h !== undefined ? { x: x.h - 0.4*cw, y: yC, w: 0.8*cw, h: 0.72*cw } : carry;   // 百のくらいの 上
   const cells = {
     o:  { x: x.o - 0.45*cw, y: yR, w: 0.9*cw, h: 0.98*cw },
     t:  { x: x.t - 0.45*cw, y: yR, w: 0.9*cw, h: 0.98*cw },
   };
   if(x.h !== undefined) cells.h = { x: x.h - 0.45*cw, y: yR, w: 0.9*cw, h: 0.98*cw };
-  return { l, cw, px, py, pw, ph, x, yA, yB, yLine, cells, carry, signX: px + 8 + 0.35*cw, msgY: py + ph + 12, msgH };
+  return { l, cw, px, py, pw, ph, x, yA, yB, yLine, cells, carry, carryH, signX: px + 8 + 0.35*cw, msgY: py + ph + 12, msgH };
 }
 // ゆびが どの ますに 書いたか（ます より 少し ひろく とる）
 function cellAt(wl, x, y){
@@ -492,6 +516,7 @@ function judgeCell(k, d){
 }
 // まちがいの わけ（こたえは いわずに、どこを 見なおせば いいかを いう）
 function whyWrong(k, v){
+  if(P.a >= 100) return whyWrong3(k, v);
   const aT = Math.floor(P.a/10), aO = P.a%10, bT = Math.floor(P.b/10), bO = P.b%10;
   if(P.op === '+'){
     if(k === 'o') return { t:'一のくらい：' + aO + ' + ' + bO + ' は？\n10 を こえたら 一のくらいの 数を かくよ' };
@@ -508,6 +533,26 @@ function whyWrong(k, v){
   if(v === aT - bT) return { t:'くり下がりで 十のくらいが 1 へったのを わすれているよ', pulse:'carry' };
   if(!bT) return { t:'十のくらい：' + aT + ' から 10 を 1つ かしたよ\nのこりは いくつ？', pulse:'carry' };
   return { t:'十のくらい：' + (aT - 1) + ' − ' + bT + ' は？' };
+}
+// 3けた：くらいごとに、下の くらいから きた くり上がり（くり下がり）を いれて きく
+function whyWrong3(k, v){
+  const i = { o:0, t:1, h:2 }[k], name = colName(k), A = dg(P.a, i), B = dg(P.b, i);
+  let c = 0;   // この くらいに 下から きた 1
+  for(let j=0;j<i;j++){
+    if(P.op === '+') c = dg(P.a, j) + dg(P.b, j) + c >= 10 ? 1 : 0;
+    else c = dg(P.a, j) - dg(P.b, j) - c < 0 ? 1 : 0;
+  }
+  const pulse = i === 1 ? 'carry' : 'carryH';
+  if(P.op === '+'){
+    if(c && v === (A + B) % 10) return { t:'くり上がりの 1 を たしわすれているよ', pulse };
+    return { t: name + '：' + A + ' + ' + B + (c ? ' + くり上がりの 1' : '') + ' は？' + (A + B + c >= 10 ? '\n10 を こえたら ' + name + 'には 一のくらいの 数を かくよ' : '') };
+  }
+  if(c && v === A - B) return { t:'くり下がりで ' + name + 'が 1 へったのを わすれているよ', pulse };
+  if(A - c < B){
+    if(v === B - (A - c)) return { t: name + '：' + (A - c) + ' から ' + B + ' は ひけないね\nとなりの くらいから 10 を かりて ' + (10 + A - c) + ' − ' + B };
+    return { t: name + '：' + (10 + A - c) + ' − ' + B + ' は？' };
+  }
+  return { t: name + '：' + (A - c) + ' − ' + B + ' は？' };
 }
 // こうほから えらんだ：その 数字を 書いた ことに する。こたえと おなじなら、その字を お手本として おぼえる
 function askPick(dg){
@@ -554,15 +599,16 @@ function drawWrite(l){
   const aT = Math.floor(P.a/10), aO = P.a%10, bT = Math.floor(P.b/10), bO = P.b%10;
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = 'bold ' + Math.round(cw*0.78) + 'px sans-serif'; ctx.fillStyle = '#16233a';
-  ctx.fillText(aT, wl.x.t, wl.yA + cw/2); ctx.fillText(aO, wl.x.o, wl.yA + cw/2);
-  if(P.b >= 10) ctx.fillText(bT, wl.x.t, wl.yB + cw/2);
+  if(P.a >= 100){ ctx.fillText(dg(P.a, 2), wl.x.h, wl.yA + cw/2); ctx.fillText(dg(P.b, 2), wl.x.h, wl.yB + cw/2); }
+  ctx.fillText(dg(P.a, 1), wl.x.t, wl.yA + cw/2); ctx.fillText(aO, wl.x.o, wl.yA + cw/2);
+  if(P.b >= 10) ctx.fillText(dg(P.b, 1), wl.x.t, wl.yB + cw/2);
   ctx.fillText(bO, wl.x.o, wl.yB + cw/2);
   ctx.fillText(P.op === '+' ? '+' : '−', wl.signX, wl.yB + cw/2);
   ctx.strokeStyle = '#16233a'; ctx.lineWidth = Math.max(3, cw*0.05); ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(wl.px + 12, wl.yLine); ctx.lineTo(wl.px + wl.pw - 12, wl.yLine); ctx.stroke();
   // くり上がり・くり下がりを わすれたときは、十のくらいの 上を 光らせる
-  if(S.pulse && S.pulse.k === 'carry' && t - S.pulse.at < 2400){
-    const q = 0.5 + 0.5*Math.sin((t - S.pulse.at)*0.012), r = wl.carry;
+  if(S.pulse && (S.pulse.k === 'carry' || S.pulse.k === 'carryH') && t - S.pulse.at < 2400){
+    const q = 0.5 + 0.5*Math.sin((t - S.pulse.at)*0.012), r = S.pulse.k === 'carryH' ? wl.carryH : wl.carry;
     ctx.fillStyle = 'rgba(255,220,120,' + (0.35 + 0.45*q) + ')';
     ctx.beginPath(); ctx.roundRect(r.x, r.y, r.w, r.h, 10); ctx.fill();
   }
@@ -731,6 +777,7 @@ function drawCele(t){
   }
 }
 async function celebrateWrite(){
+  if(P.a >= 100) return celebrateBig();
   const wl = WL(), myP = P, id = {};
   cele = { id, actors:[], bs: 6, ground: wl.yLine - 10 };
   const ok = () => cele && cele.id === id && P === myP;
@@ -858,6 +905,39 @@ async function celebrateWrite(){
   ans.big = Math.min(1.6, (G - wl.py - 30)/(rowsH*bs), (wl.pw*0.8)/(sp.cols*bs));
   ans.pop = now(); ans.bounce = now() + 300;
   for(let i=0;i<50;i++) burst(xC, G - Math.min(sp.rows, rowsH)*bs*ans.big/2, 1);
+  cele.finished = true;
+  await wait(AUTO_NEXT); if(!ok()) return;
+  goNext();
+}
+
+// 3けたの できた！：ふたりが ならんで 出て、まんなかで こたえの キャラに なる（ひき算は ひく ほうが てんめつして きえる）
+async function celebrateBig(){
+  const wl = WL(), myP = P, id = {};
+  cele = { id, actors:[], bs: 4, ground: wl.yLine - 10 };
+  const ok = () => cele && cele.id === id && P === myP;
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  const G = cele.ground, H0 = G - (wl.py + 30);
+  const rowsOf = n => n > 100 ? 10 + blockSpec(n - 100).rows + 1 : blockSpec(n).rows;
+  const big = Math.max(P.a, P.b, P.ans);
+  cele.bs = Math.max(2, Math.min(9, H0/rowsOf(big), (wl.pw*0.9 - 30)/(blockSpec(P.a).cols + blockSpec(P.b).cols)));
+  const xC = W/2, [xa, xb] = celeRow(xC, [P.a, P.b], 24);
+  const A = celeActor(P.a, xa, G), B = celeActor(P.b, xb, G);
+  A.pop = B.pop = now();
+  if(P.op === '-'){ B.tag = '−' + P.b; }
+  await wait(1200); if(!ok()) return;
+  if(P.op === '-'){
+    B.blinkAt = now(); await wait(1300); if(!ok()) return;
+    B.fadeAt = now(); await wait(380); if(!ok()) return; celeDrop(B);
+    celeMove(A, xC, G, 500, 20); await wait(530); if(!ok()) return;
+  } else {
+    celeMove(A, xC, G, 500, 20); celeMove(B, xC, G, 500, 20);
+    await wait(530); if(!ok()) return; celeDrop(B);
+  }
+  celeDrop(A);
+  const ans = celeActor(P.ans, xC, G);
+  ans.big = Math.min(1.4, (G - wl.py - 30)/(rowsOf(P.ans)*cele.bs), (wl.pw*0.8)/(blockSpec(P.ans).cols*cele.bs));
+  ans.pop = now(); ans.bounce = now() + 300;
+  for(let i=0;i<50;i++) burst(xC, G - rowsOf(P.ans)*cele.bs*ans.big/2, 1);
   cele.finished = true;
   await wait(AUTO_NEXT); if(!ok()) return;
   goNext();
@@ -1172,11 +1252,11 @@ function drawTop(l){
   const y = 8, h = 38;
   btn(8, y, 64, h, '← もどる', false, goBack, { font:12 });
   const kw = (W - 8 - 64 - 8 - 8 - 64 - 8 - 6*(KINDS.length - 1)) / KINDS.length;
-  KINDS.forEach((k, i) => btn(8 + 64 + 8 + i*(kw + 6), y, kw, h, k.label, kindId === k.id, () => { kindId = k.id; saveChoice(); newProblem(); }));
+  KINDS.forEach((k, i) => btn(8 + 64 + 8 + i*(kw + 6), y, kw, h, k.label, kindId === k.id, () => { kindId = k.id; if(kindId === 'big3') modeId = 'write'; saveChoice(); newProblem(); }));
   btn(W - 8 - 64, y, 64, h, 'つぎ', false, newProblem);
   // 2だんめ：こたえかた
   const y2 = y + h + 6, mw = (W - 16 - (MODES.length - 1)*6)/MODES.length;
-  MODES.forEach((m, i) => btn(8 + i*(mw + 6), y2, mw, 36, m.label, modeId === m.id, () => { modeId = m.id; saveChoice(); newProblem(); },
+  MODES.forEach((m, i) => btn(8 + i*(mw + 6), y2, mw, 36, m.label, modeId === m.id, () => { modeId = m.id; if(modeId !== 'write' && kindId === 'big3') kindId = 'mix'; saveChoice(); newProblem(); },
     { on:'#f0a020', font: W < 420 ? 12 : 13 }));
 }
 function draw(){

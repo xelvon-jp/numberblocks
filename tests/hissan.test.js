@@ -310,6 +310,30 @@ module.exports = {
     t.eq(await p.evaluate(() => window.__err || ''), '', 'アニメで エラー');
   },
 
+  'E かく：3けた どうし。くり上がり・くり下がりは ちょうど 1かい、こたえも 3けた。百・十・一を 書いて できた！まで': async t => {
+    const p = await openH(t, 'write', 'big3');
+    const bad = await p.evaluate(() => {
+      let bad = 0, add = 0;
+      for(let i=0;i<1500;i++){
+        const q = genProblem('big3');
+        if(q.op === '+') add++;
+        if(!(q.a >= 100 && q.b >= 100 && q.ans >= 100 && q.ans <= 999 && q.ans === (q.op === '+' ? q.a + q.b : q.a - q.b) && carriesOf(q.op, q.a, q.b) === 1)) bad++;
+      }
+      return [bad, add > 500 && add < 1000];
+    });
+    t.eq(bad, [0, true], '3けたの もんだいが おかしい');
+    await p.evaluate(() => setProblem('+', 247, 135));   // 382：一で くり上がり
+    t.eq(await p.evaluate(() => cellKeys()), ['o', 't', 'h'], 'ますが 3つ ない');
+    let r = await writeDigit(p, 'o', 2); t.eq(r.st, 'ok', '一 2');
+    r = await writeDigit(p, 't', 7);
+    t.ok(r.st === 'bad' && /くり上がりの 1 を たしわすれ/.test(r.msg), 'くり上がり わすれ: ' + JSON.stringify(r));
+    r = await writeDigit(p, 't', 8); t.eq(r.st, 'ok', '十 8');
+    r = await writeDigit(p, 'h', 3); t.eq(r.st, 'ok', '百 3');
+    await p.waitForFunction(() => cele && cele.finished, null, { timeout: 20000 });
+    t.eq(await p.evaluate(() => [S.done, window.__err || '']), [true, ''], 'できた！に ならない');
+    t.ok(/十のくらいから 10 を かりて|となりの くらいから 10 を かりて/.test(await p.evaluate(() => { setProblem('-', 543, 128); return whyWrong('o', 5).t; })), 'ひき算 3けたの ことば');
+  },
+
   'E かく：ひき算 52−27（一 5、十 2）と くり下がり わすれ・3けた': async t => {
     const p = await openH(t, 'write', 'sub');
     await p.evaluate(() => setProblem('-', 52, 27));

@@ -517,9 +517,9 @@ try{
                              prize: (r.prize && r.prize.made) ? { n: r.prize.n|0, made: r.prize.made.slice(-5) } : { n:0, made:[] },
                              clock: (r.clock && r.clock.lv) ? { lv: Math.min(CLOCK_MAX, r.clock.lv|0) || 1, hist: r.clock.hist || [] }
                                                              : { lv:1, hist:[] },
-                             // ひっさんの レベル（HISSAN_LEVELS は まだ 読まれていないので 4 と 書く）。
+                             // ひっさんの レベル（HISSAN_LEVELS は まだ 読まれていないので 5 と 書く）。
                              // v:2 から「2けた − 1けた」が 2 に 入ったので、まえの 2 いじょうは 1つ ずらす
-                             hissan: (r.hissan && r.hissan.lv) ? { lv: Math.min(4, (r.hissan.lv|0) + (r.hissan.v !== 2 && (r.hissan.lv|0) >= 2 ? 1 : 0)) || 1, hist: r.hissan.hist || [], v:2 }
+                             hissan: (r.hissan && r.hissan.lv) ? { lv: Math.min(5, (r.hissan.lv|0) + (r.hissan.v !== 2 && (r.hissan.lv|0) >= 2 ? 1 : 0)) || 1, hist: r.hissan.hist || [], v:2 }
                                                                : { lv:1, hist:[], v:2 },
                              beg: { idx:b.idx|0, cleared:b.cleared||{}, logs:b.logs||{}, rainbow:b.rainbow||{} } };
       }
@@ -907,7 +907,8 @@ const HISSAN_LEVELS = [
   { name:'たし算',       kind:'add',  big:false },   // くり上がり 1かい、こたえは 2けた
   { name:'ひき算 1けた', kind:'sub1', big:false },   // 2けた − 1けた、くり下がり 1かい（23 − 7）
   { name:'ひき算',       kind:'sub',  big:false },   // 2けた − 2けた、くり下がり 1かい
-  { name:'まぜ',         kind:'mix',  big:true  }    // たし算・ひき算、こたえ 3けたも
+  { name:'まぜ',         kind:'mix',  big:true  },   // たし算・ひき算、こたえ 3けたも
+  { name:'3けた',        kind:'big3', big:true  }    // 3けた どうしの たし算・ひき算、くり上がり・くり下がり 1かい
 ];
 function hissanStatsOf(id){
   const r = taskStore[id] || (taskStore[id] = emptyRec());
