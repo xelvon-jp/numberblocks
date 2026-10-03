@@ -2363,7 +2363,9 @@ function drawLightning(ctx, e, a){
   let shake = 0;
   strikes.forEach((at, k) => {
     const d = e - at; if(d < 0 || d > 520) return;
-    if(d < 140){ ctx.fillStyle = 'rgba(255,255,235,' + 0.8*(1 - d/140) + ')'; ctx.fillRect(a.x, a.y, a.w, a.h); }
+    // ぴかっ：目に いたく ないように うすい きいろで、ふわっと ついて ゆっくり きえる（1ぽんめ だけ すこし つよめ）
+    if(d < 300){ const f = d < 60 ? d/60 : 1 - (d - 60)/240;
+      ctx.fillStyle = 'rgba(255,240,170,' + (k ? 0.14 : 0.22)*f + ')'; ctx.fillRect(a.x, a.y, a.w, a.h); }
     shake = Math.max(shake, d < 320 ? (1 - d/320)*9 : 0);
     const x0 = a.x + a.w*[0.25, 0.75, 0.5][k], pts = boltZigzag(x0, a.y - 10, a.ground, k + 1);
     ctx.globalAlpha = Math.max(0, 1 - d/520);
