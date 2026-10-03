@@ -2343,3 +2343,68 @@ function drawMoon(ctx, x, y, r){
   for(const [dx, dy, k] of [[-0.3, -0.2, 0.18], [0.25, 0.15, 0.13], [-0.05, 0.35, 0.1]]){ ctx.beginPath(); ctx.arc(x + dx*r, y + dy*r, k*r, 0, Math.PI*2); ctx.fill(); }
   ctx.restore();
 }
+
+/* ── いなずま⚡クリア（ゲーム・ひっさん・かけざん で おなじ えんしゅつ）──────────────
+   e … はじまってからの ms。a … { x, y, w, h（くらくする はんい）, ground（かみなりが おちる 高さ）, textY, text }
+   あらしの ように くらく なり、かみなりが 3ぼん おちて そのたびに ぴかっ。まんなかに 金いろの ことば。
+   かえりちは ゆれの 大きさ（px。よぶ がわで 画面を ゆらす）。 */
+const BOLT_MS = 2800;
+function boltZigzag(x0, y0, y1, seed){
+  const pts = [[x0, y0]], n = 7;
+  for(let i=1;i<=n;i++){ const r = Math.sin(seed*13.7 + i*4.1); pts.push([x0 + r*34 + (i === n ? 0 : (i%2 ? -14 : 14)), y0 + (y1 - y0)*i/n]); }
+  return pts;
+}
+function drawLightning(ctx, e, a){
+  if(e < 0 || e > BOLT_MS) return 0;
+  const strikes = [0, 380, 760];
+  ctx.save();
+  const dark = e < 200 ? e/200 : e > BOLT_MS - 500 ? Math.max(0, (BOLT_MS - e)/500) : 1;
+  ctx.fillStyle = 'rgba(20,20,60,' + 0.38*dark + ')'; ctx.fillRect(a.x, a.y, a.w, a.h);
+  let shake = 0;
+  strikes.forEach((at, k) => {
+    const d = e - at; if(d < 0 || d > 520) return;
+    if(d < 140){ ctx.fillStyle = 'rgba(255,255,235,' + 0.8*(1 - d/140) + ')'; ctx.fillRect(a.x, a.y, a.w, a.h); }
+    shake = Math.max(shake, d < 320 ? (1 - d/320)*9 : 0);
+    const x0 = a.x + a.w*[0.25, 0.75, 0.5][k], pts = boltZigzag(x0, a.y - 10, a.ground, k + 1);
+    ctx.globalAlpha = Math.max(0, 1 - d/520);
+    for(const [lw, col, blur] of [[16, 'rgba(255,230,80,0.35)', 30], [7, '#ffe14a', 18], [3, '#ffffff', 0]]){
+      ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineJoin = 'miter'; ctx.shadowColor = '#fff6a0'; ctx.shadowBlur = blur;
+      ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+    }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  });
+  if(e > 250){
+    const k = Math.min(1, (e - 250)/260), pop = k < 1 ? 0.3 + 1.0*k + 0.25*Math.sin(k*Math.PI) : 1 + 0.04*Math.sin(e*0.02);
+    const fade = e > BOLT_MS - 400 ? Math.max(0, (BOLT_MS - e)/400) : 1;
+    const txt = a.text || 'いなずま⚡クリア！';
+    let fs = 50; ctx.font = '900 ' + fs + 'px sans-serif';
+    fs = Math.floor(fs*Math.min(1, (a.w*0.88)/(ctx.measureText(txt).width + fs*0.22)));
+    ctx.save(); ctx.globalAlpha = fade; ctx.translate(a.x + a.w/2, a.textY); ctx.scale(pop, pop); ctx.rotate(-0.05);
+    ctx.font = '900 ' + fs + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.shadowColor = '#fff2a0'; ctx.shadowBlur = 24 + 10*Math.sin(e*0.03);
+    ctx.strokeStyle = '#3a2160'; ctx.lineWidth = fs*0.22; ctx.strokeText(txt, 0, 0);
+    ctx.shadowBlur = 0;
+    const g = ctx.createLinearGradient(0, -fs/2, 0, fs/2); g.addColorStop(0, '#fff6b0'); g.addColorStop(0.5, '#ffd23a'); g.addColorStop(1, '#f08a10');
+    ctx.fillStyle = g; ctx.fillText(txt, 0, 0);
+    ctx.restore();
+  }
+  ctx.restore();
+  return shake;
+}
+// めあての じかんの バー（のこりが へっていく。なくなったら そっと きえる）
+function drawSpeedBar(ctx, x, y, w, frac){
+  if(!(frac > 0)) return;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.beginPath(); ctx.roundRect(x, y, w, 6, 3); ctx.fill();
+  const g = ctx.createLinearGradient(x, 0, x + w, 0); g.addColorStop(0, '#ffe14a'); g.addColorStop(1, '#f0a020');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.roundRect(x, y, Math.max(6, w*Math.min(1, frac)), 6, 3); ctx.fill();
+  ctx.font = '12px sans-serif'; ctx.textBaseline = 'middle'; ctx.textAlign = 'right'; ctx.fillText('⚡', x - 2, y + 3);
+  ctx.restore();
+}
+// めあての じかん：さいきんの クリアの まんなか（3かい たまるまでは はじめの ねだん def）。def の 0.6〜1.5ばい に おさめる
+function speedTarget(hist, def){
+  const h = (hist || []).slice().sort((x, y) => x - y);
+  if(h.length < 3) return def;
+  const med = h.length % 2 ? h[h.length >> 1] : (h[h.length/2 - 1] + h[h.length/2])/2;
+  return Math.round(Math.min(def*1.5, Math.max(def*0.6, med)));
+}

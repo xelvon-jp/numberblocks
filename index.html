@@ -522,6 +522,7 @@ try{
                              hissan: (r.hissan && r.hissan.lv) ? { lv: Math.min(5, (r.hissan.lv|0) + (r.hissan.v !== 2 && (r.hissan.lv|0) >= 2 ? 1 : 0)) || 1, hist: r.hissan.hist || [], v:2 }
                                                                : { lv:1, hist:[], v:2 },
                              kake: (r.kake && r.kake.f) ? r.kake : null,
+                             spd: (r.spd && typeof r.spd === 'object') ? r.spd : {},
                              beg: { idx:b.idx|0, cleared:b.cleared||{}, logs:b.logs||{}, rainbow:b.rainbow||{} } };
       }
       const i = PROFILES.findIndex(pr=>pr.id === v.cur);
@@ -791,16 +792,16 @@ function taskActive(){
 // 「てじゅん」を押したら、見ているあいだに進んでしまわないよう取りやめる。
 // もどすで クリアを取り消したときも進まない（taskDone が外れるので）。
 const AUTO_NEXT_MS = 3000;
-let clearedAt = 0, autoNextOff = false;
+let clearedAt = 0, autoNextOff = false, boltExtra = 0;   // boltExtra … いなずまの ぶん ながく まつ
 function autoNextProgress(){
   if(!taskDone || !clearedAt || autoNextOff) return 0;
-  return Math.min(1, (Date.now() - clearedAt) / AUTO_NEXT_MS);
+  return Math.min(1, (Date.now() - clearedAt) / (AUTO_NEXT_MS + boltExtra));
 }
 function tickAutoNext(){
   if(paradeBreak) return;
   if(!taskActive() || !taskDone || !clearedAt || autoNextOff) return;
   if(stageOpen || setOpen || whoOpen) return;     // ほかの画面を出しているあいだは待つ
-  if(Date.now() - clearedAt >= AUTO_NEXT_MS) nextTask();
+  if(Date.now() - clearedAt >= AUTO_NEXT_MS + boltExtra) nextTask();
 }
 
 // ── みちしるべ（ビギナー）──────────────────────────────────────────
@@ -837,7 +838,7 @@ function resetTaskState(){
   cast = cast.filter(a => a.kind !== 'run');
   drumReset(currentTask());
   taskDone = false; taskLog = []; winFx = null;
-  clearedAt = 0; autoNextOff = false; lastLevelUp = 0; setMiss = 0; setShake = 0;
+  clearedAt = 0; autoNextOff = false; lastLevelUp = 0; setMiss = 0; setShake = 0; boltExtra = 0;
   wayIdx = 0; wayFlash = 0; usedOther = false; lastRainbow = false;
   hintOn = false; hintShownAt = 0; taskStartT = Date.now();
   blocks = []; puzzle = null; clearUndo();
@@ -922,7 +923,7 @@ function hissanStats(){ return hissanStatsOf(profile().id); }
 // まぜまぜの けいさんを はじめた ときに さきに よみこんで おく
 function hissanStartMsg(){
   const st = hissanStats(), lv = HISSAN_LEVELS[st.lv - 1];
-  return { from:'game', type:'start', kind: lv.kind, big: lv.big, label: 'ひっさん' + st.lv + '（' + lv.name + '）', lv: st.lv };
+  return { from:'game', type:'start', kind: lv.kind, big: lv.big, label: 'ひっさん' + st.lv + '（' + lv.name + '）', lv: st.lv, spd: spdHist('h' + lv.kind) };
 }
 function hissanFrameEl(){
   if(hissanFrame && hissanFrame.isConnected) return hissanFrame;
@@ -947,7 +948,7 @@ function startHissanTask(){
   if(!isCalcMode()) setMode('calc');
   resetTaskState();
   const m = hissanStartMsg(), f = hissanFrameEl();
-  hissanTask = { lv: m.lv, kind: m.kind, frame: f };
+  hissanTask = { lv: m.lv, kind: m.kind, frame: f };   // kind は きろく（spd）の なまえにも つかう
   if(hissanReady) hissanPost(m); else hissanPending = m;
   showHissan(true);
   updateTargets();
@@ -956,15 +957,63 @@ function closeHissan(){
   if(hissanTask && hissanTask.frame) showHissan(false);
   hissanTask = null; hissanPending = null;
 }
+// ── いなずま⚡（はやく とけた）─────────────────────────────────────
+// どの もんだいも、もんだいの しゅるい・むずかしさごとに「めあての じかん」を もつ（engine.js の speedTarget）。
+// さいきん 10かいの クリアの まんなか（3かい たまるまでは はじめの ねだん）。はじめの ねだんの 0.6〜1.5ばい。
+// めあて いないに クリアしたら いなずま⚡クリア。レインボーの じょうけんも みたせば いなずまレインボー⚡🌈クリア。
+//   けいさん c1〜c4（おてほん手数 1〜2／3〜4／5〜6／7〜）6びょう ＋ 1て 4びょう
+//   とけい   k<レベル>  10びょう ＋ レベル×3びょう
+//   ひっさん h<しゅるい> ひっさんの 画面で きめる（こたえの 1けた 6びょう ＋ くり上がり 1かい 5びょう）
+//   かけざん m<グループ> KAKE_DEF
+const SPD_WIN = 10;
+function spdOf(id){ const r = taskStore[id] || (taskStore[id] = emptyRec()); return r.spd || (r.spd = {}); }
+function spdHist(key){ return (spdOf(profile().id)[key] || []).slice(); }
+function spdNote(key, ms){
+  const sp = spdOf(profile().id), h = sp[key] || (sp[key] = []);
+  h.push(Math.round(ms)); if(h.length > SPD_WIN) h.splice(0, h.length - SPD_WIN);
+  saveTask();
+}
+// いまの おだい（けいさん・とけい）の めあて
+function taskSpeed(){
+  const t = currentTask();
+  if(isClockTask(t)){ const lv = t.clv || 1; return { key:'k' + lv, target: speedTarget(spdHist('k' + lv), 10000 + 3000*lv) }; }
+  const ref = t.ref || t.best || 1, b = ref <= 2 ? 1 : ref <= 4 ? 2 : ref <= 6 ? 3 : 4;
+  return { key:'c' + b, target: speedTarget(spdHist('c' + b), 6000 + 4000*ref) };
+}
+// クリアした ときに よぶ：いなずまか きめて、はやさを きろく
+function noteSpeed(){
+  const sp = taskSpeed(), ms = Date.now() - (taskStartT || Date.now());
+  const bolt = !window.__speedOff && ms <= sp.target;   // __speedOff … テスト用
+  spdNote(sp.key, ms);
+  boltExtra = bolt ? BOLT_MS : 0;
+  return bolt;
+}
+function clearPraise(rainbow, bolt){
+  if(rainbow && bolt) return { text:'いなずまレインボー⚡🌈クリア！', color:'#c0398a', big:true, rainbow:true, bolt:true };
+  if(bolt) return { text:'いなずま⚡クリア！', color:'#d08a00', big:true, bolt:true };
+  if(rainbow) return { text:RAINBOW_TEXT, color:'#c0398a', big:true, rainbow:true };
+  return null;
+}
+function fxLife(rainbow, bolt){ return (rainbow ? RAINBOW_LIFE : WIN_MS) + (bolt ? BOLT_MS : 0); }
+// あらしと かみなり（あそぶ ところ だけ くらく する）
+function drawGameBolt(ctx){
+  if(!winFx || !winFx.bolt){ if(canvas.style.transform) canvas.style.transform = ''; return; }
+  const top = TAB_H, bottom = sh - bottomPanelH();
+  const shake = drawLightning(ctx, winFx.t, { x:0, y:top, w:sw, h:bottom - top, ground: groundTopY() + 20, textY: top + (groundTopY() - top)*0.32,
+                                              text: winFx.praise && winFx.praise.text });
+  canvas.style.transform = shake ? 'translate(' + ((Math.random() - 0.5)*shake).toFixed(1) + 'px,' + ((Math.random() - 0.5)*shake).toFixed(1) + 'px)' : '';
+}
+
 // ── かけざん（まぜまぜ）────────────────────────────────────────────
 // 1×1〜20×20 の 1つずつ（7×8 と 8×7 は べつ）を 人ごとに おぼえる。手がきで こたえる（ひっさんの 画面）。
 // グループ：A 九九やさしい（×2・×5・×10・おなじ数）／B 九九むずかしい／C 2けた×1けた／D 2けた×2けた（2〜20、×1 は 出さない）。
 // だんかい：0 は A・B、1 で C、2 で D が まざる。いまの だんかいの いちばん あたらしい グループの 8わりを
 //           「8びょう いないに 2かい つづけて せいかい」（m）に したら つぎへ。
 // セット：けいさんの あいだに はさむ。1時間 やすんだら 1もん から（1→2→3→4→5、あとは 5もん）。
-// いなずま⚡：その グループの さいきん 20かいの せいかい（まちがい なし）の まんなか（中央値）の 1.15ばい いない。
-//            3かい たまるまでは 4びょう いない（おとなでも なかなか 出なかったので あまく した）。
-const KAKE_MAX = 5, KAKE_WIN = 20, KAKE_MIN = 3, KAKE_FAST = 0.5, KAKE_SLACK = 1.15, KAKE_FIRST = 4000, KAKE_RB = 8000, KAKE_NEW = 2, KAKE_UNLOCK = 0.8;
+// いなずま⚡：その グループの めあての じかん（speedTarget：さいきん 10かいの まんなか、はじめは KAKE_DEF）いない。金に なるのは まちがい なしの とき。
+// レインボー：まちがい なし。
+const KAKE_MAX = 5, KAKE_RB = 8000, KAKE_NEW = 2, KAKE_UNLOCK = 0.8;
+const KAKE_DEF = { A:4000, B:6000, C:10000, D:15000 };   // ⚡ はじめの めあて（グループごと）
 const MIX_SPECIALS = ['kake', 'clock', 'kake', 'hissan'];
 function kakeGroup(a, b){
   if(a <= 10 && b <= 10){
@@ -977,15 +1026,11 @@ const KAKE_STAGES = [['A', 'B'], ['C'], ['D']];
 const KAKE_ALL = (() => { const out = []; for(let a=2;a<=20;a++) for(let b=2;b<=20;b++) out.push([a, b]); return out; })();
 function kakeOf(id){
   const r = taskStore[id] || (taskStore[id] = emptyRec());
-  return r.kake || (r.kake = { f:{}, gh:{ A:[], B:[], C:[], D:[] }, stage:0, rampN:0, lastSet:0 });
+  return r.kake || (r.kake = { f:{}, stage:0, rampN:0, lastSet:0 });
 }
 function kake(){ return kakeOf(profile().id); }
 // その グループで いなずまに なる はやさ（ms）
-function kakeBolt(g){
-  const h = (kake().gh[g] || []).slice().sort((x, y) => x - y);
-  if(h.length < KAKE_MIN) return KAKE_FIRST;
-  return Math.round(h[Math.floor(KAKE_FAST*(h.length - 1))]*KAKE_SLACK);
-}
+function kakeBolt(g){ return speedTarget(spdHist('m' + g), KAKE_DEF[g]); }
 function kakeStageGroups(st){ return [].concat(...KAKE_STAGES.slice(0, st + 1)); }
 // つぎの セットを えらぶ：まちがい・おそかった もんだい（じかんが きたもの）→ あたらしい もんだい（2つまで）→ おぼえた もんだいの ふくしゅう 1つ → のこりは ランダム
 function kakePick(n, nowT){
@@ -1014,6 +1059,7 @@ function noteKake(m){
   const K = kake(), k = m.a + 'x' + m.b, t = Date.now(), g = kakeGroup(m.a, m.b);
   const x = K.f[k] || (K.f[k] = { c:0, s:0, m:false, g:false, w:0, due:0, last:0 });
   const ok = !m.miss, fast = ok && m.ms <= KAKE_RB, th = kakeBolt(g), bolt = ok && m.ms <= th;
+  spdNote('m' + g, m.ms);
   x.last = t;
   if(!ok){ x.w++; x.s = 0; x.g = false; x.due = t + 60*1000; }
   else {
@@ -1021,7 +1067,6 @@ function noteKake(m){
     if(x.s >= 2) x.m = true;
     if(bolt) x.g = true;
     x.due = x.g ? t + 24*3600*1000*Math.pow(2, Math.min(4, x.c - 1)) : fast ? t + 10*60*1000*Math.pow(2, Math.min(6, x.s)) : t + 5*60*1000;
-    const h = K.gh[g] || (K.gh[g] = []); h.push(m.ms); if(h.length > KAKE_WIN) h.splice(0, h.length - KAKE_WIN);
   }
   // だんかいを すすめる
   const newest = KAKE_STAGES[K.stage];
@@ -1063,7 +1108,7 @@ function onHissanMessage(m){
   if(!hissanTask || !m || m.from !== 'hissan') return;
   if(m.type === 'kake'){ noteKake(m); return; }
   if(m.type === 'done'){
-    if(hissanTask.kind !== 'mul') noteHissanAnswer(m.miss === 0);
+    if(hissanTask.kind !== 'mul'){ noteHissanAnswer(m.miss === 0); if(m.ms) spdNote('h' + hissanTask.kind, m.ms); }
     notePrize(m.ans);                                  // ごほうびの パレードにも 数える（こたえの キャラ。100 より 大きくても そのまま）
     showHissan(false);
     hissanTask.frame = null;                           // hissanTask は のこす（つぎへ で けいさんに もどる）
@@ -2914,13 +2959,14 @@ function clockClear(){
   clearedAt = Date.now(); autoNextOff = false;
   const moves = taskLog.length;
   const rainbow = moves <= (t.best || 1);
-  const praise = rainbow ? { text:RAINBOW_TEXT, color:'#c0398a', big:true, rainbow:true } : null;
+  const bolt = noteSpeed();
+  const praise = clearPraise(rainbow, bolt);
   lastRainbow = rainbow;
   saveTask();
   const g = getClockGeom();
-  winFx = { block:null, num:null, center:{ x:g.cx, y:g.cy, r:g.R }, t:0, praise:praise, moves:moves,
+  winFx = { block:null, num:null, center:{ x:g.cx, y:g.cy, r:g.R }, t:0, praise:praise, moves:moves, bolt,
             arc: rainbow ? rainbowArcPlace() : null, stampAt:{ cx:g.cx, cy:g.cy + g.R*0.38 },
-            landedAt:null, life: rainbow ? RAINBOW_LIFE : WIN_MS };
+            landedAt:null, life: fxLife(rainbow, bolt) };
   for(let i=0;i<70;i++) fxParticles.push(new Particle(g.cx, g.cy));
   if(!lastLevelUp) castRun(t.c.goal);
   const gm = t.c.goal % 60;
@@ -3503,7 +3549,8 @@ function drawWinLines(ctx){
 
 function drawWinStamp(ctx){
   if(!winFx || winFx.preview) return;
-  const t = winFx.t;
+  if(winFx.bolt && winFx.t < BOLT_MS - 200) return;   // いなずまの あいだは おおきな ことばに まかせる
+  const t = winFx.bolt ? winFx.t - (BOLT_MS - 200) : winFx.t;
   const fade = Math.min(1, Math.max(0, ((winFx.life || WIN_MS) - t)/500));
   // 出るときにちょっと行き過ぎてから戻る（ぽんっと押した感じ）
   const e = Math.min(1, t/190);
@@ -3555,7 +3602,8 @@ function updateWinFx(dt){
 // 虹が かかりはじめてからの時間（まだなら -1）
 function rainbowTime(){
   if(!winFx || !(winFx.praise && winFx.praise.rainbow) || winFx.landedAt === null) return -1;
-  return winFx.t - winFx.landedAt;
+  const rt = winFx.t - winFx.landedAt - (winFx.bolt ? BOLT_MS - 300 : 0);   // いなずまの ときは あらしが はれてから
+  return rt < 0 ? -1 : rt;
 }
 
 // ─── おだいカード ─────────────────────────────────────────────────────────
@@ -3662,6 +3710,7 @@ function drawTaskCard(ctx, t){
   const pulse = 0.5+0.5*Math.sin(t*0.006);
   if(!taskStartT) taskStartT = Date.now();   // 開き直したときの数えはじめ
   const lv = TASK_LEVELS[task.lv||0];
+  if(!taskDone && !paradeBreak && taskActive()) drawSpeedBar(ctx, r.x + 22, r.y + r.h + 3, r.w - 30, 1 - (Date.now() - taskStartT)/taskSpeed().target);
 
   ctx.save();
   ctx.fillStyle = taskDone ? 'rgba(255,205,70,0.96)' : 'rgba(255,255,255,0.9)';
@@ -4540,17 +4589,17 @@ function checkTask(){
     const moves = taskLog.length;
     // レインボー：ビギナーは ふつうの キーだけで 作れたら、ふつうは おてほんの 手数いないで 作れたら
     const rainbow = begMode() ? !usedOther : moves <= (t.ref || t.best);
-    const praise = rainbow ? { text:RAINBOW_TEXT, color:'#c0398a', big:true, rainbow:true }
-                           : judgeClear(taskIdx, moves, prevOwn);
+    const bolt = noteSpeed();                         // いなずま：めあての じかん いない
+    const praise = clearPraise(rainbow, bolt) || judgeClear(taskIdx, moves, prevOwn);
     lastRainbow = rainbow;
     if(rainbow){ const cr = curRec(); cr.rainbow = cr.rainbow || {}; cr.rainbow[taskIdx] = true; }
     if(!kept || moves < kept.length) taskLogs[taskIdx] = taskLog.slice();
     saveTask();
     notePrize(t.n);
     const win = blocks.find(b=>b.num===t.n);
-    winFx = { block:win, num:t.n, t:0, praise:praise, moves:moves,
+    winFx = { block:win, num:t.n, t:0, praise:praise, moves:moves, bolt,
               arc: rainbow ? rainbowArcPlace() : null, stampAt: stampPlace(),
-              landedAt: null, life: rainbow ? RAINBOW_LIFE : WIN_MS };
+              landedAt: null, life: fxLife(rainbow, bolt) };
     if(win){
       win.vy = -9; win.onGround = false;              // うれしくて跳ねる
       for(let i=0;i<70;i++) fxParticles.push(new Particle(win.cx, win.y + win.height*0.35));
@@ -5112,6 +5161,7 @@ function drawFrame(ts){
     fxParticles = fxParticles.filter(fp=>fp.life>0);
     for(const fp of fxParticles) fp.draw(ctx);
     drawTaskCard(ctx, walkTime);
+    drawGameBolt(ctx);
   } else if(mode==='factor'){
     lerpFactorBlocks(); drawFactorMode(ctx,walkTime);
     updateWinFx(dt); drawCast(ctx);          // おいわいの プレビューは どの画面でも 見られる
@@ -5183,6 +5233,7 @@ function drawFrame(ts){
       checkWay();
       checkTask();
       drawTaskCard(ctx, walkTime);
+      drawGameBolt(ctx);
       drawFormula(ctx);
       drawNumpad(ctx);
       drawKeyInput(ctx, dt);

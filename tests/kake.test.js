@@ -32,14 +32,14 @@ module.exports = {
     t.eq(r.groups, ['A', 'B', 'C', 'D', 'A'], 'グループ');
   },
 
-  'いなずまは グループの さいきんの せいかいの まんなかの 1.15ばい いない（3かい たまるまでは 4びょう）。まちがえた もんだいは すぐ また 出る。8わり おぼえたら 2けた×1けたへ': async t => {
+  'いなずまは グループの めあて（さいきんの まんなか、はじめは B 6びょう）いない。まちがえた もんだいは すぐ また 出る。8わり おぼえたら 2けた×1けたへ': async t => {
     const p = await t.open();
     const r = await p.evaluate(() => {
       const out = {};
       out.before = kakeBolt('B');
       for(const ms of [9000, 7000, 5000, 4000, 6000]) noteKake({ a:7, b:8, ms, miss:0 });
-      out.th = kakeBolt('B');                       // [4000,5000,6000,7000,9000] の まんなか 6000 × 1.15
-      noteKake({ a:6, b:7, ms:6800, miss:0 });
+      out.th = kakeBolt('B');                       // [4000,5000,6000,7000,9000] の まんなか 6000
+      noteKake({ a:6, b:7, ms:5500, miss:0 });
       out.gold = kake().f['6x7'].g;
       noteKake({ a:6, b:9, ms:3000, miss:1 });
       out.wrongSoon = kake().f['6x9'].due - Date.now() < 2*60*1000;
@@ -51,7 +51,7 @@ module.exports = {
       saveTask(); out.saved = !!JSON.parse(localStorage.getItem(TASK_KEY)).p[profile().id].kake.f['7x8'];
       return out;
     });
-    t.eq([r.before, r.th], [4000, 6900], 'いなずまの はやさ');
+    t.eq([r.before, r.th], [6000, 6000], 'いなずまの はやさ');
     t.eq(r.gold, true, 'いなずまで 金に ならない');
     t.eq([r.wrongSoon, r.inSet], [true, true], 'まちがえた もんだいが すぐ 出ない');
     t.eq([r.stage, r.c], [1, true], 'つぎの だんかいに すすまない');
@@ -60,7 +60,7 @@ module.exports = {
 
   'ひっさんの 画面で セットを とく：たて書きで 手がき、いなずま・レインボー、こたえる たびに しらせて さいごに done': async t => {
     const p = await openH(t);
-    await p.evaluate(() => { window.__msgs = []; tellGame = m => window.__msgs.push(m); startMul([{ a:7, b:8, th:600000 }, { a:3, b:3, th:null }], 'かけざん'); });
+    await p.evaluate(() => { window.__speedOff = false; window.__msgs = []; tellGame = m => window.__msgs.push(m); startMul([{ a:7, b:8, th:600000 }, { a:3, b:3, th:null }], 'かけざん'); });
     const r1 = await p.evaluate(() => ({ P: [P.op, P.a, P.b, P.ans], keys: cellKeys(), hint: writeHint(), why: whyWrong('o', 1).t }));
     t.eq(r1, { P:['×', 7, 8, 56], keys:['o', 't'], hint:'こたえを かこう', why:'7 × 8 は？' }, '1もんめ');
     await p.evaluate(() => { S.lastInk = S.t0 + 2500; judgeCell('t', 5); judgeCell('o', 6); });

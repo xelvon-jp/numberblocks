@@ -145,6 +145,7 @@ function newProblem(fixed){
         drum: [0,0,0], picked:null, bad:new Set(), shake:{},
         msg:'', msgAt:0, hideOnesB:false, cells:null, memo:[], wmsg:'', pulse:null, ask:null };
   S.cells = makeCells(); cele = null; cv.style.transform = '';
+  S.t0 = now(); S.target = P.op === '×' ? null : speedTarget(EMBED && EMBED.spd, hissanDef(P));   // ⚡ めあての じかん
   clearTimeout(inkTimer); inkTimer = null; inkCell = null; pen = null;
   drag = null; anims = []; parts = []; busy = 0; askCol = null; askResolve = null;
   choices = null;
@@ -332,7 +333,10 @@ function finish(){
   S.done = true; S.doneAt = now();
   const l = L();
   for(let i=0;i<60;i++) burst(W/2, (l.rooms.t.y + l.bottom)/2, 1);
-  if(P.op === '×') mulFinish(); else say(S.miss ? 'できた！' : 'レインボー🌈クリア！');
+  S.ms = Math.max(0, (S.lastInk || now()) - (S.t0 || now()));
+  S.rainbow = !S.miss; S.bolt = !window.__speedOff && !!(S.target && S.ms <= S.target);   // __speedOff … テスト用
+  if(P.op === '×') mulFinish();
+  else { if(S.bolt) S.boltAt = now(); say(S.bolt ? boltText() : S.rainbow ? 'レインボー🌈クリア！' : 'できた！'); }
   if(modeId === 'write') celebrateWrite();
 }
 
@@ -683,6 +687,7 @@ function drawWrite(l){
     ctx.fillStyle = S.done && S.bolt ? '#d08a00' : S.done ? '#c0398a' : S.ask ? '#2b3a52' : S.wunk ? '#c07a10' : S.wmsg ? '#c8322f' : '#2b3a52'; ctx.fillText(s, W/2, y);
   });
   ctx.restore();
+  if(!S.done && S.target && S.t0) drawSpeedBar(ctx, wl.px + 22, wl.py - 13, wl.pw - 30, 1 - (t - S.t0)/S.target);
   drawStage(l, wl, t);
   // できた！ 式の ところで キャラが 位ごとに わかれて 計算し、こたえの キャラに なる（こたえの 行は 見えたまま）
   if(S.done){
@@ -695,6 +700,8 @@ function drawWrite(l){
   }
 }
 
+// ひっさんの ⚡ はじめの めあて：こたえの 1けた 6びょう ＋ くり上がり・くり下がり 1かい 5びょう
+function hissanDef(P){ return 6000*String(P.ans).length + 5000*carriesOf(P.op, P.a, P.b); }
 // ─── けいさん中の ぶたい（E かく）────────────────────────────────
 // ひっさんの 下に、キャラで しきを ならべる：[95] − [77] = [  ]。
 // 右がわ（こたえ）は ぜんぶ 書けるまで からっぽの わく。書けたら こたえの キャラが とびこむ。
@@ -919,7 +926,7 @@ async function celebrateWrite(){
   ans.pop = now(); ans.bounce = now() + 300;
   for(let i=0;i<50;i++) burst(xC, G - Math.min(sp.rows, rowsH)*bs*ans.big/2, 1);
   cele.finished = true;
-  await wait(AUTO_NEXT); if(!ok()) return;
+  await wait(Math.max(AUTO_NEXT, fxRemain() + 300)); if(!ok()) return;
   goNext();
 }
 
@@ -952,7 +959,7 @@ async function celebrateBig(){
   ans.pop = now(); ans.bounce = now() + 300;
   for(let i=0;i<50;i++) burst(xC, G - rowsOf(P.ans)*cele.bs*ans.big/2, 1);
   cele.finished = true;
-  await wait(AUTO_NEXT); if(!ok()) return;
+  await wait(Math.max(AUTO_NEXT, fxRemain() + 300)); if(!ok()) return;
   goNext();
 }
 
@@ -962,7 +969,7 @@ async function celebrateBig(){
 // ms は もんだいが 出てから さいごの 1かくを 書きおわるまで（よみとりを まつ 0.75びょうは いれない）。
 // まちがえずに 8びょう いない → レインボー🌈クリア。その グループの いつもの はやさ（th）いない → いなずま⚡クリア。
 let MUL = null;   // { set, i, label }
-const MUL_RAINBOW = 8000, MUL_NEXT = 1400;
+const MUL_NEXT = 1400;
 function startMul(set, label){
   MUL = { set: set.length ? set : [{ a:7, b:8, th:null }], i:0, label: label || 'かけざん' };
   mulShow();
@@ -970,7 +977,7 @@ function startMul(set, label){
 function mulShow(){
   const q = MUL.set[MUL.i];
   setProblem('×', q.a, q.b);
-  S.t0 = now(); S.th = q.th || null;
+  S.t0 = now(); S.target = q.th || null;
   if(EMBED) EMBED.label = MUL.label + '（' + (MUL.i + 1) + '/' + MUL.set.length + '）';
 }
 function mulNext(){
@@ -980,12 +987,8 @@ function mulNext(){
   tellGame({ type:'done', kind:'mul', ans: last.a*last.b, miss:0 });
 }
 function mulFinish(){
-  const ms = Math.max(0, (S.lastInk || now()) - (S.t0 || now()));
-  const clean = !S.miss;
-  S.ms = ms;
-  S.bolt = clean && S.th && ms <= S.th;              // いなずま
-  S.rainbow = clean && ms <= MUL_RAINBOW;
-  say(S.bolt ? 'いなずま⚡クリア！' : S.rainbow ? 'レインボー🌈クリア！' : 'できた！');
+  const ms = S.ms;
+  say(S.bolt ? boltText() : S.rainbow ? 'レインボー🌈クリア！' : 'できた！');
   tellGame({ type:'kake', a:P.a, b:P.b, ms, miss:S.miss });
 }
 // できた！：a の キャラが b にん ならんで（a が b こ）、がったいして こたえの キャラに なる。いなずまは そのあと ビュン！と はしる
@@ -1007,19 +1010,20 @@ async function celebrateMul(){
   const sp = blockSpec(P.ans), rowsH = P.ans > 100 ? 10 + blockSpec(P.ans - 100).rows + 1 : sp.rows;
   const big = Math.min(1.8, (G - wl.py - 30)/(rowsH*cele.bs), (wl.pw*0.8)/(sp.cols*cele.bs));
   const ans = celeActor(P.ans, S.bolt ? wl.px - 60 : W/2, G); ans.big = big; ans.aura = !!S.bolt;
-  if(S.bolt){ ans.alpha = 1; celeMove(ans, W/2, G, 260, 0); S.boltAt = now(); }   // ビュン！と はしって きて とまる
+  if(S.bolt){ ans.alpha = 1; celeMove(ans, W/2, G, 260, 0); S.boltAt = now(); S.dash = true; }   // ビュン！と はしって きて とまる
   ans.pop = now() + (S.bolt ? 260 : 0); ans.bounce = now() + 300;
   for(let i=0;i<(S.bolt ? 70 : 40);i++) burst(W/2, G - Math.min(sp.rows, rowsH)*cele.bs*big/2, 1, S.bolt ? '#ffd23a' : undefined);
   cele.finished = true;
-  await wait(S.bolt ? Math.max(MUL_NEXT, BOLT_MS + 200) : MUL_NEXT); if(!ok()) return;
+  await wait(Math.max(MUL_NEXT, fxRemain() + 300)); if(!ok()) return;
   goNext();
 }
-// レインボー🌈クリアの にじ：ひっさんの うえに 左から 右へ かかる（まちがい なし。かけざんは 8びょう いないで いなずま じゃない とき）
+// レインボー🌈クリアの にじ：ひっさんの うえに 左から 右へ かかる（まちがい なし）。いなずまの ときは あらしが はれてから
 const ARC_COLORS = ['#e8413a', '#f08a24', '#f4c81c', '#46b04a', '#3a8fe0', '#4b4fc4', '#8a4fd0'];
 function drawArc(wl, t){
-  const on = P.op === '×' ? S.rainbow && !S.bolt : !S.miss;
-  if(!S.done || !on) return;
-  const e = t - S.doneAt, k = Math.min(1, e/900), ease = 1 - Math.pow(1 - k, 3);
+  if(!S.done || !S.rainbow) return;
+  if(S.bolt && !S.boltAt) return;                      // いなずまの あとに かかる
+  const e = t - (S.bolt ? S.boltAt + BOLT_MS - 300 : S.doneAt); if(e < 0) return;
+  const k = Math.min(1, e/900), ease = 1 - Math.pow(1 - k, 3);
   const cx = W/2, cy = wl.yLine - 6, band = Math.max(6, wl.cw*0.11), r0 = Math.min(W*0.47, wl.yLine - wl.py - 10);
   ctx.save(); ctx.globalAlpha = 0.85; ctx.lineCap = 'butt';
   ARC_COLORS.forEach((c, i) => {
@@ -1030,64 +1034,23 @@ function drawArc(wl, t){
   if(k >= 1 && Math.floor(e/90) % 3 === 0) burst(cx + (Math.random() - 0.5)*r0*2, cy - Math.random()*r0, 1, ARC_COLORS[Math.floor(Math.random()*7)]);
   ctx.restore();
 }
-// いなずまの えんしゅつ（drawWrite の さいごに かく）。だいたい 2.8びょう：
-//   あらしの ように くらく なり、かみなりが 3ぼん おちて そのたびに ぴかっ・ぐらぐら、
-//   まんなかに 金いろの「いなずま⚡クリア！」、こたえの キャラは でんきの オーラ
-const BOLT_MS = 2800;
-function boltPath(x0, y0, y1, seed){
-  const pts = [[x0, y0]], n = 7;
-  for(let i=1;i<=n;i++){ const r = Math.sin(seed*13.7 + i*4.1); pts.push([x0 + r*34 + (i === n ? 0 : (i%2 ? -14 : 14)), y0 + (y1 - y0)*i/n]); }
-  return pts;
-}
+// いなずまの えんしゅつ（engine.js の drawLightning。drawWrite の さいごに かく）
+function boltText(){ return S.rainbow ? 'いなずまレインボー⚡🌈クリア！' : 'いなずま⚡クリア！'; }
 function drawBolt(t){
   if(!S.bolt || !S.boltAt){ if(cv.style.transform) cv.style.transform = ''; return; }
   const e = t - S.boltAt;
   if(e < 0 || e > BOLT_MS){ if(cv.style.transform) cv.style.transform = ''; return; }
-  const wl = WL(), strikes = [0, 380, 760];
-  ctx.save();
-  // あらしの くらさ
-  const dark = e < 200 ? e/200 : e > BOLT_MS - 500 ? Math.max(0, (BOLT_MS - e)/500) : 1;
-  ctx.fillStyle = 'rgba(20,20,60,' + 0.35*dark + ')'; ctx.fillRect(0, 0, W, H);
-  // かみなり（3ぼん）と ぴかっ
-  let shake = 0;
-  strikes.forEach((at, k) => {
-    const d = e - at; if(d < 0 || d > 520) return;
-    if(d < 140){ ctx.fillStyle = 'rgba(255,255,235,' + 0.8*(1 - d/140) + ')'; ctx.fillRect(0, 0, W, H); }
-    shake = Math.max(shake, d < 320 ? (1 - d/320)*9 : 0);
-    const x0 = [W*0.25, W*0.75, W*0.5][k], pts = boltPath(x0, -10, wl.yLine - 10, k + 1);
-    ctx.globalAlpha = Math.max(0, 1 - d/520);
-    for(const [lw, col, blur] of [[16, 'rgba(255,230,80,0.35)', 30], [7, '#ffe14a', 18], [3, '#ffffff', 0]]){
-      ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineJoin = 'miter'; ctx.shadowColor = '#fff6a0'; ctx.shadowBlur = blur;
-      ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
-    }
-    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
-  });
-  // はしってきた あとの せん
-  if(e < 600){
-    ctx.globalAlpha = 1 - e/600; ctx.strokeStyle = 'rgba(255,210,60,0.95)'; ctx.lineWidth = 4;
+  const wl = WL();
+  const shake = drawLightning(ctx, e, { x:0, y:0, w:W, h:H, ground: wl.yLine - 10, textY: wl.py + 45, text: boltText() });
+  if(S.dash && e < 600){   // かけざん：はしってきた あとの せん
+    ctx.save(); ctx.globalAlpha = 1 - e/600; ctx.strokeStyle = 'rgba(255,210,60,0.95)'; ctx.lineWidth = 4;
     for(let i=0;i<6;i++){ const y = wl.yLine - 26 - i*16; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W/2 - 50 - i*10, y); ctx.stroke(); }
-    ctx.globalAlpha = 1;
-  }
-  // 金いろの おおきな ことば（ぽんっと でて、ぴりぴり ひかる）
-  if(e > 250){
-    const k = Math.min(1, (e - 250)/260), pop = k < 1 ? 0.3 + 1.0*k + 0.25*Math.sin(k*Math.PI) : 1 + 0.04*Math.sin(e*0.02);
-    const fade = e > BOLT_MS - 400 ? Math.max(0, (BOLT_MS - e)/400) : 1;
-    const txt = 'いなずま⚡クリア！';
-    let fs = 50; ctx.font = '900 ' + fs + 'px sans-serif';
-    fs = Math.floor(fs*Math.min(1, (W*0.86)/(ctx.measureText(txt).width + fs*0.22)));   // はばに おさめる
-    const cx = W/2, cy = wl.py + fs*0.9;
-    ctx.save(); ctx.globalAlpha = fade; ctx.translate(cx, cy); ctx.scale(pop, pop); ctx.rotate(-0.05);
-    ctx.font = '900 ' + fs + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
-    ctx.shadowColor = '#fff2a0'; ctx.shadowBlur = 24 + 10*Math.sin(e*0.03);
-    ctx.strokeStyle = '#3a2160'; ctx.lineWidth = fs*0.22; ctx.strokeText(txt, 0, 0);
-    ctx.shadowBlur = 0;
-    const g = ctx.createLinearGradient(0, -fs/2, 0, fs/2); g.addColorStop(0, '#fff6b0'); g.addColorStop(0.5, '#ffd23a'); g.addColorStop(1, '#f08a10');
-    ctx.fillStyle = g; ctx.fillText(txt, 0, 0);
     ctx.restore();
   }
-  ctx.restore();
   cv.style.transform = shake ? 'translate(' + ((Math.random() - 0.5)*shake).toFixed(1) + 'px,' + ((Math.random() - 0.5)*shake).toFixed(1) + 'px)' : '';
 }
+// のこりの えんしゅつの じかん（いなずま → にじ が おわるまで まつ）
+function fxRemain(){ return S.bolt && S.boltAt ? Math.max(0, S.boltAt + BOLT_MS + (S.rainbow ? 1300 : 0) - now()) : 0; }
 // こたえの キャラの でんきの オーラ（drawCele の まえに かく）
 function drawAura(t){
   if(!S.bolt || !S.boltAt || !cele) return;
@@ -1342,7 +1305,7 @@ function drawRooms(l){
 function goNext(){
   if(!S.done || S.sent) return;
   if(MUL){ S.sent = true; mulNext(); return; }
-  if(EMBED){ S.sent = true; tellGame({ type:'done', op:P.op, a:P.a, b:P.b, ans:P.ans, miss:S.miss }); }
+  if(EMBED){ S.sent = true; tellGame({ type:'done', op:P.op, a:P.a, b:P.b, ans:P.ans, miss:S.miss, ms:S.ms, bolt:!!S.bolt }); }
   else newProblem();
 }
 const AUTO_NEXT = 2000;   // E かく：できた！の アニメが おわって この ms で つぎの もんだいへ
@@ -1508,7 +1471,7 @@ if(EMBED){
   window.addEventListener('message', e => {
     const m = e.data; if(!m || m.from !== 'game') return;
     if(m.type === 'start'){
-      EMBED.kind = m.kind || 'add'; EMBED.big = !!m.big; EMBED.label = m.label || 'ひっさん';
+      EMBED.kind = m.kind || 'add'; EMBED.big = !!m.big; EMBED.label = m.label || 'ひっさん'; EMBED.spd = m.spd || [];
       kindId = EMBED.kind; HW = isHalloween(); closeTrain(); paused = false;
       if(m.kind === 'mul') startMul(m.set || [], m.label); else { MUL = null; newProblem(); }
     } else if(m.type === 'hide'){ paused = true; MUL = null; closeTrain(); newProblem(); }

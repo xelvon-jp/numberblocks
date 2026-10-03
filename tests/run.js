@@ -63,6 +63,8 @@ function makeT(browser, baseUrl){
         deviceScaleFactor:1, isMobile:true, hasTouch:true });
       contexts.push(ctx);
       const page = await ctx.newPage();
+      // テストは いっしゅんで とくので、いなずま⚡は ふだん とめておく（たしかめる テストだけ window.__speedOff = false）
+      await page.addInitScript(() => { window.__speedOff = true; });
       page.on('pageerror', e => errors.push(String(e && e.message || e)));
       // スクリプトが読みこめないと drawFrame ができないので、長く待たずに理由を出して止める
       // （engine.js と同じ名前の const を置いて全部止まったことがある）
