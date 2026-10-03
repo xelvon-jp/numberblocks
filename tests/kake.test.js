@@ -32,14 +32,14 @@ module.exports = {
     t.eq(r.groups, ['A', 'B', 'C', 'D', 'A'], 'グループ');
   },
 
-  'いなずまは グループの さいきんの せいかいの はやい 3わり。まちがえた もんだいは すぐ また 出る。8わり おぼえたら 2けた×1けたへ': async t => {
+  'いなずまは グループの さいきんの せいかいの まんなかの 1.15ばい いない（3かい たまるまでは 4びょう）。まちがえた もんだいは すぐ また 出る。8わり おぼえたら 2けた×1けたへ': async t => {
     const p = await t.open();
     const r = await p.evaluate(() => {
       const out = {};
       out.before = kakeBolt('B');
       for(const ms of [9000, 7000, 5000, 4000, 6000]) noteKake({ a:7, b:8, ms, miss:0 });
-      out.th = kakeBolt('B');                       // [4000,5000,6000,7000,9000] の 3わり → 5000
-      noteKake({ a:6, b:7, ms:4500, miss:0 });
+      out.th = kakeBolt('B');                       // [4000,5000,6000,7000,9000] の まんなか 6000 × 1.15
+      noteKake({ a:6, b:7, ms:6800, miss:0 });
       out.gold = kake().f['6x7'].g;
       noteKake({ a:6, b:9, ms:3000, miss:1 });
       out.wrongSoon = kake().f['6x9'].due - Date.now() < 2*60*1000;
@@ -51,7 +51,7 @@ module.exports = {
       saveTask(); out.saved = !!JSON.parse(localStorage.getItem(TASK_KEY)).p[profile().id].kake.f['7x8'];
       return out;
     });
-    t.eq([r.before, r.th], [null, 5000], 'いなずまの はやさ');
+    t.eq([r.before, r.th], [4000, 6900], 'いなずまの はやさ');
     t.eq(r.gold, true, 'いなずまで 金に ならない');
     t.eq([r.wrongSoon, r.inSet], [true, true], 'まちがえた もんだいが すぐ 出ない');
     t.eq([r.stage, r.c], [1, true], 'つぎの だんかいに すすまない');

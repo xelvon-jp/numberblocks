@@ -960,8 +960,9 @@ function closeHissan(){
 // だんかい：0 は A・B、1 で C、2 で D が まざる。いまの だんかいの いちばん あたらしい グループの 8わりを
 //           「8びょう いないに 2かい つづけて せいかい」（m）に したら つぎへ。
 // セット：けいさんの あいだに はさむ。1時間 やすんだら 1もん から（1→2→3→4→5、あとは 5もん）。
-// いなずま⚡：その グループの さいきん 20かいの せいかい（まちがい なし）の 中で はやい ほうから 3わり いない（5かい たまるまで なし）。
-const KAKE_MAX = 5, KAKE_WIN = 20, KAKE_MIN = 5, KAKE_FAST = 0.3, KAKE_RB = 8000, KAKE_NEW = 2, KAKE_UNLOCK = 0.8;
+// いなずま⚡：その グループの さいきん 20かいの せいかい（まちがい なし）の まんなか（中央値）の 1.15ばい いない。
+//            3かい たまるまでは 4びょう いない（おとなでも なかなか 出なかったので あまく した）。
+const KAKE_MAX = 5, KAKE_WIN = 20, KAKE_MIN = 3, KAKE_FAST = 0.5, KAKE_SLACK = 1.15, KAKE_FIRST = 4000, KAKE_RB = 8000, KAKE_NEW = 2, KAKE_UNLOCK = 0.8;
 const MIX_SPECIALS = ['kake', 'clock', 'kake', 'hissan'];
 function kakeGroup(a, b){
   if(a <= 10 && b <= 10){
@@ -977,11 +978,11 @@ function kakeOf(id){
   return r.kake || (r.kake = { f:{}, gh:{ A:[], B:[], C:[], D:[] }, stage:0, rampN:0, lastSet:0 });
 }
 function kake(){ return kakeOf(profile().id); }
-// その グループで いなずまに なる はやさ（ms）。まだ たりなければ null
+// その グループで いなずまに なる はやさ（ms）
 function kakeBolt(g){
   const h = (kake().gh[g] || []).slice().sort((x, y) => x - y);
-  if(h.length < KAKE_MIN) return null;
-  return h[Math.floor(KAKE_FAST*(h.length - 1))];
+  if(h.length < KAKE_MIN) return KAKE_FIRST;
+  return Math.round(h[Math.floor(KAKE_FAST*(h.length - 1))]*KAKE_SLACK);
 }
 function kakeStageGroups(st){ return [].concat(...KAKE_STAGES.slice(0, st + 1)); }
 // つぎの セットを えらぶ：まちがい・おそかった もんだい（じかんが きたもの）→ あたらしい もんだい（2つまで）→ おぼえた もんだいの ふくしゅう 1つ → のこりは ランダム
@@ -1010,7 +1011,7 @@ function kakePick(n, nowT){
 function noteKake(m){
   const K = kake(), k = m.a + 'x' + m.b, t = Date.now(), g = kakeGroup(m.a, m.b);
   const x = K.f[k] || (K.f[k] = { c:0, s:0, m:false, g:false, w:0, due:0, last:0 });
-  const ok = !m.miss, fast = ok && m.ms <= KAKE_RB, th = kakeBolt(g), bolt = ok && th !== null && m.ms <= th;
+  const ok = !m.miss, fast = ok && m.ms <= KAKE_RB, th = kakeBolt(g), bolt = ok && m.ms <= th;
   x.last = t;
   if(!ok){ x.w++; x.s = 0; x.g = false; x.due = t + 60*1000; }
   else {
