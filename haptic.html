@@ -22,44 +22,51 @@
 </head>
 <body>
 <h1>ぶるっ テスト</h1>
-<p>ボタンを おして、スマホが「コツッ」と ふるえるか ためします。どれが ふるえたか おしえてください。</p>
+<p>ボタンを おして、スマホが「コツッ」と ふるえるか ためします。どれが ふるえたか と、いちばん 下の ログの さいごの 2ぎょう（iOS の バージョン）を おしえてください。</p>
 
 <div class="card">
   <label class="real"><input type="checkbox" switch> ← まず これを さわって、コツッと なるか たしかめる</label>
   <p style="font-size:13px">ならない ときは「せってい → サウンドと触覚 → システムの触覚」が オンか 見てください。</p>
 </div>
 
-<button class="btn" data-p="once">1. 1かい<small>すぐ 1かい</small></button>
-<button class="btn" data-p="three">2. かみなり 3ぼん<small>0・0.38・0.76びょう</small></button>
-<button class="btn" data-p="burst">3. ゴロゴロ（れんぞく）<small>0.06びょう おきに 10かい</small></button>
-<button class="btn" data-p="later1">4. 1びょう あとに 1かい<small>いちばん だいじ（ゲームでは すこし あとに かみなりが でる）</small></button>
-<button class="btn" data-p="later3">5. 3びょう あとに 1かい<small>もっと あとでも なるか</small></button>
-<button class="btn" data-p="laterThree">6. 1びょう あとに かみなり 3ぼん<small>ゲームに いちばん ちかい</small></button>
+<p><b>やりかた A</b>（いれこ・head に つくって すぐ けす）</p>
+<button class="btn" data-m="A" data-p="once">A1. すぐ 1かい</button>
+<button class="btn" data-m="A" data-p="later1">A2. 1びょう あとに 1かい</button>
+<button class="btn" data-m="A" data-p="three">A3. かみなり 3ぼん（0・0.38・0.76びょう）</button>
+<p><b>やりかた B</b>（いれこ・body に 小さく おいておく）</p>
+<button class="btn" data-m="B" data-p="once">B1. すぐ 1かい</button>
+<button class="btn" data-m="B" data-p="later1">B2. 1びょう あとに 1かい</button>
+<button class="btn" data-m="B" data-p="three">B3. かみなり 3ぼん</button>
+<p><b>やりかた C</b>（スイッチそのものを クリック）</p>
+<button class="btn" data-m="C" data-p="once">C1. すぐ 1かい</button>
+<button class="btn" data-m="C" data-p="later1">C2. 1びょう あとに 1かい</button>
 
 <div class="card"><div id="log"></div></div>
 
-<!-- かくした スイッチ（ラベルを クリックすると iPhone が コツッと ふるえる） -->
-<input type="checkbox" switch id="hx" class="hidden-switch" aria-hidden="true" tabindex="-1">
-<label for="hx" id="hxl" class="hidden-switch" aria-hidden="true"></label>
+<!-- B：いれこの スイッチを 画面の すみに 1px で おいておく -->
+<label id="bl" aria-hidden="true" style="position:fixed;left:0;bottom:0;width:1px;height:1px;overflow:hidden;opacity:0.01"><input type="checkbox" switch id="bi" tabindex="-1"></label>
 
 <script>
-const lab = document.getElementById('hxl'), logEl = document.getElementById('log');
+const logEl = document.getElementById('log');
 const t0 = performance.now();
 function log(s){ logEl.textContent = ((performance.now() - t0)/1000).toFixed(2) + 's ' + s + '\n' + logEl.textContent; }
-function tick(){
-  if(navigator.vibrate) navigator.vibrate(30);   // Android
-  lab.click();                                    // iPhone（iOS 18 いこう）
-}
+const M = {
+  // A：ios-haptics と おなじ。label の 中に switch を いれて head に おき、label を クリックして すぐ けす
+  A(){ const l = document.createElement('label'); l.ariaHidden = 'true'; l.style.display = 'none';
+       const i = document.createElement('input'); i.type = 'checkbox'; i.setAttribute('switch', '');
+       l.appendChild(i); document.head.appendChild(l); l.click(); document.head.removeChild(l); },
+  B(){ document.getElementById('bl').click(); },
+  C(){ document.getElementById('bi').click(); },
+};
+let how = 'A';
+function tick(){ if(navigator.vibrate) navigator.vibrate(30); M[how](); }
 const at = (ms, n) => setTimeout(() => { tick(); log('  コツッ ' + (n || '')); }, ms);
 const P = {
   once(){ tick(); log('  コツッ'); },
   three(){ [0, 380, 760].forEach((ms, i) => at(ms, i + 1)); },
-  burst(){ for(let i=0;i<10;i++) at(i*60, i + 1); },
   later1(){ at(1000); },
-  later3(){ at(3000); },
-  laterThree(){ [0, 380, 760].forEach((ms, i) => at(1000 + ms, i + 1)); },
 };
-document.querySelectorAll('.btn').forEach(b => b.addEventListener('click', () => { log('▶ ' + b.firstChild.textContent.trim()); P[b.dataset.p](); }));
+document.querySelectorAll('.btn').forEach(b => b.addEventListener('click', () => { how = b.dataset.m; log('▶ ' + b.textContent.trim()); P[b.dataset.p](); }));
 log('switch: ' + ('switch' in HTMLInputElement.prototype ? 'あり' : 'なし') + ' / vibrate: ' + (navigator.vibrate ? 'あり' : 'なし'));
 log(navigator.userAgent);
 </script>
