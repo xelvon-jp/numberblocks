@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>ぶるっ テスト</title>
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; padding: 16px 16px 40px; font-family: -apple-system, system-ui, sans-serif; background: #eaf8f2; color: #2b3a52; }
+  h1 { font-size: 22px; margin: 8px 0 4px; }
+  p { margin: 6px 0; line-height: 1.5; font-size: 15px; }
+  .btn { display: block; width: 100%; margin: 10px 0; padding: 16px 14px; border: 0; border-radius: 14px; background: #3f8fd0; color: #fff;
+         font-size: 18px; font-weight: 700; text-align: left; -webkit-tap-highlight-color: transparent; }
+  .btn small { display: block; font-weight: 400; font-size: 13px; opacity: .9; margin-top: 2px; }
+  .btn:active { background: #2d74ad; }
+  .card { background: #fff; border-radius: 14px; padding: 12px 14px; margin: 12px 0; }
+  #log { font-size: 13px; white-space: pre-wrap; color: #555; }
+  .hidden-switch { position: absolute; left: -9999px; top: 0; opacity: 0; }
+  label.real { display: flex; align-items: center; gap: 10px; font-size: 16px; }
+</style>
+</head>
+<body>
+<h1>ぶるっ テスト</h1>
+<p>ボタンを おして、スマホが「コツッ」と ふるえるか ためします。どれが ふるえたか おしえてください。</p>
+
+<div class="card">
+  <label class="real"><input type="checkbox" switch> ← まず これを さわって、コツッと なるか たしかめる</label>
+  <p style="font-size:13px">ならない ときは「せってい → サウンドと触覚 → システムの触覚」が オンか 見てください。</p>
+</div>
+
+<button class="btn" data-p="once">1. 1かい<small>すぐ 1かい</small></button>
+<button class="btn" data-p="three">2. かみなり 3ぼん<small>0・0.38・0.76びょう</small></button>
+<button class="btn" data-p="burst">3. ゴロゴロ（れんぞく）<small>0.06びょう おきに 10かい</small></button>
+<button class="btn" data-p="later1">4. 1びょう あとに 1かい<small>いちばん だいじ（ゲームでは すこし あとに かみなりが でる）</small></button>
+<button class="btn" data-p="later3">5. 3びょう あとに 1かい<small>もっと あとでも なるか</small></button>
+<button class="btn" data-p="laterThree">6. 1びょう あとに かみなり 3ぼん<small>ゲームに いちばん ちかい</small></button>
+
+<div class="card"><div id="log"></div></div>
+
+<!-- かくした スイッチ（ラベルを クリックすると iPhone が コツッと ふるえる） -->
+<input type="checkbox" switch id="hx" class="hidden-switch" aria-hidden="true" tabindex="-1">
+<label for="hx" id="hxl" class="hidden-switch" aria-hidden="true"></label>
+
+<script>
+const lab = document.getElementById('hxl'), logEl = document.getElementById('log');
+const t0 = performance.now();
+function log(s){ logEl.textContent = ((performance.now() - t0)/1000).toFixed(2) + 's ' + s + '\n' + logEl.textContent; }
+function tick(){
+  if(navigator.vibrate) navigator.vibrate(30);   // Android
+  lab.click();                                    // iPhone（iOS 18 いこう）
+}
+const at = (ms, n) => setTimeout(() => { tick(); log('  コツッ ' + (n || '')); }, ms);
+const P = {
+  once(){ tick(); log('  コツッ'); },
+  three(){ [0, 380, 760].forEach((ms, i) => at(ms, i + 1)); },
+  burst(){ for(let i=0;i<10;i++) at(i*60, i + 1); },
+  later1(){ at(1000); },
+  later3(){ at(3000); },
+  laterThree(){ [0, 380, 760].forEach((ms, i) => at(1000 + ms, i + 1)); },
+};
+document.querySelectorAll('.btn').forEach(b => b.addEventListener('click', () => { log('▶ ' + b.firstChild.textContent.trim()); P[b.dataset.p](); }));
+log('switch: ' + ('switch' in HTMLInputElement.prototype ? 'あり' : 'なし') + ' / vibrate: ' + (navigator.vibrate ? 'あり' : 'なし'));
+log(navigator.userAgent);
+</script>
+</body>
+</html>
