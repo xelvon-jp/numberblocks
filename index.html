@@ -630,6 +630,7 @@ function setProfile(i){
   saveTask();                 // いままでの子の記録をしまう
   profileIdx = i;
   loadProfileState();
+  try{ play.update(); }catch(e){}   // あそぶ じかんの バー（こども だけ）
   taskDone = false; taskLog = []; winFx = null;
   hintOn = false; hintShownAt = 0; taskStartT = Date.now();
   blocks = []; puzzle = null; clearUndo();
@@ -5363,6 +5364,9 @@ const play = (() => {
   function refill(){ st.used = 0; nagAt = 0; lock.classList.remove('on'); pop.classList.remove('on'); }
   function restIfAway(){ if(Date.now() - st.last >= PLAY_REST) refill(); }
   function remain(){ return st.limit ? st.limit*60000 - st.used : Infinity; }
+  // かぞえるのは こども（ひなた）で あそんで いる ときだけ。パパ・ママの ときは バーも 出さず へらさない
+  function kidNow(){ try{ return !!profile().kid; }catch(e){ return true; } }
+  const counting = () => !!st.limit && kidNow();
   // いま もんだいを といている とちゅうか（おわるまで まつ）
   function busy(){
     if(typeof hissanTask !== 'undefined' && hissanTask && hissanTask.frame) return true;
@@ -5373,7 +5377,7 @@ const play = (() => {
     const dt = Math.min(5000, Math.max(0, t - tick)); tick = t;
     if(document.visibilityState === 'visible'){
       if(stopped()) restIfAway();        // とまって 1じかん たったら また あそべる
-      else {
+      else if(counting()){
         const before = remain();
         st.used += dt; st.last = t;
         const r = remain();
@@ -5382,14 +5386,14 @@ const play = (() => {
     }
     if(t - saved > 5000) save();
     const r = remain();
-    bar.style.display = st.limit ? 'block' : 'none';
-    if(st.limit){
+    bar.style.display = counting() ? 'block' : 'none';
+    if(counting()){
       const k = Math.max(0, r)/(st.limit*60000);
       fill.style.width = (k*100).toFixed(2) + '%';
       fill.style.background = r <= 60000 ? '#e0403f' : r <= 180000 ? '#f0a020' : '#3fbf5a';
     }
     left.classList.toggle('blink', t < blinkUntil && !stopped());
-    if(st.limit && r <= 0 && !stopped() && !pop.classList.contains('on') && !pin.classList.contains('on') && !busy()){
+    if(counting() && r <= 0 && !stopped() && !pop.classList.contains('on') && !pin.classList.contains('on') && !busy()){
       if(st.mode === 'lock') lock.classList.add('on');
       else if(t >= nagAt) pop.classList.add('on');
     }

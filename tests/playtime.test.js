@@ -50,7 +50,7 @@ module.exports = {
     await p.evaluate(MIN => { play._set(13*MIN); play.update(); }, MIN);
     t.eq((await lockSt(p)).lock, true, 'とまらない');
     await p.reload(); await p.waitForFunction(() => typeof play !== 'undefined');
-    await p.evaluate(() => { whoOpen = false; play.update(); });
+    await p.evaluate(() => { whoOpen = false; setProfile(0); play.update(); });   // ひらくと パパから。ひなたを えらぶと とまる
     t.eq((await lockSt(p)).lock, true, 'ひらきなおすと あそべて しまう');
     await p.evaluate(MIN => { play._set(13*MIN, Date.now() - 61*MIN); play.update(); }, MIN);
     t.ok(!(await lockSt(p)).lock && await p.evaluate(MIN => play.remain() > 11.9*MIN, MIN), '1じかん たっても もどらない');
@@ -117,7 +117,24 @@ module.exports = {
     // 1じかん まえに とじた ことに して ひらきなおす
     await p.evaluate(MIN => { play._set(21*MIN, Date.now() - 61*MIN); localStorage.setItem('nb_play', JSON.stringify(play.st())); }, MIN);
     await p.reload(); await p.waitForFunction(() => typeof play !== 'undefined');
+    await p.evaluate(() => { whoOpen = false; setProfile(0); play.update(); });
     const s = await state(p);
     t.ok(s.w > 99 && !s.pop, '1じかん やすんでも もどらない: ' + JSON.stringify(s));
+  },
+
+  'パパ・ママで あそぶ ときは じかんを かぞえない（バーも 出さず、0 でも とめない）。ひなたに もどすと つづきから': async t => {
+    const p = await t.open();
+    await p.evaluate(MIN => { play._set(6*MIN); play.update(); }, MIN);
+    await p.evaluate(() => { setProfile(PROFILES.findIndex(x => x.id === 'papa')); });
+    t.eq((await state(p)).bar, 'none', 'パパで バーが 出る');
+    const before = await p.evaluate(() => play.remain());
+    await p.waitForTimeout(2300); await p.evaluate(() => play.update());
+    t.ok(await p.evaluate(b => play.remain() === b, before), 'パパの あいだも へる');
+    await p.evaluate(MIN => { play._set(13*MIN); play.update(); }, MIN);
+    t.eq((await lockSt(p)).lock, false, 'パパでも とまる');
+    await p.evaluate(() => { setProfile(PROFILES.findIndex(x => x.id === 'mama')); play.update(); });
+    t.eq([(await state(p)).bar, (await lockSt(p)).lock], ['none', false], 'ママで バー／とまる');
+    await p.evaluate(() => { setProfile(0); play.update(); });
+    t.eq([(await state(p)).bar, (await lockSt(p)).lock], ['block', true], 'ひなたに もどしても とまらない');
   },
 };
