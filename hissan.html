@@ -688,6 +688,7 @@ function drawWrite(l){
   if(S.done){
     const e = Math.min(1, (t - S.doneAt)/400);
     ctx.save(); ctx.fillStyle = 'rgba(255,255,255,' + 0.85*e + ')'; ctx.beginPath(); ctx.roundRect(wl.px, wl.py, wl.pw, wl.yLine - 4 - wl.py, [16, 16, 0, 0]); ctx.fill(); ctx.restore();
+    drawArc(wl, t);
     drawAura(t);
     drawCele(t);
     drawBolt(t);
@@ -1012,6 +1013,22 @@ async function celebrateMul(){
   cele.finished = true;
   await wait(S.bolt ? Math.max(MUL_NEXT, BOLT_MS + 200) : MUL_NEXT); if(!ok()) return;
   goNext();
+}
+// レインボー🌈クリアの にじ：ひっさんの うえに 左から 右へ かかる（まちがい なし。かけざんは 8びょう いないで いなずま じゃない とき）
+const ARC_COLORS = ['#e8413a', '#f08a24', '#f4c81c', '#46b04a', '#3a8fe0', '#4b4fc4', '#8a4fd0'];
+function drawArc(wl, t){
+  const on = P.op === '×' ? S.rainbow && !S.bolt : !S.miss;
+  if(!S.done || !on) return;
+  const e = t - S.doneAt, k = Math.min(1, e/900), ease = 1 - Math.pow(1 - k, 3);
+  const cx = W/2, cy = wl.yLine - 6, band = Math.max(6, wl.cw*0.11), r0 = Math.min(W*0.47, wl.yLine - wl.py - 10);
+  ctx.save(); ctx.globalAlpha = 0.85; ctx.lineCap = 'butt';
+  ARC_COLORS.forEach((c, i) => {
+    ctx.strokeStyle = c; ctx.lineWidth = band + 1;
+    ctx.beginPath(); ctx.arc(cx, cy, r0 - i*band, Math.PI, Math.PI + Math.PI*ease); ctx.stroke();
+  });
+  // かかりおわったら きらきら
+  if(k >= 1 && Math.floor(e/90) % 3 === 0) burst(cx + (Math.random() - 0.5)*r0*2, cy - Math.random()*r0, 1, ARC_COLORS[Math.floor(Math.random()*7)]);
+  ctx.restore();
 }
 // いなずまの えんしゅつ（drawWrite の さいごに かく）。だいたい 2.8びょう：
 //   あらしの ように くらく なり、かみなりが 3ぼん おちて そのたびに ぴかっ・ぐらぐら、
