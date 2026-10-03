@@ -2968,7 +2968,7 @@ function clockClear(){
   saveTask();
   const g = getClockGeom();
   winFx = { block:null, num:null, center:{ x:g.cx, y:g.cy, r:g.R }, t:0, praise:praise, moves:moves, bolt,
-            arc: rainbow ? rainbowArcPlace() : null, stampAt:{ cx:g.cx, cy:g.cy + g.R*0.38 },
+            arc: rainbow ? clockArcPlace(g) : null, stampAt:{ cx:g.cx, cy:g.cy + g.R*0.38 },
             landedAt:null, life: fxLife(rainbow, bolt) };
   for(let i=0;i<70;i++) fxParticles.push(new Particle(g.cx, g.cy));
   if(!lastLevelUp) castRun(t.c.goal);
@@ -3444,6 +3444,13 @@ function rainbowArcPlace(){
   const o = arcSettings();
   return { cx: sw*o.x, cy: groundTopY() - o.foot*arcPlayH(), R: Math.max(20, sw*o.r),
            band: o.band, alpha: o.alpha };
+}
+// とけいの 虹：ふだんの 場所は 大きな とけいの うしろで ほとんど 見えないので、
+// とけいの 下（キャラの うえ）に、こく かける。
+function clockArcPlace(g){
+  const o = arcSettings(), cy = groundTopY() + 6;
+  const R = Math.max(40, Math.min(sw*0.47, cy - (g.cy + g.R) - 4));
+  return { cx: sw/2, cy, R, band: Math.max(7, Math.min(12, R/16)), alpha: Math.max(o.alpha, 0.85), layer: 2 };   // とけいでは お山が 高いので けしきの まえ（キャラの うしろ）
 }
 // 「できた！」のスタンプも、クリアした瞬間に位置を決めて動かさない。
 // 道具の列のすぐ下（空の上のほう）に置き、キャラより先に描いて うしろに回す。
@@ -4809,7 +4816,7 @@ function drawBG(ctx){
   // 奥のお山 → 虹 → 手前のお山・木・茂み・草はら・花（おぼえておいたものを貼るだけ）。
   // 虹は遠くの空にかかるので、手前の丘や木のうしろに 足がかくれる。
   // （せっていの「にじの ちょうせい」で、重なる場所を かえられる）
-  const sc = sceneryLayers(groundY), layer = arcLayer();
+  const sc = sceneryLayers(groundY), layer = winFx && winFx.arc && winFx.arc.layer != null ? winFx.arc.layer : arcLayer();
   if(layer === 0) drawRainbowArc(ctx);
   ctx.drawImage(sc.far, 0, 0);
   if(layer === 1) drawRainbowArc(ctx);
