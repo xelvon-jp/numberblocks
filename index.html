@@ -1064,7 +1064,7 @@ function onHissanMessage(m){
   if(m.type === 'kake'){ noteKake(m); return; }
   if(m.type === 'done'){
     if(hissanTask.kind !== 'mul') noteHissanAnswer(m.miss === 0);
-    notePrize(m.ans > 100 ? m.ans - 100 : m.ans);     // ごほうびの パレードにも 数える（こたえの キャラ）
+    notePrize(m.ans);                                  // ごほうびの パレードにも 数える（こたえの キャラ。100 より 大きくても そのまま）
     showHissan(false);
     hissanTask.frame = null;                           // hissanTask は のこす（つぎへ で けいさんに もどる）
     nextTask();

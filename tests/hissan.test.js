@@ -417,10 +417,15 @@ module.exports = {
       // ふつうの 5もんの パレードには ださない
       castParade([1,2,3]); drawFrame(performance.now());
       out.none = said.length;
+      // 100 より 大きい こたえも そのまま パレードに（まえは −100 して いた）
+      startHissanTask(); onHissanMessage({ from:'hissan', type:'done', ans:415, miss:0 });
+      out.big = prize().made.includes(415) || (pendingParade || []).includes(415);
+      castParade([415, 224]); for(let i=0;i<3;i++) drawFrame(performance.now() + i*900);
+      out.err2 = window.loopErr || '';
       drawLevelUpBanner = real;
       return out;
     });
-    t.eq(r, { parade:[true, true], said:'ひっさん3ひき算', err:'', none:0 }, 'レベルアップの ことば');
+    t.eq(r, { parade:[true, true], said:'ひっさん3ひき算', err:'', none:0, big:true, err2:'' }, 'レベルアップの ことば／100より大きい こたえ');
   },
 
   'まぜまぜ：ひっさんを 画面いっぱいに かさねて 出し、できたら つぎの けいさんへ。8問 まちがえずに できたら レベルが 上がる': async t => {
