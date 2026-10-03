@@ -144,7 +144,7 @@ function newProblem(fixed){
         res:{ o:null, t:null, h:null }, miss:0, done:false, doneAt:0,
         drum: [0,0,0], picked:null, bad:new Set(), shake:{},
         msg:'', msgAt:0, hideOnesB:false, cells:null, memo:[], wmsg:'', pulse:null, ask:null };
-  S.cells = makeCells(); cele = null;
+  S.cells = makeCells(); cele = null; cv.style.transform = '';
   clearTimeout(inkTimer); inkTimer = null; inkCell = null; pen = null;
   drag = null; anims = []; parts = []; busy = 0; askCol = null; askResolve = null;
   choices = null;
@@ -688,6 +688,7 @@ function drawWrite(l){
   if(S.done){
     const e = Math.min(1, (t - S.doneAt)/400);
     ctx.save(); ctx.fillStyle = 'rgba(255,255,255,' + 0.85*e + ')'; ctx.beginPath(); ctx.roundRect(wl.px, wl.py, wl.pw, wl.yLine - 4 - wl.py, [16, 16, 0, 0]); ctx.fill(); ctx.restore();
+    drawAura(t);
     drawCele(t);
     drawBolt(t);
   }
@@ -1004,30 +1005,90 @@ async function celebrateMul(){
   for(const q of row) celeDrop(q);
   const sp = blockSpec(P.ans), rowsH = P.ans > 100 ? 10 + blockSpec(P.ans - 100).rows + 1 : sp.rows;
   const big = Math.min(1.8, (G - wl.py - 30)/(rowsH*cele.bs), (wl.pw*0.8)/(sp.cols*cele.bs));
-  const ans = celeActor(P.ans, S.bolt ? wl.px - 60 : W/2, G); ans.big = big;
+  const ans = celeActor(P.ans, S.bolt ? wl.px - 60 : W/2, G); ans.big = big; ans.aura = !!S.bolt;
   if(S.bolt){ ans.alpha = 1; celeMove(ans, W/2, G, 260, 0); S.boltAt = now(); }   // ビュン！と はしって きて とまる
   ans.pop = now() + (S.bolt ? 260 : 0); ans.bounce = now() + 300;
   for(let i=0;i<(S.bolt ? 70 : 40);i++) burst(W/2, G - Math.min(sp.rows, rowsH)*cele.bs*big/2, 1, S.bolt ? '#ffd23a' : undefined);
   cele.finished = true;
-  await wait(MUL_NEXT + (S.bolt ? 500 : 0)); if(!ok()) return;
+  await wait(S.bolt ? Math.max(MUL_NEXT, BOLT_MS + 200) : MUL_NEXT); if(!ok()) return;
   goNext();
 }
-// いなずまの ひかり と かみなり（drawWrite の さいごに かく）
+// いなずまの えんしゅつ（drawWrite の さいごに かく）。だいたい 2.8びょう：
+//   あらしの ように くらく なり、かみなりが 3ぼん おちて そのたびに ぴかっ・ぐらぐら、
+//   まんなかに 金いろの「いなずま⚡クリア！」、こたえの キャラは でんきの オーラ
+const BOLT_MS = 2800;
+function boltPath(x0, y0, y1, seed){
+  const pts = [[x0, y0]], n = 7;
+  for(let i=1;i<=n;i++){ const r = Math.sin(seed*13.7 + i*4.1); pts.push([x0 + r*34 + (i === n ? 0 : (i%2 ? -14 : 14)), y0 + (y1 - y0)*i/n]); }
+  return pts;
+}
 function drawBolt(t){
-  if(!S.bolt || !S.boltAt) return;
+  if(!S.bolt || !S.boltAt){ if(cv.style.transform) cv.style.transform = ''; return; }
   const e = t - S.boltAt;
-  if(e < 0 || e > 1400) return;
+  if(e < 0 || e > BOLT_MS){ if(cv.style.transform) cv.style.transform = ''; return; }
+  const wl = WL(), strikes = [0, 380, 760];
   ctx.save();
-  if(e < 260){ ctx.fillStyle = 'rgba(255,255,240,' + (0.75*(1 - e/260)) + ')'; ctx.fillRect(0, 0, W, H); }
-  const wl = WL(), x0 = W*0.72, y0 = wl.py - 10, y1 = wl.yLine - 20;
-  ctx.globalAlpha = Math.max(0, 1 - e/900);
-  ctx.strokeStyle = '#ffe14a'; ctx.lineWidth = 7; ctx.lineJoin = 'miter'; ctx.shadowColor = '#fff6a0'; ctx.shadowBlur = 18;
-  ctx.beginPath(); ctx.moveTo(x0, y0);
-  const n = 5; for(let i=1;i<=n;i++) ctx.lineTo(x0 + (i%2 ? -28 : 22) - i*6, y0 + (y1 - y0)*i/n);
-  ctx.stroke();
+  // あらしの くらさ
+  const dark = e < 200 ? e/200 : e > BOLT_MS - 500 ? Math.max(0, (BOLT_MS - e)/500) : 1;
+  ctx.fillStyle = 'rgba(20,20,60,' + 0.35*dark + ')'; ctx.fillRect(0, 0, W, H);
+  // かみなり（3ぼん）と ぴかっ
+  let shake = 0;
+  strikes.forEach((at, k) => {
+    const d = e - at; if(d < 0 || d > 520) return;
+    if(d < 140){ ctx.fillStyle = 'rgba(255,255,235,' + 0.8*(1 - d/140) + ')'; ctx.fillRect(0, 0, W, H); }
+    shake = Math.max(shake, d < 320 ? (1 - d/320)*9 : 0);
+    const x0 = [W*0.25, W*0.75, W*0.5][k], pts = boltPath(x0, -10, wl.yLine - 10, k + 1);
+    ctx.globalAlpha = Math.max(0, 1 - d/520);
+    for(const [lw, col, blur] of [[16, 'rgba(255,230,80,0.35)', 30], [7, '#ffe14a', 18], [3, '#ffffff', 0]]){
+      ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineJoin = 'miter'; ctx.shadowColor = '#fff6a0'; ctx.shadowBlur = blur;
+      ctx.beginPath(); pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+    }
+    ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+  });
   // はしってきた あとの せん
-  ctx.globalAlpha = Math.max(0, 1 - e/500); ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(255,210,60,0.9)'; ctx.lineWidth = 3;
-  for(let i=0;i<5;i++){ const y = wl.yLine - 30 - i*14; ctx.beginPath(); ctx.moveTo(wl.px, y); ctx.lineTo(W/2 - 40 - i*8, y); ctx.stroke(); }
+  if(e < 600){
+    ctx.globalAlpha = 1 - e/600; ctx.strokeStyle = 'rgba(255,210,60,0.95)'; ctx.lineWidth = 4;
+    for(let i=0;i<6;i++){ const y = wl.yLine - 26 - i*16; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W/2 - 50 - i*10, y); ctx.stroke(); }
+    ctx.globalAlpha = 1;
+  }
+  // 金いろの おおきな ことば（ぽんっと でて、ぴりぴり ひかる）
+  if(e > 250){
+    const k = Math.min(1, (e - 250)/260), pop = k < 1 ? 0.3 + 1.0*k + 0.25*Math.sin(k*Math.PI) : 1 + 0.04*Math.sin(e*0.02);
+    const fade = e > BOLT_MS - 400 ? Math.max(0, (BOLT_MS - e)/400) : 1;
+    const txt = 'いなずま⚡クリア！';
+    let fs = 50; ctx.font = '900 ' + fs + 'px sans-serif';
+    fs = Math.floor(fs*Math.min(1, (W*0.86)/(ctx.measureText(txt).width + fs*0.22)));   // はばに おさめる
+    const cx = W/2, cy = wl.py + fs*0.9;
+    ctx.save(); ctx.globalAlpha = fade; ctx.translate(cx, cy); ctx.scale(pop, pop); ctx.rotate(-0.05);
+    ctx.font = '900 ' + fs + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.shadowColor = '#fff2a0'; ctx.shadowBlur = 24 + 10*Math.sin(e*0.03);
+    ctx.strokeStyle = '#3a2160'; ctx.lineWidth = fs*0.22; ctx.strokeText(txt, 0, 0);
+    ctx.shadowBlur = 0;
+    const g = ctx.createLinearGradient(0, -fs/2, 0, fs/2); g.addColorStop(0, '#fff6b0'); g.addColorStop(0.5, '#ffd23a'); g.addColorStop(1, '#f08a10');
+    ctx.fillStyle = g; ctx.fillText(txt, 0, 0);
+    ctx.restore();
+  }
+  ctx.restore();
+  cv.style.transform = shake ? 'translate(' + ((Math.random() - 0.5)*shake).toFixed(1) + 'px,' + ((Math.random() - 0.5)*shake).toFixed(1) + 'px)' : '';
+}
+// こたえの キャラの でんきの オーラ（drawCele の まえに かく）
+function drawAura(t){
+  if(!S.bolt || !S.boltAt || !cele) return;
+  const e = t - S.boltAt; if(e < 0 || e > BOLT_MS + 2000) return;
+  const a = cele.actors.find(q => q.aura); if(!a) return;
+  const p = celePos(a, t), sp = blockSpec(Math.max(1, a.n)), b = cele.bs*(a.big || 1);
+  const w = sp.cols*b, h = sp.rows*b, cx = p.x, cy = p.y - h/2, r = Math.max(w, h)*0.75;
+  ctx.save();
+  const q = 0.75 + 0.25*Math.sin(t*0.02);
+  const g = ctx.createRadialGradient(cx, cy, r*0.2, cx, cy, r);
+  g.addColorStop(0, 'rgba(255,240,140,' + 0.7*q + ')'); g.addColorStop(1, 'rgba(255,200,40,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.fill();
+  // ぴりぴり（まわりに 小さな いなずま）
+  ctx.strokeStyle = '#ffe14a'; ctx.lineWidth = 2.5; ctx.shadowColor = '#fff'; ctx.shadowBlur = 8;
+  for(let i=0;i<5;i++){
+    const ang = t*0.004 + i*Math.PI*2/5, x = cx + Math.cos(ang)*r*0.8, y = cy + Math.sin(ang)*r*0.8;
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 7, y + 6); ctx.lineTo(x - 2, y + 9); ctx.lineTo(x + 6, y + 17); ctx.stroke();
+  }
   ctx.restore();
 }
 
