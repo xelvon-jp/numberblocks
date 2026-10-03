@@ -5469,7 +5469,7 @@ const play = (() => {
 // ひらいた とき・1ぷん ごと・とじる とき に、Worker から もらって あわせ（merge.js）、かわって いれば おくる。
 // Worker の ver が ずれて いたら（もう1だいが さきに おくった）、もらって あわせなおして おくりなおす。
 // ネットが ない ときは なにも しない（この スマホの 中には いつも のこる）。
-const SYNC_URL = '';                            // Worker の URL（…workers.dev/save）。きまったら ここに かく
+const SYNC_URL = 'https://numberblocks-sync.xelvon-jp.workers.dev/save';   // Worker の URL（sync/deploy.sh で 出る）
 const sync = (() => {
   const CODE_KEY = 'nb_sync_code', VER_KEY = 'nb_sync_ver', URL_KEY = 'nb_sync_url', EVERY = 60*1000;
   const ls = { get: k => { try{ return localStorage.getItem(k); }catch(e){ return null; } }, set: (k, v) => { try{ localStorage.setItem(k, v); }catch(e){} } };
@@ -5524,7 +5524,7 @@ const sync = (() => {
                            : 'かぞくの あいことばを いれてください。\nはじめての スマホなら からっぽの まま OK → あたらしく つくります。', cur);
       if(v === null) return;
       const c = v.trim() || newCode();
-      if(c.replace(/-/g, '').length < 12){ alert('あいことばが みじかすぎます'); return; }
+      if(c.length < 16){ alert('あいことばが みじかすぎます（16もじ いじょう）'); return; }   // Worker も 16もじ いじょう
       if(c !== cur){ ls.set(CODE_KEY, c); ls.set(VER_KEY, '0'); lastSent = ''; }
       if(!v.trim()) alert('あいことばを つくりました。もう1だいの スマホの「どうき」に おなじ ものを いれてください：\n\n' + c);
       run();
