@@ -554,7 +554,7 @@ module.exports = {
     t.eq(r, { onArc:true, foot:true, ns:[1,2,3,4,5] }, '虹の すべりだいが おかしい');
   },
 
-  '虹の すべりだい：虹と おなじ かさなりで描く（お山のうしろの虹なら 手前の お山より先に描く）': async t => {
+  '虹の すべりだい：虹と おなじ かさなりで描く（とけいの 虹は けしきの まえ なので お山の あとに描く）': async t => {
     const p = await t.open();
     const order = await p.evaluate(() => new Promise(done => {
       taskOn = true; startClockTask({ k:'clock', to:'3:47' }); clockT = 3*60 + 47; clockAnswer();
@@ -567,7 +567,7 @@ module.exports = {
       ctx.drawImage = di; drawCastChar = dc;
       done(log.filter((v, i, a) => a.indexOf(v) === i));
     }));
-    t.eq(order, ['slider', 'far', 'near'], 'すべる キャラが 虹と ちがう かさなりに いる');
+    t.eq(order, ['far', 'near', 'slider'], 'すべる キャラが 虹と ちがう かさなりに いる');
   },
 
   'おいわいの キャラが出ている あいだ 画面を描いても 止まらない': async t => {
