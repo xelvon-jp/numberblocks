@@ -402,6 +402,27 @@ module.exports = {
     t.eq(await p.evaluate(() => hissanStats().lv), 3, '2かい ずれて しまう');
   },
 
+  'レベルが あがったら パレードに「ひっさんの レベルが あがったよ！」を 出す（とけいも）': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      const out = {};
+      const said = []; const real = drawLevelUpBanner; drawLevelUpBanner = (c, lu, age, ms) => { said.push(lu.what + lu.lv + lu.name); real(c, lu, age, ms); };
+      taskOn = true; setMix(true); startTask(4);
+      const st = hissanStats(); st.lv = 2; st.hist = [true,true,true,true,true,true,true];
+      startHissanTask(); onHissanMessage({ from:'hissan', type:'done', ans:51, miss:0 });
+      out.parade = [paradeBreak, cast.some(a => a.kind === 'parade')];
+      drawFrame(performance.now()); drawFrame(performance.now() + 500);
+      out.said = said[0]; out.err = window.loopErr || '';
+      endParadeBreak(); said.length = 0;
+      // ふつうの 5もんの パレードには ださない
+      castParade([1,2,3]); drawFrame(performance.now());
+      out.none = said.length;
+      drawLevelUpBanner = real;
+      return out;
+    });
+    t.eq(r, { parade:[true, true], said:'ひっさん3ひき算', err:'', none:0 }, 'レベルアップの ことば');
+  },
+
   'まぜまぜ：ひっさんを 画面いっぱいに かさねて 出し、できたら つぎの けいさんへ。8問 まちがえずに できたら レベルが 上がる': async t => {
     const p = await t.open();
     const r = await p.evaluate(async () => {

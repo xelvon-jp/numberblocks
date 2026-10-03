@@ -585,12 +585,13 @@ let sinceClock = 0;       // まえの とけいから けいさんを 何問 �
 let lastClockGoal = -1;   // つづけて同じ時こくにしないため
 let lastLevelUp = 0;      // この とけいの おだいで レベルが上がったら そのレベル
 let pendingParade = null; // つぎへ いくときに 出す パレード（数の ならび。nextTask を見る）
+let levelUpInfo = null;   // レベルが 上がった ときの パレードの ことば { what, lv, name }（pendingParade と いっしょに つかう）
 let paradeHold = null;    // パレードを とばす ながおし {pid, t0, x, y}
 const PARADE_HOLD_MS = 1200;
 
 function loadProfileState(){
   closeHissan();
-  genTask = null; paradeBreak = false; pendingParade = null;
+  genTask = null; paradeBreak = false; pendingParade = null; levelUpInfo = null;
   const r = curRec();
   taskIdx = Math.min(TASKS.length-1, r.idx|0);
   taskCleared = r.cleared;
@@ -832,7 +833,7 @@ function checkWay(){
 
 // おだいを はじめるときに まっさらに もどすもの
 function resetTaskState(){
-  prizeCounted = false; prizeFull = false; paradeBreak = false; pendingParade = null;
+  prizeCounted = false; prizeFull = false; paradeBreak = false; pendingParade = null; levelUpInfo = null;
   cast = cast.filter(a => a.kind !== 'run');
   drumReset(currentTask());
   taskDone = false; taskLog = []; winFx = null;
@@ -869,9 +870,10 @@ function startClockTask(spec){
 function nextTask(){
   if(pendingParade){
     const nums = pendingParade; pendingParade = null;
+    const lu = levelUpInfo; levelUpInfo = null;
     paradeBreak = true;
     blocks = []; puzzle = null; winFx = null; dragBlock = null; dragPtr = null; dragPointers = {};
-    castParade(nums);
+    castParade(nums, lu);
     return;
   }
   advanceTask();
@@ -1052,6 +1054,7 @@ function noteHissanAnswer(ok){
   st.hist = (st.hist || []).concat([!!ok]).slice(-CLOCK_WINDOW);
   if(st.hist.filter(Boolean).length >= CLOCK_UP && st.lv < HISSAN_LEVELS.length){
     st.lv++; st.hist = []; lastLevelUp = st.lv; pendingParade = [1,2,3,4,5,6,7,8,9,10];
+    levelUpInfo = { what:'ひっさん', lv: st.lv, name: HISSAN_LEVELS[st.lv - 1].name };
   }
   saveTask();
 }
@@ -1087,7 +1090,10 @@ function noteClockAnswer(ok){
   const st = clockStats();
   if(t.clv !== st.lv) return;                 // おさらい・おためし は 数えない
   st.hist = (st.hist || []).concat([!!ok]).slice(-CLOCK_WINDOW);
-  if(clockRecentOk(st) >= CLOCK_UP && st.lv < CLOCK_MAX){ st.lv++; st.hist = []; lastLevelUp = st.lv; pendingParade = [1,2,3,4,5,6,7,8,9,10]; }
+  if(clockRecentOk(st) >= CLOCK_UP && st.lv < CLOCK_MAX){
+    st.lv++; st.hist = []; lastLevelUp = st.lv; pendingParade = [1,2,3,4,5,6,7,8,9,10];
+    levelUpInfo = { what:'とけい', lv: st.lv, name: CLOCK_LEVELS[st.lv - 1].name };
+  }
   saveTask();
 }
 
@@ -3170,7 +3176,8 @@ function paradePath(u){                               // u：みちの どこか
 }
 // nums を わたすと その数たちが 行進する（わたさなければ 1〜10）。
 // 大きな数（100 や 1000）も、10 より 大きくは ならないように ちぢめる。
-function castParade(nums){
+// lu（レベルが 上がった とき）を わたすと、うえに「○○の レベルが あがったよ！」を 出す
+function castParade(nums, lu){
   cast = cast.filter(a => a.kind !== 'parade');
   nums = (nums && nums.length) ? nums.slice() : [1,2,3,4,5,6,7,8,9,10];
   const base = Math.max(5, Math.min(11, (calcFloor() - TAB_H) * 0.28 / 10));
@@ -3192,7 +3199,30 @@ function castParade(nums){
       drawCastChar(ctx, n, p.x - w/2, p.y - hop, bs, true);
       ctx.restore();
     }
+    if(lu) drawLevelUpBanner(ctx, lu, age, ms);
   }});
+}
+// パレードの うえに「○○の レベルが あがったよ！」と「レベル3「ひき算」」。ぽんっと 出て、ゆれて、さいごに きえる
+function drawLevelUpBanner(ctx, lu, age, ms){
+  const inK = Math.min(1, age/350), out = age > ms - 500 ? Math.max(0, (ms - age)/500) : 1;
+  const pop = inK < 1 ? 0.4 + 0.75*inK + 0.2*Math.sin(inK*Math.PI) : 1 + 0.03*Math.sin(age*0.008);
+  const cx = sw/2, cy = TAB_H + Math.max(56, (calcFloor() - TAB_H)*0.16);
+  const t1 = lu.what + 'の レベルが あがったよ！', t2 = 'レベル' + lu.lv + '「' + lu.name + '」';
+  ctx.save(); ctx.globalAlpha = out; ctx.translate(cx, cy); ctx.scale(pop, pop);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  let fs = 30; ctx.font = '900 ' + fs + 'px sans-serif';
+  fs = Math.floor(fs*Math.min(1, (sw*0.9)/(ctx.measureText(t1).width + 12)));
+  ctx.font = '900 ' + fs + 'px sans-serif';
+  ctx.shadowColor = 'rgba(255,240,160,0.9)'; ctx.shadowBlur = 16;
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = fs*0.3; ctx.strokeText(t1, 0, 0);
+  ctx.shadowBlur = 0;
+  const g = ctx.createLinearGradient(-sw*0.4, 0, sw*0.4, 0);
+  ['#e8413a', '#f0a020', '#e6c21c', '#46b04a', '#3a8fe0', '#8a4fd0'].forEach((c, i, a) => g.addColorStop(i/(a.length - 1), c));
+  ctx.fillStyle = g; ctx.fillText(t1, 0, 0);
+  const f2 = Math.round(fs*0.7); ctx.font = 'bold ' + f2 + 'px sans-serif';
+  ctx.strokeStyle = '#ffffff'; ctx.lineWidth = f2*0.28; ctx.strokeText(t2, 0, fs*1.2);
+  ctx.fillStyle = '#c0398a'; ctx.fillText(t2, 0, fs*1.2);
+  ctx.restore();
 }
 // ─── ごほうびの パレード ─────────────────────────────────────────
 // おだいが 5問 できるごとに、その5問で つくった数たちが 行進してくる（けいさんも とけいも 数える）。
@@ -3647,7 +3677,7 @@ function drawTaskCard(ctx, t){
       // とけいの レベルが 上がった！（虹より こちらを出す）
       ctx.fillText('できた！  ' + taskGoalLabel(task), r.x+14, r.y+19);
       ctx.font='bold 13px sans-serif'; ctx.fillStyle='#c0398a';
-      ctx.fillText('とけい レベル' + lastLevelUp + '「' + CLOCK_LEVELS[lastLevelUp-1].name + '」に アップ！', r.x+14, r.y+38);
+      ctx.fillText('とけい レベル' + lastLevelUp + '「' + CLOCK_LEVELS[Math.min(CLOCK_LEVELS.length, lastLevelUp)-1].name + '」に アップ！', r.x+14, r.y+38);
     } else if(begMode()){
       // ビギナーは手数を出さない。レインボークリアのときだけ 虹色でひとこと
       const rb = lastRainbow && (!winFx || rainbowTime() >= 0);
@@ -3967,7 +3997,7 @@ function toggleFullscreen(){
 function setTaskOn(v){
   if(taskOn === v) return;
   taskOn = v; taskDone = false; taskLog = []; clearUndo(); winFx = null; drum = null; genTask = null; closeHissan();
-  paradeBreak = false; pendingParade = null;
+  paradeBreak = false; pendingParade = null; levelUpInfo = null;
   stageOpen = false; stageDetail = -1;
   hintOn = false; hintShownAt = 0; taskStartT = Date.now();
   blocks = []; saveTask(); updateTargets();
