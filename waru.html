@@ -306,11 +306,14 @@ function cancelAsk(){ if(phase === 'ask'){ phase = 'idle'; ui(); } }
 
 // ── マイク（おおきさ だけ）──
 // iPhone まかせの せってい（じどうで おおきさを あわせる）。まわりの おとは いつも はかりなおす（しずかな ときに さがり、ゆっくり あがる）。
-// まわりより 12dB 大きい おとが 0.4びょう つづいたら「こえ」。つかわない まま 60びょう たつか、かくれたら とめる。
+// まわりの おと＝さいきん 3びょうの しずかな ほう（2わりめ）。それより 14dB（いちばん ひくくても -62dB）大きい おとが
+// 0.4びょう つづいたら「こえ」。はじめの 0.8びょうは きかない（タップの おと・iPhone の おおきさ あわせ が おちつくまで）。
+// ※ まえは さいしょの 1こめを まわりの おとに していて、ひらいた すぐの むおん（-120dB）で ひくく なりすぎ、しゃべって いないのに すすんだ。
+// つかわない まま 60びょう たつか、かくれたら とめる。
 const mic = (() => {
   let stream = null, ac = null, an = null, buf = null, opening = null, lastUse = 0;
-  let floor = null, db = -100, over = 0, failed = false;
-  const THR = 12, HOLD = 400;
+  let floor = null, db = -100, over = 0, failed = false, hist = [], listenFrom = 0;
+  const THR = 14, MIN_DB = -62, HOLD = 400, WARM = 800, KEEP = 180;   // KEEP：3びょうぶん（60コマ／びょう）
   // スリープの あとなどで きれていたら（トラックが おわった・音が こない・AudioContext が とまった）つなぎなおす
   const alive = () => { const tr = stream && stream.getAudioTracks()[0];
     return !!(tr && tr.readyState === 'live' && !tr.muted && ac && ac.state === 'running'); };
@@ -328,7 +331,7 @@ const mic = (() => {
         ac = new AC(); if(ac.state === 'suspended') await ac.resume();
         an = ac.createAnalyser(); an.fftSize = 1024; buf = new Float32Array(an.fftSize);
         ac.createMediaStreamSource(stream).connect(an);
-        floor = null; failed = false; return true;
+        floor = null; hist = []; failed = false; return true;
       }catch(e){ close(); failed = true; return false; }
       finally{ opening = null; }
     })();
@@ -337,21 +340,20 @@ const mic = (() => {
   function close(){
     if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
     if(ac){ try{ ac.close(); }catch(e){} ac = null; }
-    an = null;
+    an = null; hist = []; floor = null;
   }
   // まいフレーム：おおきさを はかる。ask の あいだ だけ「こえ」を さがす
   function tick(now, listen){
     if(!an){ db = -100; return 0; }
-    if(listen) lastUse = now;
-    else if(now - lastUse > 60000){ close(); return 0; }
+    if(listen){ lastUse = now; if(!listenFrom) listenFrom = now; }
+    else { listenFrom = 0; if(now - lastUse > 60000){ close(); return 0; } }
     an.getFloatTimeDomainData(buf);
     let s = 0; for(let i = 0; i < buf.length; i++) s += buf[i]*buf[i];
     db = 20*Math.log10(Math.max(1e-6, Math.sqrt(s/buf.length)));
-    if(floor === null) floor = db;
-    else if(db < floor) floor += (db - floor)*0.3;
-    else floor += 0.02;
-    const thr = Math.max(floor + THR, -70);
-    if(!listen || db < thr){ over = 0; return 0; }
+    if(db > -110){ hist.push(db); if(hist.length > KEEP) hist.shift(); }   // むおん（つながった すぐ など）は かぞえない
+    floor = hist.length >= 20 ? hist.slice().sort((a, b) => a - b)[Math.floor(hist.length*0.2)] : null;
+    const thr = floor === null ? Infinity : Math.max(floor + THR, MIN_DB);
+    if(!listen || now - listenFrom < WARM || db < thr){ over = 0; return 0; }
     if(!over) over = now;
     return Math.min(1, (now - over)/HOLD);
   }
