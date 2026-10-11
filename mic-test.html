@@ -33,18 +33,28 @@
 <p>「マイクを つかう」を おして、こえを だしてみてください。こえが <b>しばらく つづくと</b>「きこえた！」に なります。</p>
 <p id="where"></p>
 
+<div class="card">
+  <label style="margin-top:0">マイクの せってい：
+    <select id="mode" style="font-size:16px;padding:4px">
+      <option value="auto">ふつう（iPhone まかせ）</option>
+      <option value="raw">なま（じどうの おおきさ ちょうせい なし）</option>
+    </select></label>
+  <p style="font-size:12px;color:#6a7486">かえたら いちど「とめる」→「マイクを つかう」</p>
+</div>
 <div class="row">
   <button id="start">マイクを つかう</button>
   <button id="stop" class="sub" disabled>とめる</button>
 </div>
+<div class="row"><button id="cal" class="sub" disabled>しずかに して まわりの おとを はかる（1.5びょう）</button></div>
 
 <div class="card">
   <div id="meter"><div id="fill"></div><div id="thr"></div></div>
   <div id="hold"><div id="holdFill"></div></div>
   <div id="big">—</div>
   <p id="num">おおきさ：-　／ いちばん：-　／ きこえた：0かい</p>
-  <label>どれくらいで「こえ」と みるか（ピンクの せん）：<span id="thrV"></span>
-    <input id="thrIn" type="range" min="0.01" max="0.5" step="0.01" value="0.12"></label>
+  <p id="floor">まわりの おと：まだ はかって いない（-60dB と して いる）</p>
+  <label>まわりの おとより どれだけ 大きいと「こえ」か（ピンクの せん）：<span id="thrV"></span>
+    <input id="thrIn" type="range" min="3" max="40" step="1" value="15"></label>
   <label>どれくらい つづいたら「きこえた」か：<span id="holdV"></span>
     <input id="holdIn" type="range" min="100" max="1500" step="50" value="500"></label>
 </div>
@@ -74,15 +84,24 @@ $('back').onclick = () => { stop(); location.href = 'waru.html?embed=1&v=' + Dat
 
 let stream = null, ac = null, an = null, buf = null, raf = 0;
 let level = 0, peak = 0, overSince = 0, heard = 0, coolUntil = 0;
+let floorDb = -60, cal = null;           // まわりの おと（dB）。cal は はかっている あいだの { until, sum, n }
 const thrIn = $('thrIn'), holdIn = $('holdIn');
-function showSet(){ $('thrV').textContent = (+thrIn.value).toFixed(2); $('holdV').textContent = (+holdIn.value/1000).toFixed(2) + 'びょう'; $('thr').style.left = (Math.min(1, thrIn.value/0.5)*100) + '%'; }
+// メーターは dB（-80〜0）。0 が いちばん 大きい
+const DB_MIN = -80;
+const dbOf = v => 20*Math.log10(Math.max(1e-6, v));
+const pos = db => Math.max(0, Math.min(1, (db - DB_MIN)/(-DB_MIN)));
+const thrDb = () => floorDb + (+thrIn.value);
+function showSet(){ $('thrV').textContent = '+' + thrIn.value + 'dB（' + thrDb().toFixed(0) + 'dB）'; $('holdV').textContent = (+holdIn.value/1000).toFixed(2) + 'びょう'; $('thr').style.left = (pos(thrDb())*100) + '%'; }
 thrIn.oninput = holdIn.oninput = showSet; showSet();
 
 async function start(){
   $('start').disabled = true;
   try{
     if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('getUserMedia が ない');
-    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    const raw = $('mode').value === 'raw';
+    stream = await navigator.mediaDevices.getUserMedia({ audio: raw ? { echoCancellation: false, noiseSuppression: false, autoGainControl: false } : true });
+    try{ const tr = stream.getAudioTracks()[0], set = tr.getSettings ? tr.getSettings() : {};
+         log('せってい：' + (raw ? 'なま' : 'ふつう') + ' / ' + JSON.stringify({ ec: set.echoCancellation, ns: set.noiseSuppression, agc: set.autoGainControl })); }catch(e){}
     const AC = window.AudioContext || window.webkitAudioContext;
     ac = new AC();
     if(ac.state === 'suspended') await ac.resume();
@@ -90,7 +109,7 @@ async function start(){
     an = ac.createAnalyser(); an.fftSize = 1024; buf = new Float32Array(an.fftSize);
     src.connect(an);
     log('マイク OK（' + ac.sampleRate + 'Hz, ' + ac.state + '）');
-    $('stop').disabled = false;
+    $('stop').disabled = false; $('cal').disabled = false;
     peak = 0; tick();
   }catch(e){
     log('マイク NG：' + (e.name || '') + ' ' + (e.message || e));
@@ -103,27 +122,33 @@ function tick(){
   const rms = Math.sqrt(s/buf.length);
   level = Math.max(rms, level*0.85);               // すぐ さがらないように
   peak = Math.max(peak, rms);
-  const now = performance.now(), thr = +thrIn.value, hold = +holdIn.value;
-  if(now < coolUntil){ overSince = 0; }
-  else if(level > thr){ if(!overSince) overSince = now; }
+  const now = performance.now(), db = dbOf(level), thr = thrDb(), hold = +holdIn.value;
+  if(cal){
+    cal.sum += db; cal.n++;
+    if(now >= cal.until){ floorDb = cal.sum/cal.n; cal = null; $('cal').disabled = false;
+      $('floor').textContent = 'まわりの おと：' + floorDb.toFixed(1) + 'dB'; log('まわりの おと ' + floorDb.toFixed(1) + 'dB'); showSet(); }
+  }
+  if(now < coolUntil || cal){ overSince = 0; }
+  else if(db > thr){ if(!overSince) overSince = now; }
   else overSince = 0;
   const k = overSince ? Math.min(1, (now - overSince)/hold) : 0;
   if(k >= 1){ heard++; coolUntil = now + 1500; overSince = 0; $('big').textContent = 'きこえた！🎉'; $('big').classList.add('on'); log('きこえた（' + heard + 'かいめ）'); }
   else if(now > coolUntil){ $('big').textContent = overSince ? 'きいてる…' : 'しずか'; $('big').classList.remove('on'); }
-  $('fill').style.width = (Math.min(1, level/0.5)*100) + '%';
-  $('fill').style.background = level > thr ? '#f0a020' : '#3fbf5a';
+  $('fill').style.width = (pos(db)*100) + '%';
+  $('fill').style.background = db > thr ? '#f0a020' : '#3fbf5a';
   $('holdFill').style.width = (k*100) + '%';
-  $('num').textContent = 'おおきさ：' + level.toFixed(3) + '　／ いちばん：' + peak.toFixed(3) + '　／ きこえた：' + heard + 'かい';
+  $('num').textContent = 'おおきさ：' + level.toFixed(3) + '（' + db.toFixed(0) + 'dB）／ いちばん：' + peak.toFixed(3) + '（' + dbOf(peak).toFixed(0) + 'dB）／ きこえた：' + heard + 'かい';
   raf = requestAnimationFrame(tick);
 }
 function stop(){
   cancelAnimationFrame(raf); raf = 0;
   if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; log('マイクを とめた'); }
   if(ac){ try{ ac.close(); }catch(e){} ac = null; }
-  $('start').disabled = false; $('stop').disabled = true; $('big').textContent = '—'; $('big').classList.remove('on');
+  cal = null; $('start').disabled = false; $('stop').disabled = true; $('cal').disabled = true; $('big').textContent = '—'; $('big').classList.remove('on');
 }
 $('start').onclick = start;
 $('stop').onclick = stop;
+$('cal').onclick = () => { cal = { until: performance.now() + 1500, sum: 0, n: 0 }; $('cal').disabled = true; $('floor').textContent = 'まわりの おと：はかって います…（しずかに）'; };
 window.addEventListener('pagehide', stop);
 document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') stop(); });
 
