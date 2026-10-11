@@ -48,7 +48,7 @@ module.exports = {
     // マイクが つかえない（テストの ブラウザ）ときは すぐ「いった！」が 出る
     await f.waitForFunction(() => document.querySelector('#ask .said').classList.contains('show'), null, { timeout: 4000 });
     await f.click('#ask .said');
-    t.eq(await f.evaluate(() => document.querySelector('#ask .hint').textContent), 'きこえた！', 'きこえた が 出ない');
+    t.eq(await f.evaluate(() => document.querySelector('#ask .hint .txt').textContent), 'きこえた！', 'きこえた が 出ない');
     await f.waitForFunction(() => waru.phase() === 'run', null, { timeout: 2000 });
     await f.waitForTimeout(300);
     const mid = await f.evaluate(() => ({ busy: waru.busy(), count: waru.scene().count }));
@@ -77,7 +77,7 @@ module.exports = {
     const { f } = await openWaru(t, { storage: { nb_waru: JSON.stringify({ n: 17, d: 5, seen: {}, mic: false }) } });
     t.eq(await f.evaluate(() => document.querySelector('#mic').textContent), '🎤 こえ：オフ', 'オフの しるし');
     await f.click('#go');
-    t.eq(await f.evaluate(() => [document.querySelector('#ask .hint').textContent, document.querySelector('#ask').classList.contains('nomic')]),
+    t.eq(await f.evaluate(() => [document.querySelector('#ask .hint .txt').textContent, document.querySelector('#ask').classList.contains('nomic')]),
          ['こえに だして いってから おしてね', true], 'オフの ことば');
     await f.click('#ask .cancel');
     t.eq(await f.evaluate(() => waru.phase()), 'idle', 'やめる で もどらない');

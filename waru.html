@@ -44,9 +44,8 @@
   #ask .q b { font-size:30px; }
   #ask .hint { font-size:16px; margin-top:6px; color:#5a6576; font-weight:700; }
   #ask.heard .hint { color:#d08a00; font-size:22px; }
-  #ask .meter { height:12px; border-radius:6px; background:#e4e9f1; margin:10px 0 4px; overflow:hidden; }
-  #ask.nomic .meter { display:none; }
-  #ask .meter i { display:block; height:100%; width:0; background:#3fbf5a; }
+  #ask .ear { display:inline-block; margin-left:4px; transition:transform 0.08s linear, opacity 0.08s linear; opacity:0.55; }   /* こえに あわせて すこし 大きく */
+  #ask.nomic .ear { display:none; }
   #ask .btns { display:flex; gap:8px; margin-top:10px; }
   #ask .btns button { flex:1; border:0; border-radius:12px; padding:10px; font-size:16px; font-weight:800; }
   #ask .cancel { background:#dfe6ef; color:#2b3a52; }
@@ -69,7 +68,7 @@
 <div id="say"><div class="big"></div><div class="sub"></div></div>
 <div id="stage"><canvas id="c"></canvas>
   <button id="go">わけてみる！</button>
-  <div id="ask"><div class="q"></div><div class="hint"></div><div class="meter"><i></i></div>
+  <div id="ask"><div class="q"></div><div class="hint"><span class="txt"></span><span class="ear">🎤</span></div>
     <div class="btns"><button class="cancel">やめる</button><button class="said">いった！</button></div></div>
 </div>
 <div id="memo"><div class="ttl"><span></span><button id="mic"></button></div><div class="chips"></div></div>
@@ -312,13 +311,19 @@ const mic = (() => {
   let stream = null, ac = null, an = null, buf = null, opening = null, lastUse = 0;
   let floor = null, db = -100, over = 0, failed = false;
   const THR = 12, HOLD = 400;
+  // スリープの あとなどで きれていたら（トラックが おわった・音が こない・AudioContext が とまった）つなぎなおす
+  const alive = () => { const tr = stream && stream.getAudioTracks()[0];
+    return !!(tr && tr.readyState === 'live' && !tr.muted && ac && ac.state === 'running'); };
   async function open(){
     lastUse = performance.now();
-    if(stream) return true;
+    if(stream && ac && ac.state === 'suspended'){ try{ await ac.resume(); }catch(e){} }
+    if(stream && alive()) return true;
+    if(stream) close();
     if(opening) return opening;
     opening = (async () => {
       try{
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const s0 = stream; s0.getAudioTracks().forEach(tr => tr.addEventListener('ended', () => { if(stream === s0) close(); }));
         const AC = window.AudioContext || window.webkitAudioContext;
         ac = new AC(); if(ac.state === 'suspended') await ac.resume();
         an = ac.createAnalyser(); an.fftSize = 1024; buf = new Float32Array(an.fftSize);
@@ -352,7 +357,9 @@ const mic = (() => {
   }
   return { open, close, tick, live: () => !!an, failed: () => failed, level: () => floor === null ? 0 : Math.max(0, Math.min(1, (db - floor)/(THR*1.6))) };
 })();
+// かくれたら すぐ とめる（スリープ中は まいフレームの しらべが うごかないので、ここで）
 window.addEventListener('pagehide', () => mic.close());
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden'){ mic.close(); if(phase === 'ask'){ phase = 'idle'; ui(); } } });
 
 // ── ことば ──
 const sayBig = document.querySelector('#say .big'), saySub = document.querySelector('#say .sub');
@@ -374,7 +381,7 @@ function say(sc){
 
 // ── ボタン・よそうの カード ──
 const goBtn = document.getElementById('go'), askEl = document.getElementById('ask'), micBtn = document.getElementById('mic');
-const askQ = askEl.querySelector('.q'), askHint = askEl.querySelector('.hint'), askMeter = askEl.querySelector('.meter i'), saidBtn = askEl.querySelector('.said');
+const askQ = askEl.querySelector('.q'), askHint = askEl.querySelector('.hint .txt'), askEar = askEl.querySelector('.hint .ear'), saidBtn = askEl.querySelector('.said');
 goBtn.addEventListener('click', startAsk);
 saidBtn.addEventListener('click', heard);
 askEl.querySelector('.cancel').addEventListener('click', cancelAsk);
@@ -388,7 +395,8 @@ function ui(){
   if(phase === 'ask'){
     askQ.innerHTML = '<b style="color:' + colOf(st.d) + '">' + st.d + '</b> は なんこ できるかな？';
     const useMic = st.mic !== false && !mic.failed();
-    askHint.textContent = heardAt ? 'きこえた！' : useMic ? 'こえに だして いってみてね 🎤' : 'こえに だして いってから おしてね';
+    askHint.textContent = heardAt ? 'きこえた！' : useMic ? 'こえに だして いってみてね' : 'こえに だして いってから おしてね';
+    askEar.style.visibility = heardAt ? 'hidden' : '';
     askEl.classList.toggle('heard', !!heardAt);
     askEl.classList.toggle('nomic', !useMic);
   }
@@ -463,8 +471,8 @@ function frame(now){
   }
   const k = mic.tick(now, phase === 'ask' && !heardAt);
   if(phase === 'ask'){
-    askMeter.style.width = (Math.max(k, mic.level())*100).toFixed(0) + '%';
-    askMeter.style.background = k > 0 ? '#f0a020' : '#3fbf5a';
+    const lv = Math.max(k, mic.level());
+    askEar.style.transform = 'scale(' + (1 + 0.45*lv).toFixed(2) + ')'; askEar.style.opacity = (0.55 + 0.45*lv).toFixed(2);
     if(k >= 1) heard();
     if(!saidBtn.classList.contains('show') && (now - askAt > 2500 || askEl.classList.contains('nomic'))) saidBtn.classList.add('show');
   } else saidBtn.classList.remove('show');
