@@ -31,7 +31,27 @@
   canvas { display:block; position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
   #memo { flex:none; height:calc(84px + env(safe-area-inset-bottom, 0px)); padding:6px 10px calc(6px + env(safe-area-inset-bottom, 0px));
           background:rgba(255,255,255,0.7); overflow-y:auto; touch-action:pan-y; }   /* たかさは きめておく（ぶたいの 大きさが かわらないように） */
-  #memo .ttl { font-size:12px; color:#6a7486; margin-bottom:3px; }
+  #memo .ttl { font-size:12px; color:#6a7486; margin-bottom:3px; display:flex; justify-content:space-between; align-items:center; }
+  #mic { border:0; border-radius:8px; padding:3px 8px; font-size:12px; font-weight:700; background:#dfe6ef; color:#2b3a52; }
+  #mic.off { opacity:0.4; }
+  #go { position:absolute; left:50%; bottom:12px; transform:translateX(-50%); border:0; border-radius:16px; padding:14px 26px;
+        font-size:22px; font-weight:900; background:#f0a020; color:#fff; box-shadow:0 3px 0 #c07a10; white-space:nowrap; }
+  #go:active { transform:translateX(-50%) translateY(2px); box-shadow:0 1px 0 #c07a10; }
+  #ask { position:absolute; left:50%; bottom:10px; transform:translateX(-50%); width:min(92%, 360px); display:none;
+         background:rgba(255,255,255,0.96); border-radius:18px; padding:14px 16px; text-align:center; box-shadow:0 4px 14px rgba(40,60,90,0.25); }
+  #ask.on { display:block; }
+  #ask .q { font-size:24px; font-weight:900; }
+  #ask .q b { font-size:30px; }
+  #ask .hint { font-size:16px; margin-top:6px; color:#5a6576; font-weight:700; }
+  #ask.heard .hint { color:#d08a00; font-size:22px; }
+  #ask .meter { height:12px; border-radius:6px; background:#e4e9f1; margin:10px 0 4px; overflow:hidden; }
+  #ask.nomic .meter { display:none; }
+  #ask .meter i { display:block; height:100%; width:0; background:#3fbf5a; }
+  #ask .btns { display:flex; gap:8px; margin-top:10px; }
+  #ask .btns button { flex:1; border:0; border-radius:12px; padding:10px; font-size:16px; font-weight:800; }
+  #ask .cancel { background:#dfe6ef; color:#2b3a52; }
+  #ask .said { background:#3f8fd0; color:#fff; visibility:hidden; }
+  #ask .said.show { visibility:visible; }
   #memo .chips { display:flex; flex-wrap:wrap; gap:5px; }
   #memo .chip { border:1.5px solid #c9d3e0; background:#fff; border-radius:999px; padding:3px 9px; font-size:14px; font-weight:700; color:#2b3a52; }
   #memo .chip.just { background:#fff4c8; border-color:#e7b400; color:#8a5a00; }
@@ -47,11 +67,12 @@
     <div class="row"><button class="m" aria-label="へらす">−</button><div class="val"></div><button class="p" aria-label="ふやす">＋</button></div></div>
 </div>
 <div id="say"><div class="big"></div><div class="sub"></div></div>
-<div id="stage"><canvas id="c"></canvas></div>
-<div id="memo"><div class="ttl"></div><div class="chips"></div></div>
-<!-- ためし：マイク テストへ（こえで よそう を つくる まえに ためす。おわったら けす） -->
-<button id="micTest" style="position:absolute;right:8px;bottom:calc(8px + env(safe-area-inset-bottom, 0px));border:0;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:700;background:#dfe6ef;color:#2b3a52"
-        onclick="location.href='mic-test.html?v=' + Date.now()">🎤 マイク テスト</button>
+<div id="stage"><canvas id="c"></canvas>
+  <button id="go">わけてみる！</button>
+  <div id="ask"><div class="q"></div><div class="hint"></div><div class="meter"><i></i></div>
+    <div class="btns"><button class="cancel">やめる</button><button class="said">いった！</button></div></div>
+</div>
+<div id="memo"><div class="ttl"><span></span><button id="mic"></button></div><div class="chips"></div></div>
 <script>
 // ページと いっしょに 新しい スクリプトを 読む（古い キャッシュと まざらないように。index.html と おなじ しくみ）
 (function(){
@@ -63,7 +84,7 @@
 // ─── わけっこ（あまりの ある わりざん を あそぶ）─────────────────────────────
 // 「ぜんぶで」の かずを「いくつずつ」に わけると、なんこの グループが できて、なんこ あまるか。
 // もんだいを とく のでは なく、かずを かえて ためして たのしむ ページ（ゲームの「わけっこ」タブの 中で ひらく）。
-//   かずを かえると、まえの ようすから じっくり うごいて かわる：
+//   かずを かえても まるごとの キャラの まま。「わけてみる！」→ こえに だして よそう → じっくり うごいて わかれる：
 //   うごく キャラが ぷるぷる → キューブに ばらける → 1グループずつ とんで あつまり、キャラに なって ぴょん（かずを かぞえる）
 //   → さいごに あまりが とんで「あまり」の わくに はいる。
 // ためした くみあわせは したの メモに のこる（「3が13と1」。ひなたの メモと おなじ かきかた）。ぴったりは 金いろ。
@@ -250,35 +271,137 @@ function draw(now){
     let x = c.x, y = c.y;
     if(c.wig) x += Math.sin(now*0.07 + c.x)*c.bs*0.14*c.wig;
     if(c.hop != null && c.hop < 1) y -= Math.sin(Math.PI*c.hop)*c.bs*0.9;
-    if(c.slot && (sc.phase !== 'break')) drawLabel(c.slot, now);
+    if(c.slot && sc.phase !== 'break' && (phase === 'run' || phase === 'done')) drawLabel(c.slot, now);   // まるごとの ときは ばんごうを 出さない
     drawNumberblock(ctx, c.num, x, y, c.bs, { t: now, animate: true });
   }
   for(const c of sc.loose) if(c.layer) drawCube(c);
   return sc;
 }
 
-// ── ことば・メモ ──
+// ── すすみかた ──
+// idle：まるごとの キャラ（かずを かえても うごかない）→「わけてみる！」
+// ask ：「3 は なんこ できるかな？」こえに だして よそう（マイクの おおきさ だけ。なかみは きかない）
+// run ：わける うごき（ボタンは おせない）→ done：こたえ。メモに のこる
+// よそうは きくだけ（あってるか は しらべない）。パパ・ママが「あってた？」と はなす きっかけ。
+let phase = 'idle', askAt = 0, heardAt = 0;
+const locked = () => phase === 'ask' || phase === 'run';
+function toWhole(){ L = layout(st.n, st.n); T = null; pending = false; phase = 'idle'; ui(); }
+function startAsk(){
+  if(locked()) return;
+  toWhole(); phase = 'ask'; askAt = performance.now(); heardAt = 0;
+  if(st.mic !== false) mic.open().then(ok => { if(!ok) ui(); });
+  ui();
+}
+function heard(){
+  if(phase !== 'ask' || heardAt) return;
+  heardAt = performance.now(); ui();
+  setTimeout(run, 600);                    // 「きこえた！」を すこし 見せてから
+}
+function run(){
+  if(phase !== 'ask') return;
+  phase = 'run'; go(st.n, st.d);
+  if(!T){ phase = 'done'; remember(); }      // まるごと（いくつずつ ＝ ぜんぶ）は うごかない
+  ui();
+}
+function cancelAsk(){ if(phase === 'ask'){ phase = 'idle'; ui(); } }
+
+// ── マイク（おおきさ だけ）──
+// iPhone まかせの せってい（じどうで おおきさを あわせる）。まわりの おとは いつも はかりなおす（しずかな ときに さがり、ゆっくり あがる）。
+// まわりより 12dB 大きい おとが 0.4びょう つづいたら「こえ」。つかわない まま 60びょう たつか、かくれたら とめる。
+const mic = (() => {
+  let stream = null, ac = null, an = null, buf = null, opening = null, lastUse = 0;
+  let floor = null, db = -100, over = 0, failed = false;
+  const THR = 12, HOLD = 400;
+  async function open(){
+    lastUse = performance.now();
+    if(stream) return true;
+    if(opening) return opening;
+    opening = (async () => {
+      try{
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const AC = window.AudioContext || window.webkitAudioContext;
+        ac = new AC(); if(ac.state === 'suspended') await ac.resume();
+        an = ac.createAnalyser(); an.fftSize = 1024; buf = new Float32Array(an.fftSize);
+        ac.createMediaStreamSource(stream).connect(an);
+        floor = null; failed = false; return true;
+      }catch(e){ close(); failed = true; return false; }
+      finally{ opening = null; }
+    })();
+    return opening;
+  }
+  function close(){
+    if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+    if(ac){ try{ ac.close(); }catch(e){} ac = null; }
+    an = null;
+  }
+  // まいフレーム：おおきさを はかる。ask の あいだ だけ「こえ」を さがす
+  function tick(now, listen){
+    if(!an){ db = -100; return 0; }
+    if(listen) lastUse = now;
+    else if(now - lastUse > 60000){ close(); return 0; }
+    an.getFloatTimeDomainData(buf);
+    let s = 0; for(let i = 0; i < buf.length; i++) s += buf[i]*buf[i];
+    db = 20*Math.log10(Math.max(1e-6, Math.sqrt(s/buf.length)));
+    if(floor === null) floor = db;
+    else if(db < floor) floor += (db - floor)*0.3;
+    else floor += 0.02;
+    const thr = Math.max(floor + THR, -70);
+    if(!listen || db < thr){ over = 0; return 0; }
+    if(!over) over = now;
+    return Math.min(1, (now - over)/HOLD);
+  }
+  return { open, close, tick, live: () => !!an, failed: () => failed, level: () => floor === null ? 0 : Math.max(0, Math.min(1, (db - floor)/(THR*1.6))) };
+})();
+window.addEventListener('pagehide', () => mic.close());
+
+// ── ことば ──
 const sayBig = document.querySelector('#say .big'), saySub = document.querySelector('#say .sub');
 const colOf = n => rgb(darken(mainColorOf(n), 0.25));
 let lastSay = '';
 function say(sc){
-  const { n, d, q, r } = L;
+  const n = st.n, d = st.d, q = Math.floor(n/d), r = n % d;
   const N = '<b style="color:#2d6fb0">' + n + '</b>', D = '<b style="color:' + colOf(d) + '">' + d + '</b>';
   let big, sub = '';
-  if(sc.done){
+  if(phase === 'done'){
     big = N + ' は ' + D + ' が <b>' + q + '</b>こ' + (r ? ' と あまり <b style="color:#c0398a">' + r + '</b>' : ' <span class="ok">ぴったり！</span>');
     sub = n + ' ÷ ' + d + ' ＝ ' + q + (r ? ' あまり ' + r : '');
-  } else big = N + ' は ' + D + ' が <b>' + sc.count + '</b>こ …';
+  } else if(phase === 'run') big = N + ' は ' + D + ' が <b>' + sc.count + '</b>こ …';
+  else { big = N + ' を ' + D + ' ずつ に わけると…'; sub = phase === 'idle' ? '「わけてみる！」を おしてね' : ''; }
   const html = big + '|' + sub;
   if(html === lastSay) return;
   lastSay = html; sayBig.innerHTML = big; saySub.textContent = sub;
 }
-const memoTtl = document.querySelector('#memo .ttl'), memoChips = document.querySelector('#memo .chips');
+
+// ── ボタン・よそうの カード ──
+const goBtn = document.getElementById('go'), askEl = document.getElementById('ask'), micBtn = document.getElementById('mic');
+const askQ = askEl.querySelector('.q'), askHint = askEl.querySelector('.hint'), askMeter = askEl.querySelector('.meter i'), saidBtn = askEl.querySelector('.said');
+goBtn.addEventListener('click', startAsk);
+saidBtn.addEventListener('click', heard);
+askEl.querySelector('.cancel').addEventListener('click', cancelAsk);
+micBtn.addEventListener('click', () => { if(locked()) return; st.mic = st.mic === false; save(); if(st.mic === false) mic.close(); ui(); });
+function ui(){
+  goBtn.style.display = phase === 'idle' || phase === 'done' ? '' : 'none';
+  goBtn.textContent = phase === 'done' ? 'もういちど わけてみる' : 'わけてみる！';
+  askEl.classList.toggle('on', phase === 'ask');
+  micBtn.textContent = st.mic === false ? '🎤 こえ：オフ' : '🎤 こえ：オン';
+  micBtn.classList.toggle('off', locked());
+  if(phase === 'ask'){
+    askQ.innerHTML = '<b style="color:' + colOf(st.d) + '">' + st.d + '</b> は なんこ できるかな？';
+    const useMic = st.mic !== false && !mic.failed();
+    askHint.textContent = heardAt ? 'きこえた！' : useMic ? 'こえに だして いってみてね 🎤' : 'こえに だして いってから おしてね';
+    askEl.classList.toggle('heard', !!heardAt);
+    askEl.classList.toggle('nomic', !useMic);
+  }
+  showN(); showD(); drawMemo();
+}
+
+// ── メモ ──
+const memoTtl = document.querySelector('#memo .ttl span'), memoChips = document.querySelector('#memo .chips');
 function drawMemo(){
   const n = st.n, ds = (st.seen[n] || []).slice().sort((a, b) => a - b);
   memoTtl.textContent = 'メモ：' + n + ' を わけた';
   memoChips.innerHTML = '';
-  if(!ds.length){ memoChips.innerHTML = '<span class="none">まだ ないよ。いくつずつ を かえて ためしてね</span>'; return; }
+  if(!ds.length){ memoChips.innerHTML = '<span class="none">まだ ないよ</span>'; return; }
   for(const d of ds){
     const q = Math.floor(n/d), r = n % d, b = document.createElement('button');
     b.className = 'chip' + (r ? '' : ' just') + (d === st.d ? ' cur' : '');
@@ -288,11 +411,11 @@ function drawMemo(){
   }
 }
 function remember(){
-  const a = st.seen[L.n] || (st.seen[L.n] = []);
-  if(!a.includes(L.d)){ a.push(L.d); save(); drawMemo(); }
+  const a = st.seen[st.n] || (st.seen[st.n] = []);
+  if(!a.includes(st.d)){ a.push(st.d); save(); drawMemo(); }
 }
 
-// ── スピンボタン ──
+// ── スピンボタン ──（よそう・うごいている あいだは おせない）
 function spinner(id, get, set, min, max){
   const el = document.getElementById(id), val = el.querySelector('.val'), m = el.querySelector('.m'), p = el.querySelector('.p');
   const hold = (btn, dv) => {
@@ -300,7 +423,8 @@ function spinner(id, get, set, min, max){
     const stop = () => { clearTimeout(tm); tm = null; };
     btn.addEventListener('pointerdown', e => {
       e.preventDefault(); stop(); k = 0;
-      const step = () => { const v = get() + dv; if(v < min() || v > max()) return stop(); set(v); };
+      if(locked()) return;
+      const step = () => { const v = get() + dv; if(locked() || v < min() || v > max()) return stop(); set(v); };
       step();
       const rep = () => { k++; step(); if(tm !== null) tm = setTimeout(rep, k > 6 ? 70 : 160); };
       tm = setTimeout(rep, 480);
@@ -310,20 +434,18 @@ function spinner(id, get, set, min, max){
   hold(m, -1); hold(p, +1);
   return () => {
     const v = get(); val.textContent = v; val.style.color = colOf(v);
-    m.classList.toggle('off', v <= min()); p.classList.toggle('off', v >= max());
+    m.classList.toggle('off', locked() || v <= min()); p.classList.toggle('off', locked() || v >= max());
   };
 }
-function setN(n){ n = Math.max(1, Math.min(N_MAX, n)); if(n === st.n) return; st.n = n; if(st.d > n) st.d = n; changed(); }
-function setD(d){ d = Math.max(1, Math.min(st.n, d)); if(d === st.d) return; st.d = d; changed(); }
+// かずを かえたら まるごとに もどす（うごきは「わけてみる！」の あと だけ）
+function setN(n){ n = Math.max(1, Math.min(N_MAX, n)); if(locked() || n === st.n) return; st.n = n; if(st.d > n) st.d = n; save(); toWhole(); }
+function setD(d){ d = Math.max(1, Math.min(st.n, d)); if(locked() || d === st.d) return; st.d = d; save(); toWhole(); }
 const showN = spinner('spN', () => st.n, setN, () => 1, () => N_MAX);
 const showD = spinner('spD', () => st.d, setD, () => 1, () => st.n);
-function changed(){ save(); showN(); showD(); drawMemo(); go(st.n, st.d); }
 
 // ── はじめ ──
 resize();
-L = layout(st.n, st.n);        // はじめは まるごとの キャラ。すこし して わける
-showN(); showD(); drawMemo();
-setTimeout(() => go(st.n, st.d), 700);
+toWhole();
 function relayout(){
   const w = stageEl.clientWidth, h = stageEl.clientHeight;
   if(w === W && h === H) return;
@@ -331,23 +453,34 @@ function relayout(){
 }
 window.addEventListener('resize', relayout);
 if(window.ResizeObserver) new ResizeObserver(relayout).observe(stageEl);
-// ゲームの 中で かくされている あいだは かかない（でんちの ため）
+// ゲームの 中で かくされている あいだは かかない（でんちの ため）。マイクも とめる
 const hiddenInGame = () => { try{ return !!window.frameElement && window.frameElement.style.visibility === 'hidden'; }catch(e){ return false; } };
 function frame(now){
-  if(hiddenInGame()){ requestAnimationFrame(frame); return; }
+  if(hiddenInGame() || document.visibilityState === 'hidden'){
+    if(mic.live()) mic.close();
+    if(phase === 'ask'){ phase = 'idle'; ui(); }
+    requestAnimationFrame(frame); return;
+  }
+  const k = mic.tick(now, phase === 'ask' && !heardAt);
+  if(phase === 'ask'){
+    askMeter.style.width = (Math.max(k, mic.level())*100).toFixed(0) + '%';
+    askMeter.style.background = k > 0 ? '#f0a020' : '#3fbf5a';
+    if(k >= 1) heard();
+    if(!saidBtn.classList.contains('show') && (now - askAt > 2500 || askEl.classList.contains('nomic'))) saidBtn.classList.add('show');
+  } else saidBtn.classList.remove('show');
   const sc = draw(now);
   if(sc){
     say(sc);
     if(sc.done && T){ T = null; }
-    if(sc.done && pending){ pending = false; remember(); }
+    if(phase === 'run' && sc.done){ phase = 'done'; pending = false; remember(); ui(); }
   }
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
 
 // テスト・ゲームから
-window.waru = { st: () => st, L: () => L, busy: () => !!T, setN, setD, layout, scene: () => scene(performance.now()),
-                finish(){ if(T) T.t0 -= T.total + 1; } };
+window.waru = { st: () => st, L: () => L, busy: () => !!T, phase: () => phase, setN, setD, layout, scene: () => scene(performance.now()),
+                start: startAsk, heard, finish(){ if(T) T.t0 -= T.total + 1; } };
 </script>
 </body>
 </html>

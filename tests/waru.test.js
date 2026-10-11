@@ -7,11 +7,19 @@ async function openWaru(t, o){
   await tapTab(p, 'waru');
   await p.waitForFunction(() => { const f = document.querySelector('iframe[src^="waru.html"]'); return f && f.contentWindow && f.contentWindow.waru; }, null, { timeout: 5000 });
   const f = p.frames().find(x => x.url().includes('waru.html'));
-  await f.waitForTimeout(800);   // はじめの「まるごと → わける」が はじまるまで
+  await f.waitForTimeout(150);
   return { p, f };
 }
 const vis = p => p.evaluate(() => { const f = document.querySelector('iframe[src^="waru.html"]'); return f ? f.style.visibility : 'none'; });
 const say = f => f.evaluate(() => document.querySelector('#say').innerText.replace(/\s+/g, ' ').trim());
+// よそうを とばして わけきる（「わけてみる！」→ きこえた → おわり）
+async function split(f){
+  await f.evaluate(() => { waru.start(); waru.heard(); });
+  await f.waitForFunction(() => waru.phase() === 'run' || waru.phase() === 'done', null, { timeout: 2000 });
+  await f.evaluate(() => waru.finish());
+  await f.waitForFunction(() => waru.phase() === 'done', null, { timeout: 2000 });
+  await f.waitForTimeout(50);
+}
 const chips = f => f.evaluate(() => [...document.querySelectorAll('#memo .chip')].map(c => c.textContent + (c.classList.contains('just') ? '★' : '')));
 
 module.exports = {
@@ -19,7 +27,7 @@ module.exports = {
     const { p, f } = await openWaru(t);
     t.eq(await vis(p), 'visible', 'わけっこで 見えない');
     t.ok(await p.evaluate(() => document.querySelector('iframe[src^="waru.html"]').getBoundingClientRect().top === TAB_H), 'タブの 下から はじまらない');
-    await f.evaluate(() => { waru.setN(17); waru.setD(5); waru.finish(); });
+    await f.evaluate(() => { waru.setN(17); waru.setD(5); });
     await tapTab(p, 'factor'); await p.waitForTimeout(100);
     t.eq(await vis(p), 'hidden', 'ほかの タブで かくれない');
     await tapTab(p, 'waru'); await p.waitForTimeout(100);
@@ -28,42 +36,67 @@ module.exports = {
     t.eq(await vis(p), 'hidden', 'せっていの うしろに のこる');
   },
 
-  '40 を 3ずつ：13こ と あまり 1。とちゅうは 1グループずつ ふえて、おわると メモに のこる。ぴったりは 金': async t => {
-    const { f } = await openWaru(t, { storage: { nb_waru: JSON.stringify({ n: 40, d: 40, seen: {} }) } });
-    await f.evaluate(() => waru.finish());
-    await f.evaluate(() => waru.setD(3));
-    await f.waitForTimeout(250);
+  'かずを かえても うごかない（まるごとの まま）。「わけてみる！」→ よそう → こえ（いった！）で わかれる。うごいて いる あいだは かえられない': async t => {
+    const { f } = await openWaru(t, { storage: { nb_waru: JSON.stringify({ n: 40, d: 3, seen: {} }) } });
+    await f.evaluate(() => { waru.setD(4); waru.setD(3); });
+    t.eq(await f.evaluate(() => [waru.phase(), waru.busy(), waru.L().d]), ['idle', false, 40], 'かずを かえたら うごいた');
+    t.eq(await say(f), '40 を 3 ずつ に わけると… 「わけてみる！」を おしてね', 'まえの ことば');
+    await f.click('#go');
+    t.eq(await f.evaluate(() => [waru.phase(), document.querySelector('#ask .q').textContent]), ['ask', '3 は なんこ できるかな？'], 'よそうの カード');
+    await f.evaluate(() => waru.setD(5));
+    t.eq(await f.evaluate(() => waru.st().d), 3, 'よそうの あいだに かえられた');
+    // マイクが つかえない（テストの ブラウザ）ときは すぐ「いった！」が 出る
+    await f.waitForFunction(() => document.querySelector('#ask .said').classList.contains('show'), null, { timeout: 4000 });
+    await f.click('#ask .said');
+    t.eq(await f.evaluate(() => document.querySelector('#ask .hint').textContent), 'きこえた！', 'きこえた が 出ない');
+    await f.waitForFunction(() => waru.phase() === 'run', null, { timeout: 2000 });
+    await f.waitForTimeout(300);
     const mid = await f.evaluate(() => ({ busy: waru.busy(), count: waru.scene().count }));
     t.ok(mid.busy && mid.count < 13, 'すぐに ぜんぶ できて しまう: ' + JSON.stringify(mid));
+    await f.evaluate(() => waru.setD(5));
+    t.eq(await f.evaluate(() => waru.st().d), 3, 'うごいて いる あいだに かえられた');
     await f.waitForTimeout(2600);
     const later = await f.evaluate(() => waru.scene().count);
     t.ok(later > 0 && later < 13, 'じゅんばんに ふえない: ' + later);
-    await f.waitForFunction(() => !waru.busy(), null, { timeout: 8000 });
+    await f.waitForFunction(() => waru.phase() === 'done', null, { timeout: 8000 });
     await f.waitForTimeout(100);
     t.eq(await say(f), '40 は 3 が 13こ と あまり 1 40 ÷ 3 ＝ 13 あまり 1', 'ことば');
     t.eq(await chips(f), ['3が13と1'], 'メモ');
-    await f.evaluate(() => { waru.setD(4); waru.finish(); }); await f.waitForTimeout(100);
+    t.eq(await f.evaluate(() => document.querySelector('#go').textContent), 'もういちど わけてみる', 'もういちど');
+    // ぴったり
+    await f.evaluate(() => waru.setD(4));
+    t.eq(await f.evaluate(() => [waru.phase(), waru.L().d]), ['idle', 40], 'かえたら まるごとに もどらない');
+    await split(f);
     t.eq(await say(f), '40 は 4 が 10こ ぴったり！ 40 ÷ 4 ＝ 10', 'ぴったりの ことば');
     t.eq(await chips(f), ['3が13と1', '4が10★'], 'メモ（ぴったりは 金）');
-    // メモを おすと その かずに もどる
-    await f.click('#memo .chip >> nth=0'); await f.evaluate(() => waru.finish()); await f.waitForTimeout(100);
-    t.eq(await f.evaluate(() => waru.st().d), 3, 'メモで もどれない');
+    await f.click('#memo .chip >> nth=0');
+    t.eq(await f.evaluate(() => [waru.st().d, waru.phase()]), [3, 'idle'], 'メモで もどれない');
   },
 
-  '1 ふやすと あまりだけ かわり、あまりが いくつずつ に なったら グループが 1つ ふえる': async t => {
-    const { f } = await openWaru(t, { storage: { nb_waru: JSON.stringify({ n: 40, d: 3, seen: {} }) } });
-    await f.evaluate(() => waru.finish());
-    await f.evaluate(() => { waru.setN(41); waru.finish(); });
+  'よそうは「やめる」で もどれる。こえ オフ でも「いった！」で すすむ': async t => {
+    const { f } = await openWaru(t, { storage: { nb_waru: JSON.stringify({ n: 17, d: 5, seen: {}, mic: false }) } });
+    t.eq(await f.evaluate(() => document.querySelector('#mic').textContent), '🎤 こえ：オフ', 'オフの しるし');
+    await f.click('#go');
+    t.eq(await f.evaluate(() => [document.querySelector('#ask .hint').textContent, document.querySelector('#ask').classList.contains('nomic')]),
+         ['こえに だして いってから おしてね', true], 'オフの ことば');
+    await f.click('#ask .cancel');
+    t.eq(await f.evaluate(() => waru.phase()), 'idle', 'やめる で もどらない');
+    await split(f);
+    t.eq(await say(f), '17 は 5 が 3こ と あまり 2 17 ÷ 5 ＝ 3 あまり 2', '17÷5');
+  },
+
+  '1 ふやすと あまりが かわり、そろうと グループが 1つ ふえる。いくつずつ は ぜんぶ より 大きく ならない': async t => {
+    const { f } = await openWaru(t, { storage: { nb_waru: JSON.stringify({ n: 41, d: 3, seen: {} }) } });
+    await split(f);
     t.eq(await f.evaluate(() => [waru.L().q, waru.L().r]), [13, 2], '41');
-    await f.evaluate(() => waru.setN(42));
-    const still = await f.evaluate(() => { const s = waru.scene(); return s.count; });
-    t.eq(still, 13, 'うごかない グループは そのまま かぞえる はず');
-    await f.evaluate(() => waru.finish()); await f.waitForTimeout(100);
+    await f.evaluate(() => waru.setN(42)); await split(f);
     t.eq(await say(f), '42 は 3 が 14こ ぴったり！ 42 ÷ 3 ＝ 14', '42');
-    // いくつずつ は ぜんぶ より 大きく ならない
-    await f.evaluate(() => { waru.setD(42); waru.setN(10); waru.finish(); });
+    await f.evaluate(() => { waru.setD(42); waru.setN(10); });
     t.eq(await f.evaluate(() => [waru.st().n, waru.st().d]), [10, 10], 'ぜんぶを へらすと いくつずつ も へる');
     t.eq(await f.evaluate(() => [document.querySelector('#spD .p').classList.contains('off'), document.querySelector('#spN .m').classList.contains('off')]), [true, false], 'ボタンの おせない しるし');
+    // いくつずつ ＝ ぜんぶ は うごかずに すぐ こたえ
+    await split(f);
+    t.eq(await say(f), '10 は 10 が 1こ ぴったり！ 10 ÷ 10 ＝ 1', '10÷10');
   },
 
   'どの くみあわせ（1〜100）でも、キャラは ぶたいの 中に かさならずに おさまる': async t => {
@@ -88,8 +121,8 @@ module.exports = {
 
   'かずと メモは ひらきなおしても のこる': async t => {
     const { p, f } = await openWaru(t, { storage: { nb_waru: JSON.stringify({ n: 40, d: 3, seen: {} }) } });
-    await f.evaluate(() => waru.finish()); await f.waitForTimeout(100);
-    await f.evaluate(() => { waru.setD(5); waru.finish(); }); await f.waitForTimeout(100);
+    await split(f);
+    await f.evaluate(() => waru.setD(5)); await split(f);
     await p.reload(); await p.waitForFunction(() => typeof drawFrame === 'function');
     await p.evaluate(() => { whoOpen = false; });
     await tapTab(p, 'waru');
