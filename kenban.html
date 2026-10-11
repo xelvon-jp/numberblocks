@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-512.png">
+<title>けんばん</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#e8f4ff; color:#2b3a52;
+               font-family:-apple-system, system-ui, sans-serif;
+               overscroll-behavior:none; touch-action:none; user-select:none; -webkit-user-select:none; }
+  body { display:flex; flex-direction:column; }
+  #bar { flex:none; display:flex; align-items:center; gap:6px; padding:6px 10px; }
+  #bar .ttl { flex:1; font-size:16px; font-weight:800; }
+  #bar button { border:0; border-radius:10px; padding:7px 10px; font-size:13px; font-weight:700; background:#dfe6ef; color:#2b3a52; }
+  #stage { flex:1; position:relative; min-height:0; }
+  canvas { display:block; position:absolute; inset:0; width:100%; height:100%; }
+  .over { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:12px;
+          background:rgba(232,244,255,0.92); text-align:center; padding:20px; }
+  .over.on { display:flex; }
+  .over .big { font-size:22px; font-weight:900; line-height:1.4; }
+  .over .small { font-size:14px; color:#5a6576; line-height:1.5; }
+  .over button { border:0; border-radius:16px; padding:14px 26px; font-size:20px; font-weight:900; background:#f0a020; color:#fff; box-shadow:0 3px 0 #c07a10; }
+  .over button.sub { background:#dfe6ef; color:#2b3a52; box-shadow:none; font-size:15px; padding:10px 18px; }
+  #learnTip { position:absolute; left:0; right:0; top:8px; text-align:center; display:none; }
+  #learnTip.on { display:block; }
+  #learnTip .card { display:inline-block; background:#fff; border-radius:14px; padding:10px 14px; box-shadow:0 3px 10px rgba(40,60,90,0.2); }
+  #learnTip .big { font-size:18px; font-weight:900; }
+  #learnTip .small { font-size:13px; color:#5a6576; margin-top:2px; }
+  #learnTip button { margin-top:8px; border:0; border-radius:10px; padding:7px 12px; font-size:13px; font-weight:700; background:#dfe6ef; color:#2b3a52; }
+</style>
+</head>
+<body>
+<div id="bar"><div class="ttl">🎹 けんばんで よぼう</div><button id="clear">かたづける</button><button id="relearn">おぼえなおす</button></div>
+<div id="stage"><canvas id="c"></canvas>
+  <div id="startBox" class="over on"><div class="big">キーボードの しろい けんばんを ひくと<br>その かずの キャラが でてくるよ</div>
+    <div class="small">スマホを キーボードの ちかくに おいてね</div><button id="start">はじめる 🎤</button><div class="small" id="err"></div></div>
+  <div id="learnTip"><div class="card"><div class="big"></div><div class="small">ひとつずつ ゆっくり おしてね（くろい けんばんは つかわない）</div>
+    <button id="learnUndo">ひとつ もどる</button> <button id="learnCancel">やめる</button></div></div>
+</div>
+<script>
+(function(){
+  var v = encodeURIComponent(document.lastModified);
+  ['overrides.js', 'engine.js'].forEach(function(f){ document.write('<script src="' + f + '?v=' + v + '"><\/script>'); });
+})();
+</script>
+<script>
+// ─── けんばんで よぼう ─────────────────────────────────────────────
+// キーボードの おもちゃの しろい けんばん（ひだりから 1〜15）を ひくと、その かずの キャラが でてくる。
+// たかさは マイクの おとから（McLeod pitch method。oto.html と おなじ）。
+// けんばんは 25こ（ファ3〜ファ5、くろい けんばん こみ）。はじめは パパの キーボードで はかった たかさ（WHITE・BLACK）。
+// 「おぼえなおす」で しろい 15こを ひだりから ならすと おぼえなおす（くろいのは となりの しろいの あいだ から きめる）。
+// ひいた おとに いちばん ちかい けんばん（±45セント いない）を えらぶ。くろい けんばん なら なにも でない。
+// ひいた けんばんの うえに ちいさな キャラが たつ（かいだんに なる）。まんなかに 大きく その キャラ。
+const WHITE_DEF = [176.5, 197.6, 222.6, 249.4, 264.1, 296.2, 332.8, 349.6, 392.4, 441.6, 495.7, 525, 589.4, 665.2, 703.9];
+const BLACK_DEF = [186.6, 209.2, 236, 279.5, 314.1, 370.3, 416.8, 467.8, 557.1, 625.8];
+// くろい けんばんが どの しろの みぎに あるか（ファ ソ ラ シ ド レ ミ ファ ソ ラ シ ド レ ミ ファ）
+const HAS_BLACK = [1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 0];
+const NAMES = ['ファ', 'ソ', 'ラ', 'シ', 'ド', 'レ', 'ミ', 'ファ', 'ソ', 'ラ', 'シ', 'ド', 'レ', 'ミ', 'ファ'];
+const KEY = 'nb_kenban';
+let tune = { white: WHITE_DEF.slice(), black: BLACK_DEF.slice() };
+try{ const v = JSON.parse(localStorage.getItem(KEY)); if(v && v.white && v.white.length === 15) tune = { white: v.white, black: v.black || blackFrom(v.white) }; }catch(e){}
+function blackFrom(w){ const b = []; for(let i = 0; i < 14; i++) if(HAS_BLACK[i]) b.push(Math.sqrt(w[i]*w[i + 1])); return b; }
+const cents = (a, b) => 1200*Math.log2(b/a);
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d'), stageEl = document.getElementById('stage');
+let W = 0, H = 0;
+function resize(){
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  W = stageEl.clientWidth; H = stageEl.clientHeight;
+  cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+resize();
+window.addEventListener('resize', resize);
+if(window.ResizeObserver) new ResizeObserver(resize).observe(stageEl);
+
+// ── マイクと たかさ ──
+let stream = null, ac = null, an = null, buf = null, sr = 48000, hist = [];
+async function micOpen(){
+  try{
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    const AC = window.AudioContext || window.webkitAudioContext;
+    ac = new AC(); if(ac.state === 'suspended') await ac.resume();
+    sr = ac.sampleRate; an = ac.createAnalyser(); an.fftSize = 2048; buf = new Float32Array(an.fftSize);
+    ac.createMediaStreamSource(stream).connect(an); hist = [];
+    return true;
+  }catch(e){ micClose(); document.getElementById('err').textContent = 'マイクが つかえません（' + (e.name || e) + '）'; return false; }
+}
+function micClose(){
+  if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if(ac){ try{ ac.close(); }catch(e){} ac = null; }
+  an = null;
+}
+const WIN = 1024;
+function pitch(x){
+  const maxTau = Math.min(WIN - 1, Math.floor(sr/60)), minTau = Math.floor(sr/4200);
+  const nsdf = new Float32Array(maxTau + 1);
+  for(let tau = minTau; tau <= maxTau; tau++){
+    let acf = 0, m = 0;
+    for(let i = 0; i < WIN - tau; i++){ const a = x[i], b = x[i + tau]; acf += a*b; m += a*a + b*b; }
+    nsdf[tau] = m > 0 ? 2*acf/m : 0;
+  }
+  const peaks = [];
+  let tau = minTau;
+  while(tau < maxTau && nsdf[tau] > 0) tau++;
+  while(tau < maxTau){
+    while(tau < maxTau && nsdf[tau] <= 0) tau++;
+    let best = -1, bi = -1;
+    while(tau < maxTau && nsdf[tau] > 0){ if(nsdf[tau] > best){ best = nsdf[tau]; bi = tau; } tau++; }
+    if(bi > 0) peaks.push(bi);
+  }
+  if(!peaks.length) return null;
+  const top = Math.max(...peaks.map(p => nsdf[p]));
+  const pick = peaks.find(p => nsdf[p] >= 0.9*top);
+  const a = nsdf[pick - 1], b = nsdf[pick], c = nsdf[pick + 1];
+  const sh = (a - c)/(2*(a - 2*b + c)) || 0;
+  return { f: sr/(pick + (Math.abs(sh) < 1 ? sh : 0)), clarity: b };
+}
+// おなじ たかさが 0.11びょう つづいたら 1おん。おとが とぎれるか たかさが かわったら つぎを まつ
+let recent = [], armed = true, quietSince = 0, lastNote = null;
+function listen(now){
+  if(!an) return;
+  an.getFloatTimeDomainData(buf);
+  const x = buf.subarray(buf.length - WIN);
+  let s = 0; for(let i = 0; i < WIN; i++) s += x[i]*x[i];
+  const db = 20*Math.log10(Math.max(1e-7, Math.sqrt(s/WIN)));
+  if(db > -110){ hist.push(db); if(hist.length > 180) hist.shift(); }
+  const floor = hist.length >= 20 ? hist.slice().sort((a, b) => a - b)[Math.floor(hist.length*0.2)] : 0;
+  const p = db > floor + 12 && db > -75 ? pitch(x) : null;
+  if(p && p.clarity >= 0.85 && p.f > 120 && p.f < 1200){
+    quietSince = 0;
+    recent.push({ t: now, f: p.f }); while(recent.length && now - recent[0].t > 140) recent.shift();
+    if(recent.length >= 4 && now - recent[0].t >= 110){
+      const fs = recent.map(r => r.f).sort((a, b) => a - b), med = fs[fs.length >> 1];
+      if(fs.every(f => Math.abs(cents(med, f)) < 25) && (armed || (lastNote && Math.abs(cents(lastNote, med)) > 60))){ armed = false; lastNote = med; onNote(med, now); }
+    }
+  } else {
+    recent = [];
+    if(!quietSince) quietSince = now;
+    if(now - quietSince > 90) armed = true;
+  }
+}
+
+// ── どの けんばん？ ──
+// { white: 0〜14 } か { black: 0〜9 } か null
+function whichKey(f){
+  let best = null, bc = 46;
+  tune.white.forEach((k, i) => { const c = Math.abs(cents(k, f)); if(c < bc){ bc = c; best = { white: i }; } });
+  tune.black.forEach((k, i) => { const c = Math.abs(cents(k, f)); if(c < bc){ bc = c; best = { black: i }; } });
+  return best;
+}
+
+// ── あそび ──
+let standing = {}, big = null, flash = { white: -1, black: -1, t: 0 };
+let learning = null;    // おぼえなおし中：{ got: [] }
+function onNote(f, now){
+  if(learning){
+    learning.got.push(+f.toFixed(1));
+    flash = { white: learning.got.length - 1, black: -1, t: now };
+    if(learning.got.length === 15){
+      tune = { white: learning.got, black: blackFrom(learning.got) };
+      try{ localStorage.setItem(KEY, JSON.stringify(tune)); }catch(e){}
+      learning = null; standing = {}; big = null;
+    }
+    learnUi(); return;
+  }
+  const k = whichKey(f);
+  if(!k) return;
+  if(k.black !== undefined){ flash = { white: -1, black: k.black, t: now }; return; }
+  const n = k.white + 1;
+  flash = { white: k.white, black: -1, t: now };
+  standing[n] = { t: standing[n] ? standing[n].t : now, hop: now };
+  big = { n, t: now };
+}
+document.getElementById('clear').addEventListener('click', () => { standing = {}; big = null; });
+
+// ── かく ──
+function keyboardGeom(){
+  const m = 8, kh = Math.min(86, Math.max(56, H*0.14)), kw = (W - m*2)/15, y = H - kh - 6;
+  return { m, kw, kh, y };
+}
+let maxCols = 1, maxRows = 1;
+for(let n = 1; n <= 15; n++){ const s = blockSpec(n); maxCols = Math.max(maxCols, s.cols); maxRows = Math.max(maxRows, s.rows); }
+function draw(now){
+  ctx.clearRect(0, 0, W, H);
+  const g = keyboardGeom();
+  // かいだん（けんばんの うえに ちいさく たつ）
+  const stairH = Math.min(H*0.38, g.y - 10);
+  // 2マス はばまでが 1けんばんに おさまる 大きさ（15 など はばの ひろい キャラは となりに すこし かさなる）
+  const bsS = Math.min((g.kw*0.95)/2, (stairH)/(maxRows + PAD_TOP + PAD_BOT));
+  const footY = g.y - 4;
+  for(const k in standing){
+    const n = +k, s = blockSpec(n), st = standing[k];
+    const cx = g.m + (n - 0.5)*g.kw;
+    const age = now - st.t, pop = Math.min(1, age/250), hop = now - st.hop < 450 ? Math.sin(Math.PI*(now - st.hop)/450)*bsS*2 : 0;
+    ctx.save(); ctx.globalAlpha = pop;
+    drawNumberblock(ctx, n, cx - s.cols*bsS/2, footY - PAD_BOT*bsS*0.4 - s.rows*bsS - hop, bsS, { t: now, animate: true });
+    ctx.restore();
+  }
+  // まんなかに 大きく
+  if(big){
+    const s = blockSpec(big.n), top = 10, bottom = footY - stairH - 6, ah = bottom - top;
+    if(ah > 40){
+      const bs = Math.min(26, (W*0.5)/(s.cols + PAD_X*2), ah/(s.rows + PAD_TOP + PAD_BOT));
+      const age = now - big.t, k = Math.min(1, age/300), sc = k < 1 ? 0.6 + 0.4*k + 0.15*Math.sin(Math.PI*k) : 1;
+      const cx = W/2, fy = top + ah - PAD_BOT*bs;
+      ctx.save(); ctx.translate(cx, fy); ctx.scale(sc, sc);
+      drawNumberblock(ctx, big.n, -s.cols*bs/2, -s.rows*bs, bs, { t: now, animate: true });
+      ctx.restore();
+    }
+  }
+  // けんばん
+  const fl = now - flash.t < 400;
+  for(let i = 0; i < 15; i++){
+    const x = g.m + i*g.kw, on = fl && flash.white === i, next = learning && learning.got.length === i;
+    ctx.fillStyle = on ? '#ffe08a' : next ? '#d8f0ff' : '#fff';
+    ctx.strokeStyle = next ? '#3f8fd0' : '#9aa6b8'; ctx.lineWidth = next ? 2.5 : 1;
+    ctx.beginPath(); ctx.roundRect(x + 1, g.y, g.kw - 2, g.kh, [0, 0, 6, 6]); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#2b3a52'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.font = '800 ' + Math.max(10, Math.min(16, g.kw*0.55)) + 'px sans-serif';
+    ctx.fillText(String(i + 1), x + g.kw/2, g.y + g.kh - 16);
+    ctx.fillStyle = '#8a94a6'; ctx.font = Math.max(7, Math.min(10, g.kw*0.34)) + 'px sans-serif';
+    ctx.fillText(NAMES[i], x + g.kw/2, g.y + g.kh - 4);
+  }
+  let b = 0;
+  for(let i = 0; i < 14; i++){
+    if(!HAS_BLACK[i]) continue;
+    const bw = g.kw*0.6, x = g.m + (i + 1)*g.kw - bw/2, on = fl && flash.black === b;
+    ctx.fillStyle = on ? '#8a6a10' : '#2b2f3a';
+    ctx.beginPath(); ctx.roundRect(x, g.y, bw, g.kh*0.55, [0, 0, 4, 4]); ctx.fill();
+    b++;
+  }
+}
+
+// ── はじめる・おぼえなおす ──
+const startBox = document.getElementById('startBox'), tip = document.getElementById('learnTip');
+document.getElementById('start').addEventListener('click', async () => { if(await micOpen()) startBox.classList.remove('on'); });
+document.getElementById('relearn').addEventListener('click', () => { learning = { got: [] }; standing = {}; big = null; learnUi(); });
+document.getElementById('learnUndo').addEventListener('click', () => { if(learning){ learning.got.pop(); learnUi(); } });
+document.getElementById('learnCancel').addEventListener('click', () => { learning = null; learnUi(); });
+function learnUi(){
+  tip.classList.toggle('on', !!learning);
+  if(learning) tip.querySelector('.big').textContent = 'ひだりから ' + (learning.got.length + 1) + 'ばんめの しろい けんばんを おしてね（' + learning.got.length + '/15）';
+}
+
+// ゲームの 中で かくれたら マイクを とめて、もどったら「はじめる」から（iPhone は タップで ないと おとが きけない）
+const hiddenInGame = () => { try{ return !!window.frameElement && window.frameElement.style.visibility === 'hidden'; }catch(e){ return false; } };
+function stopAll(){ micClose(); startBox.classList.add('on'); learning = null; learnUi(); }
+window.addEventListener('pagehide', micClose);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') stopAll(); });
+function frame(now){
+  if(hiddenInGame()){ if(an) stopAll(); requestAnimationFrame(frame); return; }
+  listen(now);
+  draw(now);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.kenban = { onNote: f => onNote(f, performance.now()), whichKey, tune: () => tune, standing: () => standing, big: () => big, pitch, setSr: v => sr = v,
+                  learning: () => learning };
+</script>
+</body>
+</html>

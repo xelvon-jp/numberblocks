@@ -269,7 +269,7 @@ function bottomPanelH(){
   if(mode==='factor') return FACTOR_H+safeBottom();
   if(mode==='quiz')   return QUIZ_H+safeBottom();
   if(mode==='clock')  return 26+safeBottom();   // とけいは文字盤を大きく見せたい
-  if(mode==='waru')   return safeBottom();      // わけっこは waru.html が かさなる
+  if(isFrameMode())   return safeBottom();      // わけっこ・けんばんは iframe が かさなる
   return getPadH() + opBarH();                  // ＋−×÷ の段ぶんだけ高い
 }
 function calcFloor(){ return sh - GH - bottomPanelH() - 12; }
@@ -956,25 +956,31 @@ function startHissanTask(){
   showHissan(true);
   updateTargets();
 }
-// ─── わけっこ（waru.html）──────────────────────────────────────────
-// タブの 下に iframe で かさねる（あそぶ じかんは そのまま かぞえる）。1まいを つかいまわして、まえの かずを のこす。
+// ─── わけっこ（waru.html）・けんばん（kenban.html）────────────────────────
+// タブの 下に iframe で かさねる（あそぶ じかんは そのまま かぞえる）。1まいずつ つかいまわして、まえの ようすを のこす。
 // せってい・だれが あそぶ？・きろく・ステージを 出している あいだは かくす（キャンバスに かくので）。
-let waruFrame = null;
+// けんばんは タブに ない（せっていの「けんばん」から）。タブを おすと もどる。
+const FRAME_PAGES = { waru: 'waru.html', kenban: 'kenban.html' };
+function isFrameMode(m){ return !!FRAME_PAGES[m || mode]; }
+const modeFrames = {};
 function waruSync(){
-  const on = mode === 'waru' && !paradeBreak && !setOpen && !whoOpen && !recOpen && !stageOpen;
-  if(!on && !waruFrame) return;
-  if(!waruFrame || !waruFrame.isConnected){
-    const f = document.createElement('iframe');
-    f.src = 'waru.html?embed=1&v=' + Date.now();   // キャッシュの 古い版を ひらかない
-    f.allow = 'microphone';                          // こえで よそう（マイクの おおきさ だけ）
-    f.style.cssText = 'position:fixed;left:0;right:0;bottom:0;width:100%;border:0;z-index:50;background:#dff3f6';
-    document.body.appendChild(f);
-    waruFrame = f;
+  for(const m in FRAME_PAGES){
+    const on = mode === m && !paradeBreak && !setOpen && !whoOpen && !recOpen && !stageOpen;
+    let f = modeFrames[m];
+    if(!on && !f) continue;
+    if(!f || !f.isConnected){
+      f = document.createElement('iframe');
+      f.src = FRAME_PAGES[m] + '?embed=1&v=' + Date.now();   // キャッシュの 古い版を ひらかない
+      f.allow = 'microphone';                                 // こえ・おとの たかさ
+      f.style.cssText = 'position:fixed;left:0;right:0;bottom:0;width:100%;border:0;z-index:50;background:#dff3f6';
+      document.body.appendChild(f);
+      modeFrames[m] = f;
+    }
+    const top = TAB_H + 'px', h = 'calc(100% - ' + TAB_H + 'px)';
+    if(f.style.top !== top){ f.style.top = top; f.style.height = h; }
+    const vis = on ? 'visible' : 'hidden';
+    if(f.style.visibility !== vis){ f.style.visibility = vis; f.style.pointerEvents = on ? 'auto' : 'none'; }
   }
-  const top = TAB_H + 'px', h = 'calc(100% - ' + TAB_H + 'px)';
-  if(waruFrame.style.top !== top){ waruFrame.style.top = top; waruFrame.style.height = h; }
-  const vis = on ? 'visible' : 'hidden';
-  if(waruFrame.style.visibility !== vis){ waruFrame.style.visibility = vis; waruFrame.style.pointerEvents = on ? 'auto' : 'none'; }
 }
 function closeHissan(){
   if(hissanTask && hissanTask.frame) showHissan(false);
@@ -1350,7 +1356,7 @@ function targetRowY(){
   return r ? Math.round(r.y + r.h + 8) : TAB_H + 6;
 }
 function getTargetRect(id){
-  if(mode==='factor'||mode==='quiz'||mode==='clock'||mode==='waru') return null;
+  if(mode==='factor'||mode==='quiz'||mode==='clock'||isFrameMode()) return null;
   const w=51, h=60, n=DROP_TARGETS.length;
   const gap = Math.min(40, Math.max(8, (sw - EDGE_MARGIN*2 - n*w)/(n-1)));
   const total = n*w + (n-1)*gap;
@@ -4147,17 +4153,20 @@ function drawSettings(ctx){
 
   // ずかん・ひっさん（ためしの ページ）・全画面（全画面は使える端末だけ）
   // どうき（かぞくの スマホと セーブデータを あわせる）も ここ
-  const n = CAN_FULLSCREEN ? 4 : 3, g2 = 8, bw2 = (w - 32 - g2*(n-1)) / n;
+  // けんばん（キーボードの おもちゃを ひくと キャラが でる。kenban.html を タブの 下に かさねる）
+  const n = CAN_FULLSCREEN ? 5 : 4, g2 = 8, bw2 = (w - 32 - g2*(n-1)) / n;
   drawCardBtn(ctx, x+16, ty, bw2, bigH, 'ずかん', 'rgba(228,233,242,0.98)', '#22314a');
   setBtns.push({ x:x+16, y:ty, w:bw2, h:bigH, val:'zukan' });
   drawCardBtn(ctx, x+16+bw2+g2, ty, bw2, bigH, 'ひっさん', 'rgba(255,236,190,0.98)', '#6b4a00');
   setBtns.push({ x:x+16+bw2+g2, y:ty, w:bw2, h:bigH, val:'hissan' });
-  drawCardBtn(ctx, x+16+(bw2+g2)*2, ty, bw2, bigH, sync.label(), 'rgba(214,236,255,0.98)', '#1d4a7a');
-  setBtns.push({ x:x+16+(bw2+g2)*2, y:ty, w:bw2, h:bigH, val:'sync' });
+  drawCardBtn(ctx, x+16+(bw2+g2)*2, ty, bw2, bigH, 'けんばん', 'rgba(222,244,214,0.98)', '#2a5a1a');
+  setBtns.push({ x:x+16+(bw2+g2)*2, y:ty, w:bw2, h:bigH, val:'kenban' });
+  drawCardBtn(ctx, x+16+(bw2+g2)*3, ty, bw2, bigH, sync.label(), 'rgba(214,236,255,0.98)', '#1d4a7a');
+  setBtns.push({ x:x+16+(bw2+g2)*3, y:ty, w:bw2, h:bigH, val:'sync' });
   if(CAN_FULLSCREEN){
-    drawCardBtn(ctx, x+16+(bw2+g2)*3, ty, bw2, bigH, document.fullscreenElement ? 'やめる' : 'ぜんがめん',
+    drawCardBtn(ctx, x+16+(bw2+g2)*4, ty, bw2, bigH, document.fullscreenElement ? 'やめる' : 'ぜんがめん',
                 'rgba(228,233,242,0.98)', '#22314a');
-    setBtns.push({ x:x+16+(bw2+g2)*3, y:ty, w:bw2, h:bigH, val:'fs' });
+    setBtns.push({ x:x+16+(bw2+g2)*4, y:ty, w:bw2, h:bigH, val:'fs' });
   }
   ty += bigH + (tight ? 8 : 12);
 
@@ -4210,6 +4219,7 @@ function handleSettingsTap(x, y){
     else if(b.val==='halloween'){ try{ localStorage.setItem('nb_halloween', b.v); }catch(e){} halloweenOn = isHalloween(); }
     else if(b.val==='zukan') location.href = 'zukan.html?v=' + Date.now();   // キャッシュの 古い版を ひらかない
     else if(b.val==='hissan') location.href = 'hissan.html?v=' + Date.now();
+    else if(b.val==='kenban'){ setOpen = false; if(taskOn) setTaskOn(false); setMode('kenban'); }
     else if(b.val==='fs')    toggleFullscreen();
     else if(b.val==='arc')   { setOpen = false; openArcTuner(); }
     else if(b.val==='ptune') { setOpen = false; openParadeTuner(); }
@@ -4901,7 +4911,7 @@ function handleStart(x,y,pid){
   // 正解演出の途中なら、どこをタップしても次へ進む。見終わった子を待たせない。
   if(puzzle && puzzle.phase==='correct'){ puzzle.phase='done'; return; }
   if(mode==='factor'){ handleFactorTap(x,y); return; }
-  if(mode==='waru') return;                       // わけっこの 中は waru.html が うける
+  if(isFrameMode()) return;                       // わけっこ・けんばんの 中は iframe が うける
   if(mode==='clock'){ handleClockStart(x,y); return; }
   if(mode==='quiz'){
     // ドリル中は選択肢のタップだけ受け付ける（キャラの操作や数字パッドは無い）
@@ -5039,7 +5049,7 @@ function setMode(newMode){
   if(isCalcMode(newMode)) lastOp = newMode;
   if(newMode===mode) return;
   // 計算モード（＋−×÷）どうしの行き来ならキャラを残す。因数・ドリルを跨ぐときは片付ける
-  const isCalc = m => m!=='factor' && m!=='quiz' && m!=='waru';
+  const isCalc = m => m!=='factor' && m!=='quiz' && !isFrameMode(m);
   if(!isCalc(mode) || !isCalc(newMode)) blocks=[];
   if(!isCalcMode(newMode)){ stageOpen=false; stageDetail=-1; }
   mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={}; clrHold=null; clockDrag=null; clockMerged=false;
@@ -5171,8 +5181,8 @@ function drawFrame(ts){
   tickAutoNext();
   ctx.clearRect(0,0,sw,sh); drawBG(ctx); drawTabsAndUI(ctx);
   waruSync();
-  if(mode==='waru' && !paradeBreak){
-    // わけっこ：タブの 下は waru.html（iframe）。ここでは なにも かかない
+  if(isFrameMode() && !paradeBreak){
+    // わけっこ・けんばん：タブの 下は iframe。ここでは なにも かかない
   } else if(paradeBreak){
     // できた おだいは かたづけて、パレードだけ。おわったら つぎの おだいへ
     for(const fp of fxParticles) fp.update();
@@ -5307,7 +5317,7 @@ function keySummon(){
 }
 document.addEventListener('keydown', e=>{
   if(e.ctrlKey || e.metaKey || e.altKey) return;   // ブラウザのショートカットは邪魔しない
-  if(mode === 'factor' || mode === 'quiz' || mode === 'waru') return;  // 因数・ドリル・わけっこはキャラを出さないので対象外
+  if(mode === 'factor' || mode === 'quiz' || isFrameMode()) return;  // 因数・ドリル・わけっこ・けんばんはキャラを出さないので対象外
   if(puzzle) return;                               // クイズ中は入力を受けない
   if(e.key >= '0' && e.key <= '9'){
     if(keyInput.length < 3) keyInput += e.key;
