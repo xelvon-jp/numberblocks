@@ -966,6 +966,7 @@ function waruSync(){
   if(!waruFrame || !waruFrame.isConnected){
     const f = document.createElement('iframe');
     f.src = 'waru.html?embed=1&v=' + Date.now();   // キャッシュの 古い版を ひらかない
+    f.allow = 'microphone';                          // こえで よそう（マイクの おおきさ だけ）
     f.style.cssText = 'position:fixed;left:0;right:0;bottom:0;width:100%;border:0;z-index:50;background:#dff3f6';
     document.body.appendChild(f);
     waruFrame = f;

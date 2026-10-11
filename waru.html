@@ -49,6 +49,9 @@
 <div id="say"><div class="big"></div><div class="sub"></div></div>
 <div id="stage"><canvas id="c"></canvas></div>
 <div id="memo"><div class="ttl"></div><div class="chips"></div></div>
+<!-- ためし：マイク テストへ（こえで よそう を つくる まえに ためす。おわったら けす） -->
+<button id="micTest" style="position:absolute;right:8px;bottom:calc(8px + env(safe-area-inset-bottom, 0px));border:0;border-radius:10px;padding:6px 10px;font-size:13px;font-weight:700;background:#dfe6ef;color:#2b3a52"
+        onclick="location.href='mic-test.html?v=' + Date.now()">🎤 マイク テスト</button>
 <script>
 // ページと いっしょに 新しい スクリプトを 読む（古い キャッシュと まざらないように。index.html と おなじ しくみ）
 (function(){

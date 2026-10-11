@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>マイク テスト</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { background:#eef6f8; color:#2b3a52; font-family:-apple-system, system-ui, sans-serif; }
+  body { padding:12px 14px calc(24px + env(safe-area-inset-bottom, 0px)); }
+  h1 { font-size:20px; margin-bottom:4px; }
+  p { font-size:14px; line-height:1.5; margin:4px 0; }
+  .row { display:flex; gap:8px; margin:10px 0; }
+  button { flex:1; border:0; border-radius:12px; padding:14px 8px; font-size:16px; font-weight:700; background:#3f8fd0; color:#fff; }
+  button.sub { background:#dfe6ef; color:#2b3a52; }
+  button:disabled { opacity:0.35; }
+  .card { background:#fff; border-radius:14px; padding:10px 12px; margin:10px 0; }
+  #meter { position:relative; height:34px; border-radius:10px; background:#e4e9f1; overflow:hidden; }
+  #fill { position:absolute; left:0; top:0; bottom:0; width:0; background:#3fbf5a; transition:width 0.05s linear; }
+  #thr { position:absolute; top:-4px; bottom:-4px; width:3px; background:#d0569a; }
+  #hold { height:8px; border-radius:4px; background:#e4e9f1; margin-top:6px; overflow:hidden; }
+  #holdFill { height:100%; width:0; background:#f0a020; }
+  #big { text-align:center; font-size:30px; font-weight:900; min-height:48px; line-height:48px; margin-top:6px; color:#9aa3b2; }
+  #big.on { color:#d08a00; }
+  label { display:block; font-size:14px; margin-top:8px; }
+  input[type=range] { width:100%; }
+  #log { font-size:12px; white-space:pre-wrap; color:#555; word-break:break-all; }
+</style>
+</head>
+<body>
+<h1>🎤 マイク テスト</h1>
+<p>「マイクを つかう」を おして、こえを だしてみてください。こえが <b>しばらく つづくと</b>「きこえた！」に なります。</p>
+<p id="where"></p>
+
+<div class="row">
+  <button id="start">マイクを つかう</button>
+  <button id="stop" class="sub" disabled>とめる</button>
+</div>
+
+<div class="card">
+  <div id="meter"><div id="fill"></div><div id="thr"></div></div>
+  <div id="hold"><div id="holdFill"></div></div>
+  <div id="big">—</div>
+  <p id="num">おおきさ：-　／ いちばん：-　／ きこえた：0かい</p>
+  <label>どれくらいで「こえ」と みるか（ピンクの せん）：<span id="thrV"></span>
+    <input id="thrIn" type="range" min="0.01" max="0.5" step="0.01" value="0.12"></label>
+  <label>どれくらい つづいたら「きこえた」か：<span id="holdV"></span>
+    <input id="holdIn" type="range" min="100" max="1500" step="50" value="500"></label>
+</div>
+
+<div class="row">
+  <button id="other" class="sub"></button>
+  <button id="back" class="sub">もどる</button>
+</div>
+
+<div class="card"><div id="log"></div></div>
+
+<script>
+// ─── マイク テスト ─────────────────────────────────────────────
+// わけっこで「こえに だして よそう」を つかえるか ためす ページ。こえの なかみは きかない（おおきさ だけ）。
+// わけっこ（ゲームの iframe の 中）から ひらくのと、そと（ふつうの ページ）で ひらくのと、りょうほう ためせる。
+// ここを はなれる ときは かならず マイクを とめる。
+const $ = id => document.getElementById(id);
+const inFrame = window.top !== window.self;
+const logEl = $('log'), t0 = performance.now();
+function log(s){ logEl.textContent = ((performance.now() - t0)/1000).toFixed(1) + 's ' + s + '\n' + logEl.textContent; }
+
+$('where').textContent = inFrame ? 'いまは ゲームの 中（わけっこと おなじ）で ためして います。' : 'いまは そと（ふつうの ページ）で ためして います。';
+$('other').textContent = inFrame ? 'そとで ためす' : 'ゲームに もどる';
+$('back').style.display = inFrame ? '' : 'none';
+$('other').onclick = () => { stop(); if(inFrame) window.top.location.href = 'mic-test.html?v=' + Date.now(); else location.href = 'index.html'; };
+$('back').onclick = () => { stop(); location.href = 'waru.html?embed=1&v=' + Date.now(); };
+
+let stream = null, ac = null, an = null, buf = null, raf = 0;
+let level = 0, peak = 0, overSince = 0, heard = 0, coolUntil = 0;
+const thrIn = $('thrIn'), holdIn = $('holdIn');
+function showSet(){ $('thrV').textContent = (+thrIn.value).toFixed(2); $('holdV').textContent = (+holdIn.value/1000).toFixed(2) + 'びょう'; $('thr').style.left = (Math.min(1, thrIn.value/0.5)*100) + '%'; }
+thrIn.oninput = holdIn.oninput = showSet; showSet();
+
+async function start(){
+  $('start').disabled = true;
+  try{
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) throw new Error('getUserMedia が ない');
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    const AC = window.AudioContext || window.webkitAudioContext;
+    ac = new AC();
+    if(ac.state === 'suspended') await ac.resume();
+    const src = ac.createMediaStreamSource(stream);
+    an = ac.createAnalyser(); an.fftSize = 1024; buf = new Float32Array(an.fftSize);
+    src.connect(an);
+    log('マイク OK（' + ac.sampleRate + 'Hz, ' + ac.state + '）');
+    $('stop').disabled = false;
+    peak = 0; tick();
+  }catch(e){
+    log('マイク NG：' + (e.name || '') + ' ' + (e.message || e));
+    $('big').textContent = 'つかえません'; $('start').disabled = false;
+  }
+}
+function tick(){
+  an.getFloatTimeDomainData(buf);
+  let s = 0; for(let i = 0; i < buf.length; i++) s += buf[i]*buf[i];
+  const rms = Math.sqrt(s/buf.length);
+  level = Math.max(rms, level*0.85);               // すぐ さがらないように
+  peak = Math.max(peak, rms);
+  const now = performance.now(), thr = +thrIn.value, hold = +holdIn.value;
+  if(now < coolUntil){ overSince = 0; }
+  else if(level > thr){ if(!overSince) overSince = now; }
+  else overSince = 0;
+  const k = overSince ? Math.min(1, (now - overSince)/hold) : 0;
+  if(k >= 1){ heard++; coolUntil = now + 1500; overSince = 0; $('big').textContent = 'きこえた！🎉'; $('big').classList.add('on'); log('きこえた（' + heard + 'かいめ）'); }
+  else if(now > coolUntil){ $('big').textContent = overSince ? 'きいてる…' : 'しずか'; $('big').classList.remove('on'); }
+  $('fill').style.width = (Math.min(1, level/0.5)*100) + '%';
+  $('fill').style.background = level > thr ? '#f0a020' : '#3fbf5a';
+  $('holdFill').style.width = (k*100) + '%';
+  $('num').textContent = 'おおきさ：' + level.toFixed(3) + '　／ いちばん：' + peak.toFixed(3) + '　／ きこえた：' + heard + 'かい';
+  raf = requestAnimationFrame(tick);
+}
+function stop(){
+  cancelAnimationFrame(raf); raf = 0;
+  if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; log('マイクを とめた'); }
+  if(ac){ try{ ac.close(); }catch(e){} ac = null; }
+  $('start').disabled = false; $('stop').disabled = true; $('big').textContent = '—'; $('big').classList.remove('on');
+}
+$('start').onclick = start;
+$('stop').onclick = stop;
+window.addEventListener('pagehide', stop);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') stop(); });
+
+log('ばしょ：' + (inFrame ? 'ゲームの 中' : 'そと') + ' / ホーム画面から：' + (navigator.standalone || matchMedia('(display-mode: standalone)').matches ? 'はい' : 'いいえ'));
+if(navigator.permissions && navigator.permissions.query){
+  navigator.permissions.query({ name: 'microphone' }).then(p => log('マイクの きょか：' + p.state)).catch(e => log('きょかの しらべ：できない'));
+}
+log(navigator.userAgent);
+</script>
+</body>
+</html>
