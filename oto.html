@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>おとの たかさ テスト</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { background:#eef6f8; color:#2b3a52; font-family:-apple-system, system-ui, sans-serif; }
+  body { padding:12px 14px calc(24px + env(safe-area-inset-bottom, 0px)); }
+  h1 { font-size:20px; margin-bottom:4px; }
+  p { font-size:14px; line-height:1.5; margin:4px 0; }
+  .row { display:flex; gap:8px; margin:8px 0; }
+  button { flex:1; border:0; border-radius:12px; padding:12px 8px; font-size:15px; font-weight:700; background:#3f8fd0; color:#fff; }
+  button.sub { background:#dfe6ef; color:#2b3a52; }
+  button.on { background:#f0a020; }
+  button:disabled { opacity:0.35; }
+  .card { background:#fff; border-radius:14px; padding:10px 12px; margin:8px 0; }
+  #now { display:flex; align-items:baseline; gap:10px; }
+  #note { font-size:44px; font-weight:900; min-width:120px; }
+  #hz { font-size:16px; color:#5a6576; }
+  #cents { height:10px; border-radius:5px; background:#e4e9f1; position:relative; margin:6px 0 2px; }
+  #cents i { position:absolute; top:-3px; width:4px; height:16px; background:#3f8fd0; border-radius:2px; left:50%; }
+  #cents b { position:absolute; left:50%; top:-4px; width:2px; height:18px; background:#9aa3b2; }
+  #info { font-size:12px; color:#6a7486; }
+  #keys { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+  .k { width:44px; padding:4px 0 3px; border-radius:8px; background:#f4f6fa; border:2px solid #d4dbe6; text-align:center; }
+  .k .n { font-size:15px; font-weight:900; }
+  .k .s { font-size:10px; color:#6a7486; line-height:1.2; }
+  .k.hit { background:#fff1c9; border-color:#f0a020; transform:scale(1.08); }
+  .k.near { border-color:#d0569a; }
+  #big { text-align:center; font-size:56px; font-weight:900; min-height:70px; color:#d08a00; }
+  #verdict { font-size:15px; font-weight:800; }
+  #verdict.ok { color:#2a8a3a; } #verdict.ng { color:#c0398a; }
+  #log { font-size:11px; white-space:pre-wrap; color:#555; word-break:break-all; max-height:140px; overflow:auto; }
+  textarea { width:100%; height:80px; font-size:11px; }
+</style>
+</head>
+<body>
+<h1>🎹 おとの たかさ テスト</h1>
+<p>キーボードの おもちゃの けんばんを、ひとつずつ みわけられるか ためします。スマホを キーボードの ちかくに おいてください。</p>
+
+<div class="row">
+  <button id="start">マイクを つかう</button>
+  <button id="stop" class="sub" disabled>とめる</button>
+</div>
+
+<div class="card">
+  <div id="now"><div id="note">—</div><div id="hz"></div></div>
+  <div id="cents"><b></b><i></i></div>
+  <div id="info">おおきさ・はっきりさ：-</div>
+</div>
+
+<div class="row">
+  <button id="mLearn" class="on">① おぼえる</button>
+  <button id="mGuess" class="sub">② あてる</button>
+</div>
+
+<div class="card" id="learnBox">
+  <p><b>ひだりの けんばんから じゅんに 1かいずつ</b> おしてください。おとが きこえるたびに つぎの けんばんへ すすみます。</p>
+  <p id="next"></p>
+  <div class="row">
+    <button id="undo" class="sub">ひとつ けす</button>
+    <button id="clear" class="sub">ぜんぶ けす</button>
+  </div>
+</div>
+<div class="card" id="guessBox" style="display:none">
+  <p>どれか けんばんを おしてください。なんばんめ か を あてます。</p>
+  <div id="big">?</div>
+</div>
+
+<div class="card">
+  <div id="verdict">まだ おぼえて いません</div>
+  <div id="keys"></div>
+</div>
+
+<div class="card">
+  <p>けっかを おくる ときは「コピー」して はりつけてください。</p>
+  <div class="row"><button id="copy" class="sub">コピー</button></div>
+  <textarea id="out" readonly></textarea>
+</div>
+
+<div class="card"><div id="log"></div></div>
+
+<script>
+// ─── おとの たかさ テスト ───────────────────────────────────────────
+// マイクの おとから たかさ（Hz）を はかる（McLeod の やりかた：NSDF の さいしょの 大きな 山）。
+// ① おぼえる：けんばんを じゅんに ならすと、ひとつずつ たかさを きろく（おなじ たかさが 0.12びょう つづいたら 1おん）。
+// ② あてる  ：ならした おとに いちばん ちかい けんばんを 出す。
+// ちかい けんばんどうしが はんおん（100セント）の はんぶん より ちかいと みわけ にくい。
+const $ = id => document.getElementById(id);
+const t0 = performance.now();
+function log(s){ $('log').textContent = ((performance.now() - t0)/1000).toFixed(1) + 's ' + s + '\n' + $('log').textContent; }
+
+const NAMES = ['ド', 'ド#', 'レ', 'レ#', 'ミ', 'ファ', 'ファ#', 'ソ', 'ソ#', 'ラ', 'ラ#', 'シ'];
+const midiOf = f => 69 + 12*Math.log2(f/440);
+function noteName(f){ const m = Math.round(midiOf(f)); return NAMES[((m % 12) + 12) % 12] + (Math.floor(m/12) - 1); }
+const centsBetween = (a, b) => 1200*Math.log2(b/a);
+
+let keys = [];
+try{ keys = JSON.parse(localStorage.getItem('nb_oto_keys') || '[]'); }catch(e){}
+function saveKeys(){ try{ localStorage.setItem('nb_oto_keys', JSON.stringify(keys)); }catch(e){} }
+
+// ── マイク ──
+let stream = null, ac = null, an = null, buf = null, raf = 0, sr = 48000;
+async function start(){
+  $('start').disabled = true;
+  try{
+    // たかさを はかるので じどうの くふう（こえ むけ）は きる
+    stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+    const AC = window.AudioContext || window.webkitAudioContext;
+    ac = new AC(); if(ac.state === 'suspended') await ac.resume();
+    sr = ac.sampleRate;
+    an = ac.createAnalyser(); an.fftSize = 2048; buf = new Float32Array(an.fftSize);
+    ac.createMediaStreamSource(stream).connect(an);
+    log('マイク OK ' + sr + 'Hz');
+    $('stop').disabled = false; hist = []; tick();
+  }catch(e){ log('マイク NG：' + (e.name || '') + ' ' + (e.message || e)); $('start').disabled = false; }
+}
+function stop(){
+  cancelAnimationFrame(raf); raf = 0;
+  if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
+  if(ac){ try{ ac.close(); }catch(e){} ac = null; }
+  an = null; $('start').disabled = false; $('stop').disabled = true;
+}
+$('start').onclick = start; $('stop').onclick = stop;
+window.addEventListener('pagehide', stop);
+document.addEventListener('visibilitychange', () => { if(document.visibilityState === 'hidden') stop(); });
+
+// ── たかさ（McLeod pitch method）──
+const W = 1024;                          // しらべる ながさ
+function pitch(x){
+  const maxTau = Math.min(W - 1, Math.floor(sr/60)), minTau = Math.floor(sr/4200);
+  const nsdf = new Float32Array(maxTau + 1);
+  for(let tau = minTau; tau <= maxTau; tau++){
+    let acf = 0, m = 0;
+    for(let i = 0; i < W - tau; i++){ const a = x[i], b = x[i + tau]; acf += a*b; m += a*a + b*b; }
+    nsdf[tau] = m > 0 ? 2*acf/m : 0;
+  }
+  // 0 を まいなす から ぷらすに こえた あとの 山を あつめる
+  const peaks = [];
+  let tau = minTau;
+  while(tau < maxTau && nsdf[tau] > 0) tau++;           // さいしょの ぷらすの ところは とばす
+  while(tau < maxTau){
+    while(tau < maxTau && nsdf[tau] <= 0) tau++;
+    let best = -1, bi = -1;
+    while(tau < maxTau && nsdf[tau] > 0){ if(nsdf[tau] > best){ best = nsdf[tau]; bi = tau; } tau++; }
+    if(bi > 0) peaks.push(bi);
+  }
+  if(!peaks.length) return null;
+  const top = Math.max(...peaks.map(p => nsdf[p]));
+  const pick = peaks.find(p => nsdf[p] >= 0.9*top);   // さいしょの 大きな 山（オクターブ ちがいを ふせぐ）
+  // となりと 3てんで なめらかに
+  const a = nsdf[pick - 1], b = nsdf[pick], c = nsdf[pick + 1];
+  const sh = (a - c)/(2*(a - 2*b + c)) || 0;
+  return { f: sr/(pick + (Math.abs(sh) < 1 ? sh : 0)), clarity: b };
+}
+
+// ── まいフレーム ──
+let hist = [], recent = [], armed = true, quietSince = 0, lastNote = null;
+function tick(){
+  an.getFloatTimeDomainData(buf);
+  const x = buf.subarray(buf.length - W);
+  let s = 0; for(let i = 0; i < W; i++) s += x[i]*x[i];
+  const db = 20*Math.log10(Math.max(1e-7, Math.sqrt(s/W)));
+  if(db > -110){ hist.push(db); if(hist.length > 180) hist.shift(); }
+  const floor = hist.length >= 20 ? hist.slice().sort((a, b) => a - b)[Math.floor(hist.length*0.2)] : 0;
+  const now = performance.now();
+  let p = null;
+  if(db > floor + 12 && db > -75) p = pitch(x);
+  const ok = p && p.clarity >= 0.85 && p.f > 50 && p.f < 4200;
+  $('info').textContent = 'おおきさ ' + db.toFixed(0) + 'dB（まわり ' + floor.toFixed(0) + '）・はっきりさ ' + (p ? p.clarity.toFixed(2) : '-');
+  if(ok){
+    quietSince = 0;
+    const m = midiOf(p.f), r = Math.round(m);
+    $('note').textContent = noteName(p.f); $('hz').textContent = p.f.toFixed(1) + ' Hz';
+    $('cents').querySelector('i').style.left = (50 + (m - r)*100) + '%';
+    recent.push({ t: now, f: p.f }); while(recent.length && now - recent[0].t > 140) recent.shift();
+    // 0.12びょう おなじ たかさ（±25セント）＝ 1おん
+    if(recent.length >= 4 && now - recent[0].t >= 110){
+      const fs = recent.map(r => r.f).sort((a, b) => a - b), med = fs[fs.length >> 1];
+      const steady = fs.every(f => Math.abs(centsBetween(med, f)) < 25);
+      if(steady && (armed || (lastNote && Math.abs(centsBetween(lastNote, med)) > 60))){ armed = false; lastNote = med; onNote(med); }
+    }
+  } else {
+    recent = [];
+    if(!quietSince) quietSince = now;
+    if(now - quietSince > 90) armed = true;      // おとが とぎれたら つぎの 1おんを まつ
+  }
+  raf = requestAnimationFrame(tick);
+}
+
+// ── おぼえる・あてる ──
+let mode = 'learn';
+function setMode(m){ mode = m; $('mLearn').className = m === 'learn' ? 'on' : 'sub'; $('mGuess').className = m === 'guess' ? 'on' : 'sub';
+  $('learnBox').style.display = m === 'learn' ? '' : 'none'; $('guessBox').style.display = m === 'guess' ? '' : 'none'; draw(); }
+$('mLearn').onclick = () => setMode('learn'); $('mGuess').onclick = () => setMode('guess');
+$('undo').onclick = () => { keys.pop(); saveKeys(); draw(); };
+$('clear').onclick = () => { if(confirm('ぜんぶ けしますか？')){ keys = []; saveKeys(); draw(); } };
+let hitIdx = -1, hitAt = 0;
+function onNote(f){
+  if(mode === 'learn'){ keys.push(+f.toFixed(2)); saveKeys(); log((keys.length) + 'ばん ' + f.toFixed(1) + 'Hz ' + noteName(f)); hitIdx = keys.length - 1; }
+  else {
+    if(!keys.length) return;
+    let bi = 0; keys.forEach((k, i) => { if(Math.abs(centsBetween(k, f)) < Math.abs(centsBetween(keys[bi], f))) bi = i; });
+    const off = centsBetween(keys[bi], f), gap = minGapAround(bi);
+    const sure = Math.abs(off) < Math.min(50, gap/2);
+    $('big').textContent = sure ? (bi + 1) + 'ばん' : '?';
+    log('あてる ' + f.toFixed(1) + 'Hz → ' + (bi + 1) + 'ばん（' + (off >= 0 ? '+' : '') + off.toFixed(0) + 'セント）' + (sure ? '' : ' あやしい'));
+    hitIdx = sure ? bi : -1;
+  }
+  hitAt = performance.now(); draw();
+}
+function minGapAround(i){
+  let g = Infinity; keys.forEach((k, j) => { if(j !== i) g = Math.min(g, Math.abs(centsBetween(keys[i], k))); }); return g;
+}
+function draw(){
+  $('next').textContent = 'つぎは ' + (keys.length + 1) + 'ばんめ の けんばん';
+  const box = $('keys'); box.innerHTML = '';
+  let close = [];
+  keys.forEach((f, i) => {
+    const g = minGapAround(i);
+    const d = document.createElement('div'); d.className = 'k' + (i === hitIdx && performance.now() - hitAt < 1500 ? ' hit' : '') + (g < 60 ? ' near' : '');
+    d.innerHTML = '<div class="n">' + (i + 1) + '</div><div class="s">' + noteName(f) + '<br>' + Math.round(f) + '</div>';
+    box.appendChild(d);
+    if(g < 60) close.push(i + 1);
+  });
+  const v = $('verdict');
+  if(!keys.length){ v.textContent = 'まだ おぼえて いません'; v.className = ''; }
+  else {
+    let mg = Infinity; keys.forEach((_, i) => mg = Math.min(mg, minGapAround(i)));
+    if(keys.length < 2){ v.textContent = keys.length + 'こ おぼえた'; v.className = ''; }
+    else if(!close.length){ v.textContent = keys.length + 'こ ぜんぶ みわけ られそう（いちばん ちかい 2つ でも ' + mg.toFixed(0) + 'セント）'; v.className = 'ok'; }
+    else { v.textContent = 'ちかすぎる けんばん：' + close.join('・') + 'ばん（いちばん ちかい ' + mg.toFixed(0) + 'セント。はんおん＝100）'; v.className = 'ng'; }
+  }
+  $('out').value = JSON.stringify({ keys: keys.map(f => +f.toFixed(1)), notes: keys.map(noteName), ua: navigator.userAgent });
+}
+setInterval(() => { if(hitIdx >= 0 && performance.now() - hitAt > 1500){ hitIdx = -1; draw(); } }, 300);
+$('copy').onclick = () => { $('out').select(); try{ navigator.clipboard.writeText($('out').value); }catch(e){ document.execCommand('copy'); } log('コピーした'); };
+draw();
+window.oto = { pitch: x => pitch(x), keys: () => keys, setSr: v => sr = v, onNote, setMode };
+</script>
+</body>
+</html>
