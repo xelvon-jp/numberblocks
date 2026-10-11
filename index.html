@@ -269,6 +269,7 @@ function bottomPanelH(){
   if(mode==='factor') return FACTOR_H+safeBottom();
   if(mode==='quiz')   return QUIZ_H+safeBottom();
   if(mode==='clock')  return 26+safeBottom();   // とけいは文字盤を大きく見せたい
+  if(mode==='waru')   return safeBottom();      // わけっこは waru.html が かさなる
   return getPadH() + opBarH();                  // ＋−×÷ の段ぶんだけ高い
 }
 function calcFloor(){ return sh - GH - bottomPanelH() - 12; }
@@ -955,6 +956,25 @@ function startHissanTask(){
   showHissan(true);
   updateTargets();
 }
+// ─── わけっこ（waru.html）──────────────────────────────────────────
+// タブの 下に iframe で かさねる（あそぶ じかんは そのまま かぞえる）。1まいを つかいまわして、まえの かずを のこす。
+// せってい・だれが あそぶ？・きろく・ステージを 出している あいだは かくす（キャンバスに かくので）。
+let waruFrame = null;
+function waruSync(){
+  const on = mode === 'waru' && !paradeBreak && !setOpen && !whoOpen && !recOpen && !stageOpen;
+  if(!on && !waruFrame) return;
+  if(!waruFrame || !waruFrame.isConnected){
+    const f = document.createElement('iframe');
+    f.src = 'waru.html?embed=1&v=' + Date.now();   // キャッシュの 古い版を ひらかない
+    f.style.cssText = 'position:fixed;left:0;right:0;bottom:0;width:100%;border:0;z-index:50;background:#dff3f6';
+    document.body.appendChild(f);
+    waruFrame = f;
+  }
+  const top = TAB_H + 'px', h = 'calc(100% - ' + TAB_H + 'px)';
+  if(waruFrame.style.top !== top){ waruFrame.style.top = top; waruFrame.style.height = h; }
+  const vis = on ? 'visible' : 'hidden';
+  if(waruFrame.style.visibility !== vis){ waruFrame.style.visibility = vis; waruFrame.style.pointerEvents = on ? 'auto' : 'none'; }
+}
 function closeHissan(){
   if(hissanTask && hissanTask.frame) showHissan(false);
   hissanTask = null; hissanPending = null;
@@ -1177,7 +1197,8 @@ let lastOp = '+';   // けいさんタブに戻ったときに選び直す演算
 const TAB_DEFS = [
   {label:'おだい', val:'task'},
   {label:'けいさん', val:'calc'}, {label:'因数', val:'factor'},
-  {label:'ドリル', val:'quiz'},   {label:'とけい', val:'clock'}
+  {label:'ドリル', val:'quiz'},   {label:'とけい', val:'clock'},
+  {label:'わけっこ', val:'waru'}   // あまりの ある わりざんを あそぶ（waru.html を 下に かさねる）
 ];
 let tabBtns = [], opBarBtns = [];
 
@@ -1328,7 +1349,7 @@ function targetRowY(){
   return r ? Math.round(r.y + r.h + 8) : TAB_H + 6;
 }
 function getTargetRect(id){
-  if(mode==='factor'||mode==='quiz'||mode==='clock') return null;
+  if(mode==='factor'||mode==='quiz'||mode==='clock'||mode==='waru') return null;
   const w=51, h=60, n=DROP_TARGETS.length;
   const gap = Math.min(40, Math.max(8, (sw - EDGE_MARGIN*2 - n*w)/(n-1)));
   const total = n*w + (n-1)*gap;
@@ -1769,7 +1790,8 @@ function drawModeTabs(ctx){
     ctx.lineWidth=1.5;
     ctx.beginPath(); ctx.roundRect(tx+2,ty+2,tabW-4,TAB_ROW_H-4,8); ctx.stroke();
     ctx.fillStyle=active?'white':'#eef2f8';
-    ctx.font='bold 13px sans-serif';
+    let fs = 13; ctx.font='bold 13px sans-serif';
+    while(fs > 9 && ctx.measureText(td.label).width > tabW - 8){ fs--; ctx.font = 'bold ' + fs + 'px sans-serif'; }   // せまい 画面でも はみださない
     ctx.textAlign='center'; ctx.textBaseline='middle';
     ctx.fillText(td.label,tx+tabW/2,ty+TAB_ROW_H/2);
     ctx.restore();
@@ -4878,6 +4900,7 @@ function handleStart(x,y,pid){
   // 正解演出の途中なら、どこをタップしても次へ進む。見終わった子を待たせない。
   if(puzzle && puzzle.phase==='correct'){ puzzle.phase='done'; return; }
   if(mode==='factor'){ handleFactorTap(x,y); return; }
+  if(mode==='waru') return;                       // わけっこの 中は waru.html が うける
   if(mode==='clock'){ handleClockStart(x,y); return; }
   if(mode==='quiz'){
     // ドリル中は選択肢のタップだけ受け付ける（キャラの操作や数字パッドは無い）
@@ -5015,7 +5038,7 @@ function setMode(newMode){
   if(isCalcMode(newMode)) lastOp = newMode;
   if(newMode===mode) return;
   // 計算モード（＋−×÷）どうしの行き来ならキャラを残す。因数・ドリルを跨ぐときは片付ける
-  const isCalc = m => m!=='factor' && m!=='quiz';
+  const isCalc = m => m!=='factor' && m!=='quiz' && m!=='waru';
   if(!isCalc(mode) || !isCalc(newMode)) blocks=[];
   if(!isCalcMode(newMode)){ stageOpen=false; stageDetail=-1; }
   mode=newMode; puzzle=null; dragBlock=null; dragPtr=null; dragPointers={}; clrHold=null; clockDrag=null; clockMerged=false;
@@ -5146,7 +5169,10 @@ function drawFrame(ts){
   guardKidProfile();
   tickAutoNext();
   ctx.clearRect(0,0,sw,sh); drawBG(ctx); drawTabsAndUI(ctx);
-  if(paradeBreak){
+  waruSync();
+  if(mode==='waru' && !paradeBreak){
+    // わけっこ：タブの 下は waru.html（iframe）。ここでは なにも かかない
+  } else if(paradeBreak){
     // できた おだいは かたづけて、パレードだけ。おわったら つぎの おだいへ
     for(const fp of fxParticles) fp.update();
     fxParticles = fxParticles.filter(fp=>fp.life>0);
@@ -5280,7 +5306,7 @@ function keySummon(){
 }
 document.addEventListener('keydown', e=>{
   if(e.ctrlKey || e.metaKey || e.altKey) return;   // ブラウザのショートカットは邪魔しない
-  if(mode === 'factor' || mode === 'quiz') return;  // 因数・ドリルはキャラを出さないので対象外
+  if(mode === 'factor' || mode === 'quiz' || mode === 'waru') return;  // 因数・ドリル・わけっこはキャラを出さないので対象外
   if(puzzle) return;                               // クイズ中は入力を受けない
   if(e.key >= '0' && e.key <= '9'){
     if(keyInput.length < 3) keyInput += e.key;

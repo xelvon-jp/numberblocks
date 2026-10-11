@@ -33,7 +33,7 @@ module.exports = {
                  html: !!(document.getElementById('zukan-btn') || document.getElementById('fs-btn')) };
       });
       t.eq(r.tabH, 44, `${w}x${h} で上部バーの高さが 44 ではない`);
-      t.eq(r.vals, ['task','calc','factor','quiz','clock','settings'], `${w}x${h} でタブの並びがちがう`);
+      t.eq(r.vals, ['task','calc','factor','quiz','clock','waru','settings'], `${w}x${h} でタブの並びがちがう`);
       t.ok(!r.overlap, `${w}x${h} でタブどうしが重なる`);
       t.ok(!r.out, `${w}x${h} でタブが画面からはみ出す`);
       t.ok(!r.html, 'HTML の ずかん・全画面ボタンが残っている');

@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-512.png">
+<title>わけっこ</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#dff3f6; color:#2b3a52;
+               font-family:-apple-system, system-ui, sans-serif;
+               overscroll-behavior:none; touch-action:none; user-select:none; -webkit-user-select:none; }
+  body { display:flex; flex-direction:column; }
+  #top { flex:none; display:flex; gap:10px; padding:8px 10px 4px; }
+  .spin { flex:1; min-width:0; background:#fff; border-radius:14px; padding:4px 6px 6px; box-shadow:0 1px 3px rgba(40,60,90,0.15); }
+  .spin .lab { font-size:13px; font-weight:700; text-align:center; color:#5a6576; }
+  .spin .row { display:flex; align-items:center; justify-content:space-between; }
+  .spin button { flex:none; width:clamp(38px, 11.7vw, 46px); height:46px; border:0; border-radius:12px; background:#3f8fd0; color:#fff;
+                 font-size:28px; font-weight:700; line-height:1; touch-action:none; }
+  .spin button:active { background:#2d74ad; }
+  .spin button.off { opacity:0.3; }
+  .spin .val { flex:1; min-width:0; text-align:center; font-size:clamp(26px, 9vw, 36px); font-weight:900; line-height:46px; }
+  #say { height:62px; flex:none; padding:2px 12px 0; text-align:center; display:flex; flex-direction:column; justify-content:center; }
+  #say .big { font-size:clamp(14px, 5.1vw, 21px); font-weight:800; line-height:1.3; white-space:nowrap; }
+  #say .big b { font-size:clamp(17px, 6.3vw, 26px); font-weight:900; }
+  #say .sub { font-size:14px; color:#6a7486; min-height:18px; }
+  #say .ok { color:#d08a00; }
+  #stage { flex:1; position:relative; min-height:0; }
+  canvas { display:block; position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
+  #memo { flex:none; height:calc(84px + env(safe-area-inset-bottom, 0px)); padding:6px 10px calc(6px + env(safe-area-inset-bottom, 0px));
+          background:rgba(255,255,255,0.7); overflow-y:auto; touch-action:pan-y; }   /* たかさは きめておく（ぶたいの 大きさが かわらないように） */
+  #memo .ttl { font-size:12px; color:#6a7486; margin-bottom:3px; }
+  #memo .chips { display:flex; flex-wrap:wrap; gap:5px; }
+  #memo .chip { border:1.5px solid #c9d3e0; background:#fff; border-radius:999px; padding:3px 9px; font-size:14px; font-weight:700; color:#2b3a52; }
+  #memo .chip.just { background:#fff4c8; border-color:#e7b400; color:#8a5a00; }
+  #memo .chip.cur { outline:3px solid #3f8fd0; outline-offset:0; }
+  #memo .none { font-size:13px; color:#9aa3b2; }
+</style>
+</head>
+<body>
+<div id="top">
+  <div class="spin" id="spN"><div class="lab">ぜんぶで</div>
+    <div class="row"><button class="m" aria-label="へらす">−</button><div class="val"></div><button class="p" aria-label="ふやす">＋</button></div></div>
+  <div class="spin" id="spD"><div class="lab">いくつずつ</div>
+    <div class="row"><button class="m" aria-label="へらす">−</button><div class="val"></div><button class="p" aria-label="ふやす">＋</button></div></div>
+</div>
+<div id="say"><div class="big"></div><div class="sub"></div></div>
+<div id="stage"><canvas id="c"></canvas></div>
+<div id="memo"><div class="ttl"></div><div class="chips"></div></div>
+<script>
+// ページと いっしょに 新しい スクリプトを 読む（古い キャッシュと まざらないように。index.html と おなじ しくみ）
+(function(){
+  var v = encodeURIComponent(document.lastModified);
+  ['overrides.js', 'engine.js'].forEach(function(f){ document.write('<script src="' + f + '?v=' + v + '"><\/script>'); });
+})();
+</script>
+<script>
+// ─── わけっこ（あまりの ある わりざん を あそぶ）─────────────────────────────
+// 「ぜんぶで」の かずを「いくつずつ」に わけると、なんこの グループが できて、なんこ あまるか。
+// もんだいを とく のでは なく、かずを かえて ためして たのしむ ページ（ゲームの「わけっこ」タブの 中で ひらく）。
+//   かずを かえると、まえの ようすから じっくり うごいて かわる：
+//   うごく キャラが ぷるぷる → キューブに ばらける → 1グループずつ とんで あつまり、キャラに なって ぴょん（かずを かぞえる）
+//   → さいごに あまりが とんで「あまり」の わくに はいる。
+// ためした くみあわせは したの メモに のこる（「3が13と1」。ひなたの メモと おなじ かきかた）。ぴったりは 金いろ。
+// この たんまつの localStorage（nb_waru）に いまの かずと メモを おぼえる。
+const N_MAX = 100;
+const BREAK = 550;        // ぷるぷる してから ばらける まで
+const FLY = 950;          // 1こが とぶ じかん
+const HOP = 500;          // キャラに なって ぴょん
+const BS_MAX = 34;        // キューブの いちばん 大きい ばあい（px）
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d'), stageEl = document.getElementById('stage');
+let W = 0, H = 0;
+function resize(){
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  W = stageEl.clientWidth; H = stageEl.clientHeight;
+  cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+// ── おぼえる ──
+const KEY = 'nb_waru';
+let st = { n: 40, d: 3, seen: {} };
+try{ const v = JSON.parse(localStorage.getItem(KEY)); if(v && typeof v === 'object') st = Object.assign(st, v); }catch(e){}
+st.n = Math.max(1, Math.min(N_MAX, st.n|0 || 40));
+st.d = Math.max(1, Math.min(st.n, st.d|0 || 1));
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(st)); }catch(e){} }
+
+// ── ならべかた ──
+// n こを d こずつ：q グループ（キャラ d）と、あまり r（キャラ r）。どれも おなじ 大きさの わく（slot）に いれ、
+// わくを マスめに ならべる。キューブの 大きさ bs は ぜんぶ おなじ（Numberblocks の きまり）。
+// キューブ i は いつも「まえから i ばんめ」：i < q*d なら グループ floor(i/d) の k=i%d ばんめ、のこりは あまりの キャラ。
+function layout(n, d){
+  const q = Math.floor(n/d), r = n % d;
+  const sd = blockSpec(d), sr = r ? blockSpec(r) : null;
+  const cw = Math.max(sd.cols, sr ? sr.cols : 0), ch = Math.max(sd.rows, sr ? sr.rows : 0);
+  const SW = cw + 2.2, SH = ch + PAD_TOP + PAD_BOT + 1.0;     // 手・あたまの かず・足・したの ばんごう の ぶん
+  const cnt = q + (r ? 1 : 0), m = 8;
+  let best = null;
+  for(let c = 1; c <= cnt; c++){
+    const rows = Math.ceil(cnt/c);
+    const bs = Math.min((W - m*2)/(c*SW), (H - m*2)/(rows*SH), BS_MAX);
+    if(!best || bs > best.bs + 1e-6) best = { c, rows, bs };
+  }
+  const { c, rows, bs } = best;
+  const ox = (W - c*SW*bs)/2, oy = Math.max(m, (H - rows*SH*bs)/2);
+  const slots = [], cubes = [];
+  for(let s = 0; s < cnt; s++){
+    const rem = r && s === q, num = rem ? r : d, spec = rem ? sr : sd;
+    const sx = ox + (s % c)*SW*bs, sy = oy + Math.floor(s/c)*SH*bs;
+    const floorY = sy + (PAD_TOP + ch)*bs;
+    const slot = { i: s, rem: !!rem, num, x: sx + (SW*bs - spec.cols*bs)/2, y: floorY - spec.rows*bs, bs,
+                   box: { x: sx + 0.3*bs, y: sy + 0.4*bs, w: (SW - 0.6)*bs, h: (SH - 0.5)*bs }, labelY: floorY + (PAD_BOT + 0.35)*bs, cubes: [] };
+    spec.cells.forEach((cell, k) => {
+      const idx = rem ? q*d + k : s*d + k;
+      slot.cubes.push(idx);
+      cubes[idx] = { x: slot.x + cell.gx*bs, y: slot.y + cell.gy*bs, s: bs, col: cell.colorRGB, slot: s };
+    });
+    slots.push(slot);
+  }
+  return { n, d, q, r, bs, slots, cubes };
+}
+
+// ── うごき ──
+// T：いま うごいている ところ。from は うごく まえの ようす（キャラ と ばらばらの キューブ）。
+let L = null, T = null, pending = false;
+const ease = p => p < 0.5 ? 4*p*p*p : 1 - Math.pow(-2*p + 2, 3)/2;
+const lerp = (a, b, k) => a + (b - a)*k;
+const lerpCol = (a, b, k) => [0, 1, 2].map(i => Math.round(lerp(a[i], b[i], k)));
+const charOf = sl => ({ num: sl.num, x: sl.x, y: sl.y, bs: sl.bs, cubes: sl.cubes, slot: sl });
+
+// その ときの ようす：キャラ（chars）と ばらばらの キューブ（loose）。layer 0 は うしろ（まっている・きえる）、2 は とんでいる
+function scene(now){
+  if(!T) return { chars: L.slots.map(charOf), loose: [], count: L.q, done: true };
+  const t = now - T.t0;
+  if(t < T.brk){
+    const w = Math.min(1, t/200);
+    return { chars: T.from.chars.map(c => Object.assign({}, c, { wig: c.moving ? w : 0 })), loose: T.from.loose.map(c => Object.assign({ layer: 0 }, c)),
+             count: T.count0, done: false, phase: 'break' };
+  }
+  const chars = [], loose = [];
+  let count = 0;
+  for(const sl of T.L.slots){
+    const tm = T.time[sl.i];
+    if(tm.still || t >= tm.land){
+      chars.push(Object.assign(charOf(sl), { hop: tm.still ? 1 : Math.min(1, (t - tm.land)/HOP) }));
+      if(!sl.rem) count++;
+      continue;
+    }
+    sl.cubes.forEach((idx, k) => {
+      const a = T.cubes[idx], b = T.L.cubes[idx];
+      const p = Math.max(0, Math.min(1, (t - tm.start - k*tm.step)/FLY)), e = ease(p);
+      const dist = Math.hypot(b.x - a.x, b.y - a.y);
+      loose.push({ x: lerp(a.x, b.x, e), y: lerp(a.y, b.y, e) - Math.sin(Math.PI*e)*Math.min(46, dist*0.3), s: lerp(a.s, b.s, e),
+                   col: lerpCol(a.col, b.col, e), alpha: p > 0 ? 1 : 0.5, layer: p > 0 ? 2 : 0, idx });
+    });
+  }
+  const fade = 1 - (t - T.brk)/450;
+  if(fade > 0) for(const c of T.gone) loose.push(Object.assign({}, c, { alpha: fade, layer: 0, gone: true }));
+  return { chars, loose, count, done: t >= T.total, phase: 'fly' };
+}
+// いまの ようすを キューブ1こずつの いちに なおす（とちゅうで かずを かえた ときの「まえ」）
+function snapshot(now){
+  const sc = T && now - T.t0 < T.brk ? { chars: T.from.chars, loose: T.from.loose } : scene(now);
+  const cubes = [], chars = [], loose = [];
+  for(const c of sc.chars){
+    const spec = blockSpec(c.num);
+    c.cubes.forEach((idx, k) => { const cell = spec.cells[k]; cubes[idx] = { x: c.x + cell.gx*c.bs, y: c.y + cell.gy*c.bs, s: c.bs, col: cell.colorRGB }; });
+    chars.push({ num: c.num, x: c.x, y: c.y, bs: c.bs, cubes: c.cubes });
+  }
+  for(const c of sc.loose){ if(c.gone) continue; cubes[c.idx] = { x: c.x, y: c.y, s: c.s, col: c.col }; loose.push(Object.assign({}, cubes[c.idx], { idx: c.idx })); }
+  return { cubes, chars, loose };
+}
+
+function go(n2, d2){
+  const now = performance.now();
+  const L2 = layout(n2, d2);
+  if(!L){ L = L2; return; }
+  const from = snapshot(now);
+  const cubes = [], gone = [];
+  const moved = i => { const a = cubes[i], b = L2.cubes[i];
+    return a.added || Math.abs(a.x - b.x) > 0.5 || Math.abs(a.y - b.y) > 0.5 || Math.abs(a.s - b.s) > 0.3 || a.col.some((v, j) => v !== b.col[j]); };
+  for(let i = 0; i < n2; i++){
+    const b = L2.cubes[i];
+    cubes[i] = from.cubes[i] ? Object.assign({}, from.cubes[i]) : { x: b.x, y: -b.s*3 - (i % 5)*b.s, s: b.s, col: b.col, added: true };
+  }
+  for(let i = n2; i < from.cubes.length; i++) if(from.cubes[i]) gone.push(Object.assign({ idx: i }, from.cubes[i]));
+  // うごく キャラ（ぷるぷる する）：キューブが 1こでも うごく／きえる もの
+  for(const c of from.chars) c.moving = c.cubes.some(i => i >= n2 || moved(i));
+  // グループごとの じかん：うごく グループを まえから じゅんに。あまりは さいごに すこし まを あけて
+  const time = [], moving = L2.slots.filter(sl => sl.cubes.some(moved));
+  const groups = moving.filter(sl => !sl.rem).length;
+  const stagger = Math.max(90, Math.min(420, 3000/Math.max(1, groups)));
+  const anyBreak = from.chars.some(c => c.moving);
+  const brk = anyBreak ? BREAK : 120;
+  let j = 0, total = brk;
+  for(const sl of L2.slots){
+    if(!moving.includes(sl)){ time[sl.i] = { still: true }; continue; }
+    const step = Math.min(45, 360/sl.cubes.length);
+    const start = brk + j*stagger + (sl.rem && groups ? 380 : 0);
+    const land = start + FLY + (sl.cubes.length - 1)*step;
+    time[sl.i] = { start, step, land };
+    total = Math.max(total, land + HOP);
+    if(!sl.rem) j++;
+  }
+  const count0 = L2.slots.filter(sl => !sl.rem && time[sl.i].still).length;
+  if(!moving.length && !gone.length){ L = L2; T = null; return; }
+  pending = true;   // おわったら メモに のこす
+  T = { t0: now, brk, total: total + 150, L: L2, from: { chars: from.chars, loose: from.loose }, cubes, gone, time, count0 };
+  L = L2;
+}
+
+// ── かく ──
+function drawCube(c){
+  const in_ = c.s*0.04, r = c.s*0.12;
+  ctx.save(); ctx.globalAlpha = c.alpha == null ? 1 : c.alpha;
+  ctx.fillStyle = rgb(c.col);
+  ctx.beginPath(); ctx.roundRect(c.x + in_, c.y + in_, c.s - in_*2, c.s - in_*2, r); ctx.fill();
+  ctx.strokeStyle = rgb(darken(c.col, 0.3)); ctx.lineWidth = Math.max(1, c.s*0.06); ctx.stroke();
+  ctx.restore();
+}
+function drawLabel(sl, now){
+  ctx.save();
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const cx = sl.box.x + sl.box.w/2;
+  if(sl.rem){
+    ctx.setLineDash([Math.max(3, sl.bs*0.35), Math.max(3, sl.bs*0.25)]);
+    ctx.strokeStyle = '#d0569a'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(sl.box.x, sl.box.y, sl.box.w, sl.box.h, Math.min(12, sl.bs*0.6)); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = '#c0398a'; ctx.font = '800 ' + Math.max(11, Math.min(18, sl.bs*0.75)) + 'px sans-serif';
+    ctx.fillText('あまり', cx, sl.labelY);
+  } else {
+    ctx.fillStyle = 'rgba(70,90,120,0.75)'; ctx.font = '700 ' + Math.max(9, Math.min(16, sl.bs*0.62)) + 'px sans-serif';
+    ctx.fillText(String(sl.i + 1), cx, sl.labelY);
+  }
+  ctx.restore();
+}
+function draw(now){
+  ctx.clearRect(0, 0, W, H);
+  if(!L) return;
+  const sc = scene(now);
+  for(const c of sc.loose) if(!c.layer) drawCube(c);
+  for(const c of sc.chars){
+    let x = c.x, y = c.y;
+    if(c.wig) x += Math.sin(now*0.07 + c.x)*c.bs*0.14*c.wig;
+    if(c.hop != null && c.hop < 1) y -= Math.sin(Math.PI*c.hop)*c.bs*0.9;
+    if(c.slot && (sc.phase !== 'break')) drawLabel(c.slot, now);
+    drawNumberblock(ctx, c.num, x, y, c.bs, { t: now, animate: true });
+  }
+  for(const c of sc.loose) if(c.layer) drawCube(c);
+  return sc;
+}
+
+// ── ことば・メモ ──
+const sayBig = document.querySelector('#say .big'), saySub = document.querySelector('#say .sub');
+const colOf = n => rgb(darken(mainColorOf(n), 0.25));
+let lastSay = '';
+function say(sc){
+  const { n, d, q, r } = L;
+  const N = '<b style="color:#2d6fb0">' + n + '</b>', D = '<b style="color:' + colOf(d) + '">' + d + '</b>';
+  let big, sub = '';
+  if(sc.done){
+    big = N + ' は ' + D + ' が <b>' + q + '</b>こ' + (r ? ' と あまり <b style="color:#c0398a">' + r + '</b>' : ' <span class="ok">ぴったり！</span>');
+    sub = n + ' ÷ ' + d + ' ＝ ' + q + (r ? ' あまり ' + r : '');
+  } else big = N + ' は ' + D + ' が <b>' + sc.count + '</b>こ …';
+  const html = big + '|' + sub;
+  if(html === lastSay) return;
+  lastSay = html; sayBig.innerHTML = big; saySub.textContent = sub;
+}
+const memoTtl = document.querySelector('#memo .ttl'), memoChips = document.querySelector('#memo .chips');
+function drawMemo(){
+  const n = st.n, ds = (st.seen[n] || []).slice().sort((a, b) => a - b);
+  memoTtl.textContent = 'メモ：' + n + ' を わけた';
+  memoChips.innerHTML = '';
+  if(!ds.length){ memoChips.innerHTML = '<span class="none">まだ ないよ。いくつずつ を かえて ためしてね</span>'; return; }
+  for(const d of ds){
+    const q = Math.floor(n/d), r = n % d, b = document.createElement('button');
+    b.className = 'chip' + (r ? '' : ' just') + (d === st.d ? ' cur' : '');
+    b.textContent = d + 'が' + q + (r ? 'と' + r : '');
+    b.addEventListener('click', () => setD(d));
+    memoChips.appendChild(b);
+  }
+}
+function remember(){
+  const a = st.seen[L.n] || (st.seen[L.n] = []);
+  if(!a.includes(L.d)){ a.push(L.d); save(); drawMemo(); }
+}
+
+// ── スピンボタン ──
+function spinner(id, get, set, min, max){
+  const el = document.getElementById(id), val = el.querySelector('.val'), m = el.querySelector('.m'), p = el.querySelector('.p');
+  const hold = (btn, dv) => {
+    let tm = null, k = 0;
+    const stop = () => { clearTimeout(tm); tm = null; };
+    btn.addEventListener('pointerdown', e => {
+      e.preventDefault(); stop(); k = 0;
+      const step = () => { const v = get() + dv; if(v < min() || v > max()) return stop(); set(v); };
+      step();
+      const rep = () => { k++; step(); if(tm !== null) tm = setTimeout(rep, k > 6 ? 70 : 160); };
+      tm = setTimeout(rep, 480);
+    });
+    ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => btn.addEventListener(ev, stop));
+  };
+  hold(m, -1); hold(p, +1);
+  return () => {
+    const v = get(); val.textContent = v; val.style.color = colOf(v);
+    m.classList.toggle('off', v <= min()); p.classList.toggle('off', v >= max());
+  };
+}
+function setN(n){ n = Math.max(1, Math.min(N_MAX, n)); if(n === st.n) return; st.n = n; if(st.d > n) st.d = n; changed(); }
+function setD(d){ d = Math.max(1, Math.min(st.n, d)); if(d === st.d) return; st.d = d; changed(); }
+const showN = spinner('spN', () => st.n, setN, () => 1, () => N_MAX);
+const showD = spinner('spD', () => st.d, setD, () => 1, () => st.n);
+function changed(){ save(); showN(); showD(); drawMemo(); go(st.n, st.d); }
+
+// ── はじめ ──
+resize();
+L = layout(st.n, st.n);        // はじめは まるごとの キャラ。すこし して わける
+showN(); showD(); drawMemo();
+setTimeout(() => go(st.n, st.d), 700);
+function relayout(){
+  const w = stageEl.clientWidth, h = stageEl.clientHeight;
+  if(w === W && h === H) return;
+  resize(); if(W > 20 && H > 20){ L = layout(L.n, L.d); T = null; }
+}
+window.addEventListener('resize', relayout);
+if(window.ResizeObserver) new ResizeObserver(relayout).observe(stageEl);
+// ゲームの 中で かくされている あいだは かかない（でんちの ため）
+const hiddenInGame = () => { try{ return !!window.frameElement && window.frameElement.style.visibility === 'hidden'; }catch(e){ return false; } };
+function frame(now){
+  if(hiddenInGame()){ requestAnimationFrame(frame); return; }
+  const sc = draw(now);
+  if(sc){
+    say(sc);
+    if(sc.done && T){ T = null; }
+    if(sc.done && pending){ pending = false; remember(); }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+// テスト・ゲームから
+window.waru = { st: () => st, L: () => L, busy: () => !!T, setN, setD, layout, scene: () => scene(performance.now()),
+                finish(){ if(T) T.t0 -= T.total + 1; } };
+</script>
+</body>
+</html>
