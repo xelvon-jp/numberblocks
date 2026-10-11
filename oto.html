@@ -30,6 +30,8 @@
   .k .s { font-size:10px; color:#6a7486; line-height:1.2; }
   .k.hit { background:#fff1c9; border-color:#f0a020; transform:scale(1.08); }
   .k.near { border-color:#d0569a; }
+  #chordBig { text-align:center; font-size:40px; font-weight:900; min-height:52px; color:#d08a00; }
+  #chordSub { text-align:center; font-size:14px; color:#5a6576; min-height:20px; }
   #big { text-align:center; font-size:56px; font-weight:900; min-height:70px; color:#d08a00; }
   #verdict { font-size:15px; font-weight:800; }
   #verdict.ok { color:#2a8a3a; } #verdict.ng { color:#c0398a; }
@@ -55,6 +57,7 @@
 <div class="row">
   <button id="mLearn" class="on">① おぼえる</button>
   <button id="mGuess" class="sub">② あてる</button>
+  <button id="mChord" class="sub">③ わおん</button>
 </div>
 
 <div class="card" id="learnBox">
@@ -68,6 +71,14 @@
 <div class="card" id="guessBox" style="display:none">
   <p>どれか けんばんを おしてください。なんばんめ か を あてます。</p>
   <div id="big">?</div>
+</div>
+<div class="card" id="chordBox" style="display:none">
+  <p>いくつか いっしょに おしてください。きこえた けんばんを ぜんぶ 出します。</p>
+  <p id="profNote" style="font-size:12px;color:#c0398a"></p>
+  <div id="chordBig">—</div>
+  <div id="chordSub"></div>
+  <canvas id="bars" style="width:100%;height:70px;display:block;margin-top:6px"></canvas>
+  <p style="font-size:12px;color:#6a7486">したの ぼう：25こ の けんばんの「なっている つよさ」（ひだり＝1ばん）</p>
 </div>
 
 <div class="card">
@@ -89,6 +100,10 @@
 // ① おぼえる：けんばんを じゅんに ならすと、ひとつずつ たかさを きろく（おなじ たかさが 0.12びょう つづいたら 1おん）。
 // ② あてる  ：ならした おとに いちばん ちかい けんばんを 出す。
 // ちかい けんばんどうしが はんおん（100セント）の はんぶん より ちかいと みわけ にくい。
+// ③ わおん  ：いくつか いっしょに ならした ときに、どの けんばんが なっているか。
+//   ① で けんばんごとに「ばいおんの つよさ」（1〜10ばい）も おぼえて おく（おとの かたち）。
+//   スペクトル（8192てん FFT）を、25この おとの かたちの たしあわせ（マイナス なし）で いちばん よく せつめい できる
+//   ように とく（NMF の W を きめた かたち）。つよさが いちばん つよい けんばんの 3わり いじょう なら なっている。
 const $ = id => document.getElementById(id);
 const t0 = performance.now();
 function log(s){ $('log').textContent = ((performance.now() - t0)/1000).toFixed(1) + 's ' + s + '\n' + $('log').textContent; }
@@ -98,12 +113,15 @@ const midiOf = f => 69 + 12*Math.log2(f/440);
 function noteName(f){ const m = Math.round(midiOf(f)); return NAMES[((m % 12) + 12) % 12] + (Math.floor(m/12) - 1); }
 const centsBetween = (a, b) => 1200*Math.log2(b/a);
 
-let keys = [];
-try{ keys = JSON.parse(localStorage.getItem('nb_oto_keys') || '[]'); }catch(e){}
-function saveKeys(){ try{ localStorage.setItem('nb_oto_keys', JSON.stringify(keys)); }catch(e){} }
+let keys = [], prof = [];
+try{ keys = JSON.parse(localStorage.getItem('nb_oto_keys') || '[]'); prof = JSON.parse(localStorage.getItem('nb_oto_prof') || '[]'); }catch(e){}
+while(prof.length < keys.length) prof.push(null);
+prof.length = keys.length;
+function saveKeys(){ try{ localStorage.setItem('nb_oto_keys', JSON.stringify(keys)); localStorage.setItem('nb_oto_prof', JSON.stringify(prof)); }catch(e){} Wkey = ''; }
 
 // ── マイク ──
 let stream = null, ac = null, an = null, buf = null, raf = 0, sr = 48000;
+let an2 = null, spec = null;           // わおん・おとの かたち よう（こまかい FFT）
 async function start(){
   $('start').disabled = true;
   try{
@@ -113,7 +131,8 @@ async function start(){
     ac = new AC(); if(ac.state === 'suspended') await ac.resume();
     sr = ac.sampleRate;
     an = ac.createAnalyser(); an.fftSize = 2048; buf = new Float32Array(an.fftSize);
-    ac.createMediaStreamSource(stream).connect(an);
+    an2 = ac.createAnalyser(); an2.fftSize = 8192; an2.smoothingTimeConstant = 0.2; spec = new Float32Array(an2.frequencyBinCount);
+    const src = ac.createMediaStreamSource(stream); src.connect(an); src.connect(an2); Wkey = ''; noise = null;
     log('マイク OK ' + sr + 'Hz');
     $('stop').disabled = false; hist = []; tick();
   }catch(e){ log('マイク NG：' + (e.name || '') + ' ' + (e.message || e)); $('start').disabled = false; }
@@ -122,7 +141,7 @@ function stop(){
   cancelAnimationFrame(raf); raf = 0;
   if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
   if(ac){ try{ ac.close(); }catch(e){} ac = null; }
-  an = null; $('start').disabled = false; $('stop').disabled = true;
+  an = null; an2 = null; $('start').disabled = false; $('stop').disabled = true;
 }
 $('start').onclick = start; $('stop').onclick = stop;
 window.addEventListener('pagehide', stop);
@@ -168,6 +187,7 @@ function tick(){
   const floor = hist.length >= 20 ? hist.slice().sort((a, b) => a - b)[Math.floor(hist.length*0.2)] : 0;
   const now = performance.now();
   let p = null;
+  if(mode === 'chord'){ polyFrame(now, db > floor + 12 && db > -75); raf = requestAnimationFrame(tick); return; }
   if(db > floor + 12 && db > -75) p = pitch(x);
   const ok = p && p.clarity >= 0.85 && p.f > 50 && p.f < 4200;
   $('info').textContent = 'おおきさ ' + db.toFixed(0) + 'dB（まわり ' + floor.toFixed(0) + '）・はっきりさ ' + (p ? p.clarity.toFixed(2) : '-');
@@ -193,14 +213,21 @@ function tick(){
 
 // ── おぼえる・あてる ──
 let mode = 'learn';
-function setMode(m){ mode = m; $('mLearn').className = m === 'learn' ? 'on' : 'sub'; $('mGuess').className = m === 'guess' ? 'on' : 'sub';
-  $('learnBox').style.display = m === 'learn' ? '' : 'none'; $('guessBox').style.display = m === 'guess' ? '' : 'none'; draw(); }
-$('mLearn').onclick = () => setMode('learn'); $('mGuess').onclick = () => setMode('guess');
-$('undo').onclick = () => { keys.pop(); saveKeys(); draw(); };
-$('clear').onclick = () => { if(confirm('ぜんぶ けしますか？')){ keys = []; saveKeys(); draw(); } };
+function setMode(m){ mode = m; $('mLearn').className = m === 'learn' ? 'on' : 'sub'; $('mGuess').className = m === 'guess' ? 'on' : 'sub'; $('mChord').className = m === 'chord' ? 'on' : 'sub';
+  $('learnBox').style.display = m === 'learn' ? '' : 'none'; $('guessBox').style.display = m === 'guess' ? '' : 'none'; $('chordBox').style.display = m === 'chord' ? '' : 'none';
+  const miss = prof.filter(x => !x).length;
+  $('profNote').textContent = !keys.length ? '① で けんばんを おぼえて ください' : miss ? miss + 'こ の けんばんは おとの かたちを まだ おぼえて いません（① を やりなおすと よく なります）' : '';
+  armed = true; draw(); }
+$('mLearn').onclick = () => setMode('learn'); $('mGuess').onclick = () => setMode('guess'); $('mChord').onclick = () => setMode('chord');
+$('undo').onclick = () => { keys.pop(); prof.pop(); saveKeys(); draw(); };
+$('clear').onclick = () => { if(confirm('ぜんぶ けしますか？')){ keys = []; prof = []; saveKeys(); draw(); } };
 let hitIdx = -1, hitAt = 0;
 function onNote(f){
-  if(mode === 'learn'){ keys.push(+f.toFixed(2)); saveKeys(); log((keys.length) + 'ばん ' + f.toFixed(1) + 'Hz ' + noteName(f)); hitIdx = keys.length - 1; }
+  if(mode === 'learn'){
+    keys.push(+f.toFixed(2)); prof.push(null); saveKeys(); log((keys.length) + 'ばん ' + f.toFixed(1) + 'Hz ' + noteName(f)); hitIdx = keys.length - 1;
+    const i = keys.length - 1;
+    setTimeout(() => { if(keys[i] === +f.toFixed(2)){ prof[i] = harmonicsAt(f); saveKeys(); } }, 150);   // FFT の まどに おとが いっぱいに なってから
+  }
   else {
     if(!keys.length) return;
     let bi = 0; keys.forEach((k, i) => { if(Math.abs(centsBetween(k, f)) < Math.abs(centsBetween(keys[bi], f))) bi = i; });
@@ -234,12 +261,98 @@ function draw(){
     else if(!close.length){ v.textContent = keys.length + 'こ ぜんぶ みわけ られそう（いちばん ちかい 2つ でも ' + mg.toFixed(0) + 'セント）'; v.className = 'ok'; }
     else { v.textContent = 'ちかすぎる けんばん：' + close.join('・') + 'ばん（いちばん ちかい ' + mg.toFixed(0) + 'セント。はんおん＝100）'; v.className = 'ng'; }
   }
-  $('out').value = JSON.stringify({ keys: keys.map(f => +f.toFixed(1)), notes: keys.map(noteName), ua: navigator.userAgent });
+  $('out').value = JSON.stringify({ keys: keys.map(f => +f.toFixed(1)), notes: keys.map(noteName), prof: prof.map(a => a && a.map(v => +v.toFixed(2))), chordLog, ua: navigator.userAgent });
 }
 setInterval(() => { if(hitIdx >= 0 && performance.now() - hitAt > 1500){ hitIdx = -1; draw(); } }, 300);
 $('copy').onclick = () => { $('out').select(); try{ navigator.clipboard.writeText($('out').value); }catch(e){ document.execCommand('copy'); } log('コピーした'); };
+// ── わおん ──
+const NH = 10, LO_HZ = 100, HI_HZ = 6000;
+let TPL = null, WtW = null, Wkey = '', loB = 0, hiB = 0, noise = null, act = [], chordLog = [];
+const magAt = b => Math.pow(10, spec[b]/20);
+// いまの スペクトルで f の 1〜10ばい の つよさ（±3% の なかの いちばん 大きい ところ。いちばん つよい ものを 1）
+function harmonicsAt(f){
+  if(!an2) return null;
+  an2.getFloatFrequencyData(spec);
+  const binHz = sr/an2.fftSize, a = [];
+  for(let h = 1; h <= NH; h++){
+    const fh = f*h; if(fh > HI_HZ){ a.push(0); continue; }
+    let m = 0; for(let b = Math.floor(fh*0.97/binHz); b <= Math.ceil(fh*1.03/binHz); b++) m = Math.max(m, magAt(b));
+    a.push(m);
+  }
+  const mx = Math.max(...a) || 1;
+  return a.map(v => v/mx);
+}
+function buildW(){
+  const binHz = sr/8192;
+  loB = Math.floor(LO_HZ/binHz); hiB = Math.ceil(HI_HZ/binHz);
+  const n = hiB - loB;
+  TPL = keys.map((f, k) => {
+    const w = new Float32Array(n), pr = prof[k];
+    for(let h = 1; h <= NH; h++){
+      const fh = f*h; if(fh > HI_HZ) break;
+      const a = pr ? pr[h - 1] : 1/h, c = fh/binHz - loB, sg = Math.max(0.9, fh*0.004/binHz);
+      for(let b = Math.max(0, Math.floor(c - 3*sg)); b <= Math.min(n - 1, Math.ceil(c + 3*sg)); b++) w[b] += a*Math.exp(-0.5*((b - c)/sg)**2);
+    }
+    let s = 0; for(let b = 0; b < n; b++) s += w[b]*w[b]; s = Math.sqrt(s) || 1;
+    for(let b = 0; b < n; b++) w[b] /= s;
+    return w;
+  });
+  WtW = TPL.map(a => TPL.map(b => { let s = 0; for(let i = 0; i < a.length; i++) s += a[i]*b[i]; return s; }));
+  Wkey = keys.join(',') + '|' + prof.map(x => x ? 1 : 0).join('');
+}
+// v を TPL の たしあわせ h（マイナス なし）で せつめい する。λ は すくない けんばんで せつめい させる ため
+function solve(v){
+  const K = TPL.length, Wtv = TPL.map(w => { let s = 0; for(let i = 0; i < v.length; i++) s += w[i]*v[i]; return Math.max(0, s); });
+  const mx = Math.max(...Wtv); if(!(mx > 0)) return Wtv.map(() => 0);
+  const lam = 0.12*mx, h = Wtv.slice();
+  for(let it = 0; it < 120; it++) for(let k = 0; k < K; k++){
+    let den = lam; for(let j = 0; j < K; j++) den += WtW[k][j]*h[j];
+    h[k] *= Wtv[k]/(den || 1);
+  }
+  return h;
+}
+let chordSince = 0, chordCand = '', chordShown = '';
+function polyFrame(now, loud){
+  if(!an2 || keys.length < 2){ return; }
+  if(!TPL || Wkey !== keys.join(',') + '|' + prof.map(x => x ? 1 : 0).join('')) buildW();
+  an2.getFloatFrequencyData(spec);
+  const n = hiB - loB, v = new Float32Array(n);
+  if(!noise) noise = new Float32Array(n);
+  for(let b = 0; b < n; b++){
+    const m = magAt(b + loB);
+    if(!loud) noise[b] = noise[b] ? 0.9*noise[b] + 0.1*m : m;   // しずかな ときに まわりの おとを おぼえる
+    v[b] = Math.max(0, m - 2*noise[b]);
+  }
+  const h = loud ? solve(v) : keys.map(() => 0);
+  const mx = Math.max(...h);
+  act = h.map(x => mx > 0 ? x/mx : 0);
+  const on = loud && mx > 0 ? act.map((x, i) => x >= 0.3 ? i : -1).filter(i => i >= 0) : [];
+  const key = on.join(',');
+  if(key !== chordCand){ chordCand = key; chordSince = now; }
+  if(now - chordSince >= 120 && key !== chordShown){
+    chordShown = key;
+    if(on.length){
+      $('chordBig').textContent = on.map(i => i + 1).join('・'); $('chordSub').textContent = on.map(i => noteName(keys[i])).join('・');
+      chordLog.push(on.map(i => i + 1).join('+')); if(chordLog.length > 40) chordLog.shift();
+      log('わおん ' + on.map(i => i + 1).join('・') + '（' + on.map(i => noteName(keys[i])).join('・') + '）'); draw();
+    }
+  }
+  drawBars();
+}
+function drawBars(){
+  const c = $('bars'), dpr = Math.min(3, window.devicePixelRatio || 1), w = c.clientWidth, hh = c.clientHeight;
+  if(c.width !== Math.round(w*dpr)){ c.width = Math.round(w*dpr); c.height = Math.round(hh*dpr); }
+  const g = c.getContext('2d'); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, hh);
+  const K = keys.length || 1, bw = w/K;
+  for(let i = 0; i < keys.length; i++){
+    const a = act[i] || 0;
+    g.fillStyle = a >= 0.3 ? '#f0a020' : '#9fc3e6';
+    g.fillRect(i*bw + 1, hh - 12 - a*(hh - 14), bw - 2, a*(hh - 14));
+    g.fillStyle = '#6a7486'; g.font = '9px sans-serif'; g.textAlign = 'center'; g.fillText(String(i + 1), i*bw + bw/2, hh - 2);
+  }
+}
 draw();
-window.oto = { pitch: x => pitch(x), keys: () => keys, setSr: v => sr = v, onNote, setMode };
+window.oto = { solve: v => solve(v), buildW, chordLog: () => chordLog, pitch: x => pitch(x), keys: () => keys, setSr: v => sr = v, onNote, setMode };
 </script>
 </body>
 </html>
