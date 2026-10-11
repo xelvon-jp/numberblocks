@@ -104,6 +104,11 @@
 //   ① で けんばんごとに「ばいおんの つよさ」（1〜10ばい）も おぼえて おく（おとの かたち）。
 //   スペクトル（8192てん FFT）を、25この おとの かたちの たしあわせ（マイナス なし）で いちばん よく せつめい できる
 //   ように とく（NMF の W を きめた かたち）。つよさが いちばん つよい けんばんの 3わり いじょう なら なっている。
+//   おとは 0.6じょうで ちぢめて から くらべる（ちいさい おと・よわい ばいおん も かぞえる）。
+//   おとの はじまり（0.15びょうで 6dB いじょう 大きく なった）から 0.4びょうの あいだ、4わり いじょう なっていた けんばんを 1かいの わおん に する
+//   （いっしょに おしても すこし ずれる・おとの きえかたが ちがう ため）。
+//   パパの キーボードの ばいおんで つくった おとで ためして：いまの やりかた 78% → この やりかた 92%（2〜4おん）。
+//   まちがうのは 1オクターブ うえ・3ばい など ばいおんと かさなる おと。
 const $ = id => document.getElementById(id);
 const t0 = performance.now();
 function log(s){ $('log').textContent = ((performance.now() - t0)/1000).toFixed(1) + 's ' + s + '\n' + $('log').textContent; }
@@ -187,7 +192,7 @@ function tick(){
   const floor = hist.length >= 20 ? hist.slice().sort((a, b) => a - b)[Math.floor(hist.length*0.2)] : 0;
   const now = performance.now();
   let p = null;
-  if(mode === 'chord'){ polyFrame(now, db > floor + 12 && db > -75); raf = requestAnimationFrame(tick); return; }
+  if(mode === 'chord'){ polyFrame(now, db > floor + 12 && db > -75, db); raf = requestAnimationFrame(tick); return; }
   if(db > floor + 12 && db > -75) p = pitch(x);
   const ok = p && p.clarity >= 0.85 && p.f > 50 && p.f < 4200;
   $('info').textContent = 'おおきさ ' + db.toFixed(0) + 'dB（まわり ' + floor.toFixed(0) + '）・はっきりさ ' + (p ? p.clarity.toFixed(2) : '-');
@@ -226,7 +231,13 @@ function onNote(f){
   if(mode === 'learn'){
     keys.push(+f.toFixed(2)); prof.push(null); saveKeys(); log((keys.length) + 'ばん ' + f.toFixed(1) + 'Hz ' + noteName(f)); hitIdx = keys.length - 1;
     const i = keys.length - 1;
-    setTimeout(() => { if(keys[i] === +f.toFixed(2)){ prof[i] = harmonicsAt(f); saveKeys(); } }, 150);   // FFT の まどに おとが いっぱいに なってから
+    // FFT の まどに おとが いっぱいに なってから 3かい はかって まんなか（1かい だけ だと ぶれる）
+    const snaps = [];
+    [150, 250, 350].forEach((ms, j) => setTimeout(() => {
+      if(keys[i] !== +f.toFixed(2)) return;
+      const a = harmonicsAt(f); if(a) snaps.push(a);
+      if(j === 2 && snaps.length){ prof[i] = snaps[0].map((_, h) => snaps.map(sn => sn[h]).sort((x, y) => x - y)[snaps.length >> 1]); saveKeys(); }
+    }, ms));
   }
   else {
     if(!keys.length) return;
@@ -266,7 +277,7 @@ function draw(){
 setInterval(() => { if(hitIdx >= 0 && performance.now() - hitAt > 1500){ hitIdx = -1; draw(); } }, 300);
 $('copy').onclick = () => { $('out').select(); try{ navigator.clipboard.writeText($('out').value); }catch(e){ document.execCommand('copy'); } log('コピーした'); };
 // ── わおん ──
-const NH = 10, LO_HZ = 100, HI_HZ = 6000;
+const NH = 10, LO_HZ = 100, HI_HZ = 6000, PW = 0.6, LAM = 0.05, TH = 0.3, EV_MS = 400, EV_SHARE = 0.4;
 let TPL = null, WtW = null, Wkey = '', loB = 0, hiB = 0, noise = null, act = [], chordLog = [];
 const magAt = b => Math.pow(10, spec[b]/20);
 // いまの スペクトルで f の 1〜10ばい の つよさ（±3% の なかの いちばん 大きい ところ。いちばん つよい ものを 1）
@@ -290,7 +301,7 @@ function buildW(){
     const w = new Float32Array(n), pr = prof[k];
     for(let h = 1; h <= NH; h++){
       const fh = f*h; if(fh > HI_HZ) break;
-      const a = pr ? pr[h - 1] : 1/h, c = fh/binHz - loB, sg = Math.max(0.9, fh*0.004/binHz);
+      const a = Math.pow(pr ? pr[h - 1] : 1/h, PW), c = fh/binHz - loB, sg = Math.max(0.9, fh*0.004/binHz);
       for(let b = Math.max(0, Math.floor(c - 3*sg)); b <= Math.min(n - 1, Math.ceil(c + 3*sg)); b++) w[b] += a*Math.exp(-0.5*((b - c)/sg)**2);
     }
     let s = 0; for(let b = 0; b < n; b++) s += w[b]*w[b]; s = Math.sqrt(s) || 1;
@@ -304,15 +315,15 @@ function buildW(){
 function solve(v){
   const K = TPL.length, Wtv = TPL.map(w => { let s = 0; for(let i = 0; i < v.length; i++) s += w[i]*v[i]; return Math.max(0, s); });
   const mx = Math.max(...Wtv); if(!(mx > 0)) return Wtv.map(() => 0);
-  const lam = 0.12*mx, h = Wtv.slice();
+  const lam = LAM*mx, h = Wtv.slice();
   for(let it = 0; it < 120; it++) for(let k = 0; k < K; k++){
     let den = lam; for(let j = 0; j < K; j++) den += WtW[k][j]*h[j];
     h[k] *= Wtv[k]/(den || 1);
   }
   return h;
 }
-let chordSince = 0, chordCand = '', chordShown = '';
-function polyFrame(now, loud){
+let ev = null, dbHist = [];
+function polyFrame(now, loud, db){
   if(!an2 || keys.length < 2){ return; }
   if(!TPL || Wkey !== keys.join(',') + '|' + prof.map(x => x ? 1 : 0).join('')) buildW();
   an2.getFloatFrequencyData(spec);
@@ -321,20 +332,24 @@ function polyFrame(now, loud){
   for(let b = 0; b < n; b++){
     const m = magAt(b + loB);
     if(!loud) noise[b] = noise[b] ? 0.9*noise[b] + 0.1*m : m;   // しずかな ときに まわりの おとを おぼえる
-    v[b] = Math.max(0, m - 2*noise[b]);
+    v[b] = Math.pow(Math.max(0, m - 2*noise[b]), PW);
   }
   const h = loud ? solve(v) : keys.map(() => 0);
   const mx = Math.max(...h);
   act = h.map(x => mx > 0 ? x/mx : 0);
-  const on = loud && mx > 0 ? act.map((x, i) => x >= 0.3 ? i : -1).filter(i => i >= 0) : [];
-  const key = on.join(',');
-  if(key !== chordCand){ chordCand = key; chordSince = now; }
-  if(now - chordSince >= 120 && key !== chordShown){
-    chordShown = key;
-    if(on.length){
-      $('chordBig').textContent = on.map(i => i + 1).join('・'); $('chordSub').textContent = on.map(i => noteName(keys[i])).join('・');
-      chordLog.push(on.map(i => i + 1).join('+')); if(chordLog.length > 40) chordLog.shift();
-      log('わおん ' + on.map(i => i + 1).join('・') + '（' + on.map(i => noteName(keys[i])).join('・') + '）'); draw();
+  const on = loud && mx > 0 ? act.map((x, i) => x >= TH ? i : -1).filter(i => i >= 0) : [];
+  // おとの はじまり：0.15びょう まえ より 6dB いじょう 大きい
+  dbHist.push({ t: now, db }); while(dbHist.length && now - dbHist[0].t > 150) dbHist.shift();
+  const jump = loud && db - Math.min(...dbHist.map(d => d.db)) >= 6;
+  if(jump && (!ev || now - ev.t > EV_MS)) ev = { t: now, n: 0, cnt: keys.map(() => 0) };
+  if(ev && now - ev.t <= EV_MS){ ev.n++; on.forEach(i => ev.cnt[i]++); }
+  else if(ev){
+    const got = ev.cnt.map((c, i) => c >= EV_SHARE*ev.n ? i : -1).filter(i => i >= 0);
+    ev = null;
+    if(got.length){
+      $('chordBig').textContent = got.map(i => i + 1).join('・'); $('chordSub').textContent = got.map(i => noteName(keys[i])).join('・');
+      chordLog.push(got.map(i => i + 1).join('+')); if(chordLog.length > 40) chordLog.shift();
+      log('わおん ' + got.map(i => i + 1).join('・') + '（' + got.map(i => noteName(keys[i])).join('・') + '）'); draw();
     }
   }
   drawBars();
@@ -346,7 +361,7 @@ function drawBars(){
   const K = keys.length || 1, bw = w/K;
   for(let i = 0; i < keys.length; i++){
     const a = act[i] || 0;
-    g.fillStyle = a >= 0.3 ? '#f0a020' : '#9fc3e6';
+    g.fillStyle = a >= TH ? '#f0a020' : '#9fc3e6';
     g.fillRect(i*bw + 1, hh - 12 - a*(hh - 14), bw - 2, a*(hh - 14));
     g.fillStyle = '#6a7486'; g.font = '9px sans-serif'; g.textAlign = 'center'; g.fillText(String(i + 1), i*bw + bw/2, hh - 2);
   }
