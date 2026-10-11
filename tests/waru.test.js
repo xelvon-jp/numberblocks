@@ -45,8 +45,8 @@ module.exports = {
     t.eq(await f.evaluate(() => [waru.phase(), document.querySelector('#ask .q').textContent]), ['ask', '3 は なんこ できるかな？'], 'よそうの カード');
     await f.evaluate(() => waru.setD(5));
     t.eq(await f.evaluate(() => waru.st().d), 3, 'よそうの あいだに かえられた');
-    // マイクが つかえない（テストの ブラウザ）ときは すぐ「いった！」が 出る
-    await f.waitForFunction(() => document.querySelector('#ask .said').classList.contains('show'), null, { timeout: 4000 });
+    // 「いった！」は はじめから 出ている
+    t.ok(await f.evaluate(() => getComputedStyle(document.querySelector('#ask .said')).visibility === 'visible' && document.querySelector('#ask .said').offsetWidth > 0), 'いった！ が 出ていない');
     await f.click('#ask .said');
     t.eq(await f.evaluate(() => document.querySelector('#ask .hint .txt').textContent), 'きこえた！', 'きこえた が 出ない');
     await f.waitForFunction(() => waru.phase() === 'run', null, { timeout: 2000 });
@@ -60,14 +60,15 @@ module.exports = {
     t.ok(later > 0 && later < 13, 'じゅんばんに ふえない: ' + later);
     await f.waitForFunction(() => waru.phase() === 'done', null, { timeout: 8000 });
     await f.waitForTimeout(100);
-    t.eq(await say(f), '40 は 3 が 13こ と あまり 1 40 ÷ 3 ＝ 13 あまり 1', 'ことば');
+    t.eq(await say(f), '40 ÷ 3 ＝ 13 あまり 1 40 は 3 が 13こ と あまり 1', 'しき と ことば');
+    t.ok(await f.evaluate(() => parseFloat(getComputedStyle(document.querySelector('#say .eq')).fontSize) > parseFloat(getComputedStyle(document.querySelector('#say .sub')).fontSize)), 'しきが ことばより 大きくない');
     t.eq(await chips(f), ['3が13と1'], 'メモ');
-    t.eq(await f.evaluate(() => document.querySelector('#go').textContent), 'もういちど わけてみる', 'もういちど');
+    t.eq(await f.evaluate(() => getComputedStyle(document.querySelector('#go')).display), 'none', 'おわったら ボタンは 出さない');
     // ぴったり
     await f.evaluate(() => waru.setD(4));
     t.eq(await f.evaluate(() => [waru.phase(), waru.L().d]), ['idle', 40], 'かえたら まるごとに もどらない');
     await split(f);
-    t.eq(await say(f), '40 は 4 が 10こ ぴったり！ 40 ÷ 4 ＝ 10', 'ぴったりの ことば');
+    t.eq(await say(f), '40 ÷ 4 ＝ 10 40 は 4 が 10こ ぴったり！', 'ぴったりの ことば');
     t.eq(await chips(f), ['3が13と1', '4が10★'], 'メモ（ぴったりは 金）');
     await f.click('#memo .chip >> nth=0');
     t.eq(await f.evaluate(() => [waru.st().d, waru.phase()]), [3, 'idle'], 'メモで もどれない');
@@ -82,7 +83,7 @@ module.exports = {
     await f.click('#ask .cancel');
     t.eq(await f.evaluate(() => waru.phase()), 'idle', 'やめる で もどらない');
     await split(f);
-    t.eq(await say(f), '17 は 5 が 3こ と あまり 2 17 ÷ 5 ＝ 3 あまり 2', '17÷5');
+    t.eq(await say(f), '17 ÷ 5 ＝ 3 あまり 2 17 は 5 が 3こ と あまり 2', '17÷5');
   },
 
   '1 ふやすと あまりが かわり、そろうと グループが 1つ ふえる。いくつずつ は ぜんぶ より 大きく ならない': async t => {
@@ -90,13 +91,13 @@ module.exports = {
     await split(f);
     t.eq(await f.evaluate(() => [waru.L().q, waru.L().r]), [13, 2], '41');
     await f.evaluate(() => waru.setN(42)); await split(f);
-    t.eq(await say(f), '42 は 3 が 14こ ぴったり！ 42 ÷ 3 ＝ 14', '42');
+    t.eq(await say(f), '42 ÷ 3 ＝ 14 42 は 3 が 14こ ぴったり！', '42');
     await f.evaluate(() => { waru.setD(42); waru.setN(10); });
     t.eq(await f.evaluate(() => [waru.st().n, waru.st().d]), [10, 10], 'ぜんぶを へらすと いくつずつ も へる');
     t.eq(await f.evaluate(() => [document.querySelector('#spD .p').classList.contains('off'), document.querySelector('#spN .m').classList.contains('off')]), [true, false], 'ボタンの おせない しるし');
     // いくつずつ ＝ ぜんぶ は うごかずに すぐ こたえ
     await split(f);
-    t.eq(await say(f), '10 は 10 が 1こ ぴったり！ 10 ÷ 10 ＝ 1', '10÷10');
+    t.eq(await say(f), '10 ÷ 10 ＝ 1 10 は 10 が 1こ ぴったり！', '10÷10');
   },
 
   'どの くみあわせ（1〜100）でも、キャラは ぶたいの 中に かさならずに おさまる': async t => {
