@@ -78,7 +78,7 @@
 // ひいた おとに いちばん ちかい けんばん（±45セント いない）を えらぶ。くろい けんばん なら なにも でない。
 // ひいた けんばんの うえに ちいさな キャラが たつ（かいだんに なる）。まんなかに 大きく その キャラ。
 // はん（版）の しるし：かえたら ここも かえる（おくった おと・🔍 に のる。ふるい はんの まま ためして いないか すぐ わかる）
-const KENBAN_VER = '2026-10-12c';
+const KENBAN_VER = '2026-10-12d';
 const WHITE_DEF = [176.5, 197.6, 222.6, 249.4, 264.1, 296.2, 332.8, 349.6, 392.4, 441.6, 495.7, 525, 589.4, 665.2, 703.9];
 const BLACK_DEF = [186.6, 209.2, 236, 279.5, 314.1, 370.3, 416.8, 467.8, 557.1, 625.8];
 // くろい けんばんが どの しろの みぎに あるか（ファ ソ ラ シ ド レ ミ ファ ソ ラ シ ド レ ミ ファ）
@@ -221,7 +221,7 @@ function onNote(f, now){
       if(lv.got[i] !== fv) return;     // 「ひとつ もどる」で けされた
       const a = TPL.shape(fv); if(a) snaps.push(a);
       if(j === 2 && snaps.length){ lv.prof[i] = snaps[0].map((_, h) => +snaps.map(sn => sn[h]).sort((x, y) => x - y)[snaps.length >> 1].toFixed(3));
-        if(tune.prof === lv.prof) saveTune(); }
+        if(tune.prof === lv.prof){ saveTune(); verUi(); } }
     }, ms));
     if(lv.got.length === 15){
       tune = { white: lv.got, black: blackFrom(lv.got), prof: lv.prof };
@@ -622,7 +622,10 @@ document.getElementById('dbgClear').addEventListener('click', () => { dbgLog.len
 const REC_SEC = 30;
 let ring = null;   // { sp, chunks: [{ x, t }], n, sr }
 const recBtn = document.getElementById('recBtn'), recMsg = document.getElementById('recMsg');
-document.getElementById('ver').textContent = 'はん ' + KENBAN_VER;
+// はん と、おぼえなおし で はかった おとの かたちを つかって いるか（「かたち 15/15」。0 なら えほんで はかった かたち）。とくに 13の レ（k21）
+function verUi(){ const p = tune.prof || [], n = p.filter(a => Array.isArray(a) && a.some(v => v > 0)).length;
+  document.getElementById('ver').textContent = 'はん ' + KENBAN_VER + '・かたち ' + n + '/15' + (n && !(p[12] && p[12].some(v => v > 0)) ? '（13 なし）' : ''); }
+verUi();
 recBtn.addEventListener('click', recSend);
 function ringStart(){
   if(!ac || !micSrc) return;
@@ -785,7 +788,7 @@ document.getElementById('relearn').addEventListener('click', () => { learning = 
 document.getElementById('learnUndo').addEventListener('click', () => { if(learning){ learning.got.pop(); learning.prof.length = learning.got.length; learnUi(); } });
 document.getElementById('learnCancel').addEventListener('click', () => { learning = null; learnUi(); });
 function learnUi(){
-  tip.classList.toggle('on', !!learning);
+  tip.classList.toggle('on', !!learning); verUi();
   if(learning) tip.querySelector('.big').textContent = 'ひだりから ' + (learning.got.length + 1) + 'ばんめの しろい けんばんを おしてね（' + learning.got.length + '/15）';
 }
 

@@ -196,6 +196,22 @@ module.exports = {
     t.eq(await f.evaluate(() => Object.keys(kenban.standing())), ['13'], 'おぼえなおしても でない');
   },
 
+  'おぼえなおす：よみこみ なおしても（こうしん しても）おぼえた おとの かたちは のこり、13の レ が でる': async t => {
+    const { f } = await openKenbanMic(t, 589.4, [1, 0.8, 0.05]);
+    await f.waitForTimeout(400);
+    await f.click('#relearn');
+    for(let i = 1; i <= 15; i++){ await f.evaluate(i => kenban.white(i), i); await f.waitForTimeout(i >= 13 ? 450 : 50); }
+    await f.waitForTimeout(400);
+    const saved = await f.evaluate(() => localStorage.getItem('nb_kenban'));
+    t.ok(JSON.parse(saved).prof.length === 15, 'しまって いない');
+    const { f: f2 } = await openKenbanMic(t, 589.4, [1, 0.8, 0.05], { storage: { nb_kenban: saved } });
+    await f2.waitForTimeout(400);
+    t.eq(await f2.evaluate(() => JSON.stringify(kenban.tune().prof)), JSON.stringify(JSON.parse(saved).prof), 'よみこまない');
+    await f2.evaluate(() => kenban.white(13));
+    t.eq(await f2.evaluate(() => Object.keys(kenban.standing())), ['13'], 'よみこみ なおすと でない');
+    t.ok((await f2.textContent('#ver')).includes('かたち 15/15'), '🔍 に かたちの かずが でない ' + await f2.textContent('#ver'));
+  },
+
   'さっきの 30びょうを おくる：マイクの あいだ ためて おき、おすと はん（版）と いっしょに おくる。やめたら おくらない': async t => {
     const { f } = await openKenbanMic(t, 392.4, [0.44, 0.08, 1, 0.2, 0.08, 0.09, 0.05],   // ソ4（9）：えほんで はかった かたち
        { storage: { nb_sync_code: 'abcdefghijklmnop1234', nb_kenban_game: JSON.stringify({ mode: 'free' }) } });
