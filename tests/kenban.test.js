@@ -39,8 +39,53 @@ module.exports = {
     const { f } = await openKenban(t);
     await f.evaluate(([W, B]) => { kenban.onNote(W[2]); kenban.onNote(W[4]); kenban.onNote(B[0]); }, [WHITE, BLACK]);
     t.eq(await f.evaluate(() => [Object.keys(kenban.standing()), kenban.big().n]), [['3', '5'], 5], 'キャラ');
-    await f.click('#clear');
+    await f.click('#sub button >> text=かたづける');
     t.eq(await f.evaluate(() => [Object.keys(kenban.standing()), kenban.big()]), [[], null], 'かたづけ');
+  },
+
+  'たすける：たすけての かずを ひくと ありがとう・つぎへ。ちがう けんばんは「ぼくは ○」だけ。★★★ は 2にんを たして がったい': async t => {
+    const { f } = await openKenban(t, { storage: { nb_kenban_game: JSON.stringify({ mode: 'help', helpLv: 1 }) } });
+    t.eq(await f.evaluate(() => kenban.mode()), 'help', 'もうどを おぼえて いない');
+    const r = await f.evaluate(() => { const g = kenban.game(), a = g.target.ans, w = a === 1 ? 2 : 1;
+      kenban.white(w); const afterWrong = [g.saved, !!g.target.done, g.wrong.n];
+      kenban.white(a); return { afterWrong, w, saved: g.saved, done: !!g.target.done }; });
+    t.eq(r.afterWrong, [0, false, r.w], 'ちがう けんばんで すすんだ');
+    t.eq([r.saved, r.done], [1, true], 'たすけられない');
+    await f.waitForTimeout(1900);
+    t.eq(await f.evaluate(() => !kenban.game().target.done), true, 'つぎが でない');
+    await f.click('#sub button >> text=★★★ たしざん');
+    const s3 = await f.evaluate(() => { const tg = kenban.game().target; return { n: tg.nums.length, ok: tg.nums[0] + tg.nums[1] === tg.ans && tg.ans <= 15 }; });
+    t.eq(s3, { n: 2, ok: true }, 'たしざんの おだい');
+    t.eq(await f.evaluate(() => { const g = kenban.game(); kenban.white(g.target.ans); return g.saved; }), 1, 'たしざんで がったい しない');
+  },
+
+  'きょく：つぎの おとの けんばんを ひくと すすむ（ちがうと すすまない）。さいごまで で できた。つぎの けんばんが ひかる': async t => {
+    const { f } = await openKenban(t, { storage: { nb_kenban_game: JSON.stringify({ mode: 'song', song: 3 }) } });
+    const r = await f.evaluate(() => { const g = kenban.game(), notes = g.notes;
+      const glow0 = g.glow(); kenban.white(notes[0] === 1 ? 2 : 1); const wrong = g.idx;
+      notes.forEach(n => kenban.white(n)); return { glow0, first: notes[0], wrong, idx: g.idx, len: notes.length, done: !!g.done }; });
+    t.eq([r.glow0, r.wrong], [r.first - 1, 0], 'ひかる けんばん／ちがうと すすむ');
+    t.eq([r.idx, r.done], [r.len, true], 'さいごまで いかない');
+    // きょくは どれも しろい けんばん（1〜15）だけ
+    t.ok(await f.evaluate(() => kenban.songs.every(sg => sg.notes.every(n => n >= 1 && n <= 15))), 'けんばんに ない おと');
+  },
+
+  'つくる：ひいた かずが がったいして めあてに ぴったり なら できた、こえたら あふれて やりなおし。くろい けんばんでも やりなおし': async t => {
+    const { f } = await openKenban(t, { storage: { nb_kenban_game: JSON.stringify({ mode: 'make', makeLv: 1 }) } });
+    await f.evaluate(() => { const g = kenban.game(); g.T = 10; g.clear(); kenban.white(3); });
+    await f.waitForTimeout(600);
+    await f.evaluate(() => kenban.white(7));
+    await f.waitForTimeout(600);
+    t.eq(await f.evaluate(() => { const g = kenban.game(); return [g.parts, g.sum, !!g.done, g.made]; }), [[3, 7], 10, true, 1], 'ぴったり');
+    await f.waitForTimeout(2600);
+    await f.evaluate(() => { const g = kenban.game(); g.T = 6; g.clear(); kenban.white(4); kenban.white(5); });
+    await f.waitForTimeout(600);
+    t.eq(await f.evaluate(() => { const g = kenban.game(); return [g.sum, !!g.over]; }), [9, true], 'あふれ');
+    await f.waitForTimeout(1800);
+    t.eq(await f.evaluate(() => kenban.game().sum), 0, 'あふれた あと もどらない');
+    await f.evaluate(() => kenban.white(2)); await f.waitForTimeout(600);
+    await f.evaluate(() => kenban.black(0));
+    t.eq(await f.evaluate(() => kenban.game().sum), 0, 'くろい けんばんで やりなおし しない');
   },
 
   'おぼえなおす：しろい 15こを ひだりから ならすと おぼえて、くろいのは あいだに きまる。ひらきなおしても のこる': async t => {

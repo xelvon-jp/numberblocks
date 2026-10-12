@@ -14,8 +14,15 @@
                overscroll-behavior:none; touch-action:none; user-select:none; -webkit-user-select:none; }
   body { display:flex; flex-direction:column; }
   #bar { flex:none; display:flex; align-items:center; gap:6px; padding:6px 10px; }
-  #bar .ttl { flex:1; font-size:16px; font-weight:800; }
   #bar button { border:0; border-radius:10px; padding:7px 10px; font-size:13px; font-weight:700; background:#dfe6ef; color:#2b3a52; }
+  #modes { flex:1; display:flex; gap:4px; min-width:0; }
+  #modes button { flex:1; min-width:0; padding:8px 2px; font-size:clamp(11px, 3.6vw, 14px); font-weight:800; background:#fff; border:2px solid #c9d6e6; white-space:nowrap; }
+  #modes button.on { background:#3f8fd0; color:#fff; border-color:#3f8fd0; }
+  #bar #relearn { flex:none; font-size:clamp(9px, 2.8vw, 11px); padding:6px 6px; white-space:nowrap; }
+  #sub { flex:none; display:flex; gap:5px; padding:0 10px 4px; min-height:30px; align-items:center; flex-wrap:wrap; }
+  #sub button { border:1.5px solid #c9d6e6; border-radius:999px; padding:3px 10px; font-size:13px; font-weight:800; background:#fff; color:#2b3a52; }
+  #sub button.on { background:#f0a020; border-color:#f0a020; color:#fff; }
+  #sub .lab { font-size:12px; color:#6a7486; font-weight:700; }
   #stage { flex:1; position:relative; min-height:0; }
   canvas { display:block; position:absolute; inset:0; width:100%; height:100%; }
   .over { position:absolute; inset:0; display:none; align-items:center; justify-content:center; flex-direction:column; gap:12px;
@@ -34,9 +41,11 @@
 </style>
 </head>
 <body>
-<div id="bar"><div class="ttl">🎹 けんばんで よぼう</div><button id="clear">かたづける</button><button id="relearn">おぼえなおす</button></div>
+<div id="bar"><div id="modes"><button data-m="free">よぶ</button><button data-m="help">たすける</button><button data-m="song">きょく</button><button data-m="make">つくる</button></div>
+  <button id="relearn">おぼえなおす</button></div>
+<div id="sub"></div>
 <div id="stage"><canvas id="c"></canvas>
-  <div id="startBox" class="over on"><div class="big">キーボードの しろい けんばんを ひくと<br>その かずの キャラが でてくるよ</div>
+  <div id="startBox" class="over on"><div class="big">キーボードの しろい けんばんで<br>ナンバーブロックスと あそぼう</div>
     <div class="small">スマホを キーボードの ちかくに おいてね</div><button id="start">はじめる 🎤</button><div class="small" id="err"></div></div>
   <div id="learnTip"><div class="card"><div class="big"></div><div class="small">ひとつずつ ゆっくり おしてね（くろい けんばんは つかわない）</div>
     <button id="learnUndo">ひとつ もどる</button> <button id="learnCancel">やめる</button></div></div>
@@ -164,8 +173,15 @@ function whichKey(f){
 }
 
 // ── あそび ──
-let standing = {}, big = null, flash = { white: -1, black: -1, t: 0 };
+// もうど：free よぶ（ひいた かずの キャラが でる）／ help たすける ／ song きょく ／ make つくる。
+// どれも「まちがい」は かぞえない。できた ときだけ よろこぶ。
+const GKEY = 'nb_kenban_game';
+let gs = { mode: 'free', helpLv: 1, song: 0, makeLv: 1 };
+try{ const v = JSON.parse(localStorage.getItem(GKEY)); if(v && typeof v === 'object') gs = Object.assign(gs, v); }catch(e){}
+const saveGs = () => { try{ localStorage.setItem(GKEY, JSON.stringify(gs)); }catch(e){} };
+let flash = { white: -1, black: -1, t: 0 };
 let learning = null;    // おぼえなおし中：{ got: [] }
+const rint = (a, b) => a + Math.floor(Math.random()*(b - a + 1));
 function onNote(f, now){
   if(learning){
     learning.got.push(+f.toFixed(1));
@@ -173,19 +189,273 @@ function onNote(f, now){
     if(learning.got.length === 15){
       tune = { white: learning.got, black: blackFrom(learning.got) };
       try{ localStorage.setItem(KEY, JSON.stringify(tune)); }catch(e){}
-      learning = null; standing = {}; big = null;
+      learning = null; GAMES[gs.mode].reset(now);
     }
     learnUi(); return;
   }
   const k = whichKey(f);
   if(!k) return;
-  if(k.black !== undefined){ flash = { white: -1, black: k.black, t: now }; return; }
-  const n = k.white + 1;
+  if(k.black !== undefined){ flash = { white: -1, black: k.black, t: now }; if(GAMES[gs.mode].black) GAMES[gs.mode].black(now); return; }
   flash = { white: k.white, black: -1, t: now };
-  standing[n] = { t: standing[n] ? standing[n].t : now, hop: now };
-  big = { n, t: now };
+  GAMES[gs.mode].key(k.white + 1, now);
 }
-document.getElementById('clear').addEventListener('click', () => { standing = {}; big = null; });
+
+// ── かみふぶき・ことば ──
+let confetti = [], pops = [];   // pops：ふわっと 出て きえる ことば { text, x, y, t, color, size }
+const CONF_COLORS = ['#e5242a', '#f39220', '#f9d62d', '#3ebb47', '#29bee2', '#3f48cc', '#923cc0'];
+function burst(x, y, n){
+  for(let i = 0; i < (n || 40); i++){ const a = Math.random()*Math.PI*2, v = 2 + Math.random()*5;
+    confetti.push({ x, y, vx: Math.cos(a)*v, vy: Math.sin(a)*v - 3, r: Math.random()*6.28, c: CONF_COLORS[i % 7], life: 1 }); }
+}
+function say(text, x, y, now, color, size){ pops.push({ text, x, y, t: now, color: color || '#d08a00', size: size || 26 }); }
+function drawFx(now){
+  confetti = confetti.filter(p => p.life > 0);
+  for(const p of confetti){
+    p.x += p.vx; p.y += p.vy; p.vy += 0.18; p.vx *= 0.99; p.r += 0.15; p.life -= 0.012;
+    ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, p.life*2)); ctx.translate(p.x, p.y); ctx.rotate(p.r);
+    ctx.fillStyle = p.c; ctx.fillRect(-4, -2.5, 8, 5); ctx.restore();
+  }
+  pops = pops.filter(p => now - p.t < 1600);
+  for(const p of pops){
+    const a = now - p.t, k = Math.min(1, a/200), fade = a > 1200 ? 1 - (a - 1200)/400 : 1;
+    ctx.save(); ctx.globalAlpha = fade; ctx.translate(p.x, p.y - a*0.02); ctx.scale(0.6 + 0.4*k, 0.6 + 0.4*k);
+    ctx.font = '900 ' + p.size + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+    ctx.lineWidth = p.size*0.22; ctx.strokeStyle = '#fff'; ctx.strokeText(p.text, 0, 0); ctx.fillStyle = p.color; ctx.fillText(p.text, 0, 0);
+    ctx.restore();
+  }
+}
+function text(t, x, y, size, color, weight){
+  ctx.save(); ctx.font = (weight || 900) + ' ' + size + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  ctx.lineWidth = size*0.2; ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.strokeText(t, x, y); ctx.fillStyle = color || '#2b3a52'; ctx.fillText(t, x, y); ctx.restore();
+}
+// キャラを あしもと（cx, footY）に たてて かく。hop：0〜1 で ぴょん、wob：ぷるぷる
+function stand(n, cx, footY, bs, now, o){
+  o = o || {};
+  const s = blockSpec(n);
+  let y = footY - s.rows*bs, x = cx - s.cols*bs/2;
+  if(o.hop != null && o.hop < 1) y -= Math.sin(Math.PI*o.hop)*bs*2.2;
+  if(o.wob) x += Math.sin(now*0.025)*bs*0.15*o.wob;
+  ctx.save(); if(o.alpha != null) ctx.globalAlpha = o.alpha;
+  drawNumberblock(ctx, n, x, y, bs, { t: now, animate: true });
+  ctx.restore();
+}
+// その かずが いちばん 大きく はいる キューブの 大きさ
+function fitBs(nums, w, h, cap){
+  let c = 1, r = 1; for(const n of nums){ const s = blockSpec(n); c = Math.max(c, s.cols); r = Math.max(r, s.rows); }
+  return Math.min(cap || 26, w/(c + PAD_X*2), h/(r + PAD_TOP + PAD_BOT));
+}
+// ふきだし
+function bubble(t, x, y, now){
+  ctx.save(); ctx.font = '800 15px sans-serif'; const w = ctx.measureText(t).width + 18, h = 28, bob = Math.sin(now*0.005)*2;
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = '#c9d6e6'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.roundRect(x - w/2, y - h + bob, w, h, 12); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x - 6, y + bob - 1); ctx.lineTo(x, y + bob + 7); ctx.lineTo(x + 6, y + bob - 1); ctx.fill();
+  ctx.fillStyle = '#c0398a'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(t, x, y - h/2 + bob);
+  ctx.restore();
+}
+
+// ── よぶ（じゆう）──
+// ひいた けんばんの うえに ちいさく たつ（かいだん）。まんなかに 大きく。
+const FREE = {
+  standing: {}, big: null,
+  reset(){ this.standing = {}; this.big = null; },
+  key(n, now){ this.standing[n] = { t: this.standing[n] ? this.standing[n].t : now, hop: now }; this.big = { n, t: now }; },
+  sub(){ return [{ text: 'かたづける', on: false, act: () => this.reset() }]; },
+  draw(now, g){
+    const stairH = Math.min(H*0.38, g.y - 10), bsS = Math.min((g.kw*0.95)/2, stairH/(maxRows + PAD_TOP + PAD_BOT)), footY = g.y - 4;
+    for(const k in this.standing){
+      const n = +k, st = this.standing[k];
+      stand(n, g.m + (n - 0.5)*g.kw, footY - PAD_BOT*bsS*0.4, bsS, now, { hop: (now - st.hop)/450, alpha: Math.min(1, (now - st.t)/250) });
+    }
+    if(this.big){
+      const top = 10, ah = footY - stairH - 6 - top;
+      if(ah > 40){
+        const bs = fitBs([this.big.n], W*0.5, ah), k = Math.min(1, (now - this.big.t)/300);
+        ctx.save(); ctx.translate(W/2, top + ah - PAD_BOT*bs); const sc = k < 1 ? 0.6 + 0.4*k + 0.15*Math.sin(Math.PI*k) : 1; ctx.scale(sc, sc);
+        stand(this.big.n, 0, 0, bs, now); ctx.restore();
+      }
+    }
+  },
+};
+
+// ── たすける ──
+// キャラが「たすけて〜」。その かずの けんばんを ひくと「ありがとう！」。
+//   ★ うえ   ：キャラは じぶんの けんばんの まうえ（ばしょで わかる）
+//   ★★ まんなか：キャラは まんなか（かずを みて けんばんを かぞえる）
+//   ★★★ たしざん：2にん（3 と 4）が「がったい したい！」→ あわせた かず（7）で がったい
+// ちがう けんばんを ひくと、その かずの キャラが すこし 出て「ぼくは 5」（しかったり しない）。
+const HELP = {
+  target: null, saved: 0, wrong: null, last: 0,
+  reset(now){ this.saved = 0; this.wrong = null; this.next(now || performance.now()); },
+  next(now){
+    let nums, ans;
+    do{
+      if(gs.helpLv === 3){ const a = rint(1, 9), b = rint(1, Math.min(9, 15 - a)); nums = [a, b]; ans = a + b; }
+      else { ans = rint(1, 15); nums = [ans]; }
+    } while(ans === this.last);
+    this.last = ans; this.target = { nums, ans, t: now, done: 0 };
+  },
+  key(n, now){
+    const tg = this.target; if(!tg || tg.done) return;
+    if(n === tg.ans){
+      tg.done = now; this.saved++;
+      const p = this.where(tg); burst(p.x, p.y, 50);
+      say(gs.helpLv === 3 ? tg.nums[0] + ' と ' + tg.nums[1] + ' で ' + tg.ans + '！' : 'ありがとう！', W/2, 74, now, '#d08a00', 30);
+    } else this.wrong = { n, t: now };
+  },
+  where(tg){ const g = keyboardGeom(); return gs.helpLv === 1 ? { x: this.lv1x(tg.ans, g), y: g.y - 100 } : { x: W/2, y: g.y*0.5 }; },
+  lv1x(n, g){ return Math.max(W*0.16, Math.min(W*0.84, g.m + (n - 0.5)*g.kw)); },
+  sub(){ return [['★ うえ', 1], ['★★ まんなか', 2], ['★★★ たしざん', 3]].map(([t, lv]) => ({ text: t, on: gs.helpLv === lv, act: () => { gs.helpLv = lv; saveGs(); this.reset(); } })); },
+  draw(now, g){
+    const tg = this.target; if(!tg) return;
+    if(tg.done && now - tg.done > 1700) this.next(now);
+    const footY = g.y - 4, stairH = Math.min(H*0.38, g.y - 10), bsS = Math.min((g.kw*0.95)/2, stairH/(maxRows + PAD_TOP + PAD_BOT));
+    if(this.saved) text('たすけた ' + '★'.repeat(Math.min(this.saved, 10)) + (this.saved > 10 ? ' ' + this.saved : ''), W/2, 14, 15, '#d08a00', 800);
+    // ちがう けんばん：その かずの キャラが ちいさく「ぼくは 5」
+    if(this.wrong && now - this.wrong.t < 1100){
+      const a = now - this.wrong.t, cx = Math.max(34, Math.min(W - 34, g.m + (this.wrong.n - 0.5)*g.kw)), al = a > 800 ? 1 - (a - 800)/300 : 1;
+      if(gs.helpLv !== 1 || this.wrong.n !== tg.ans) stand(this.wrong.n, cx, footY - PAD_BOT*bsS*0.4, bsS*0.8, now, { alpha: al*0.8, hop: a/450 });
+      text('ぼくは ' + this.wrong.n, cx, footY - 12 - blockSpec(this.wrong.n).rows*bsS*0.8 - 22, 13, '#5a6576', 800);
+    }
+    const sinceDone = tg.done ? now - tg.done : -1, fade = sinceDone > 1300 ? 1 - (sinceDone - 1300)/400 : 1;
+    if(gs.helpLv === 1){
+      // けんばんの うえに たって、やじるしで じぶんの けんばんを さす
+      const kx = g.m + (tg.ans - 0.5)*g.kw, cx = this.lv1x(tg.ans, g), fy = footY - 46;
+      const bs = fitBs([tg.ans], W*0.3, fy - 70, 18), appear = Math.min(1, (now - tg.t)/300);
+      stand(tg.ans, cx, fy, bs, now, { alpha: appear*fade, wob: tg.done ? 0 : 1, hop: tg.done ? (sinceDone % 500)/500 : null });
+      if(!tg.done){
+        bubble('たすけて〜', Math.min(W - 60, Math.max(60, cx)), fy - blockSpec(tg.ans).rows*bs - PAD_TOP*bs*0.8, now);
+        const bob = Math.sin(now*0.008)*4;
+        ctx.save(); ctx.strokeStyle = '#f0a020'; ctx.fillStyle = '#f0a020'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(cx, fy + 8); ctx.lineTo(kx, g.y - 14 + bob); ctx.stroke();
+        const ang = Math.atan2(g.y - 14 + bob - fy - 8, kx - cx);
+        ctx.beginPath(); ctx.moveTo(kx + Math.cos(ang)*10, g.y - 14 + bob + Math.sin(ang)*10);
+        ctx.lineTo(kx + Math.cos(ang + 2.5)*12, g.y - 14 + bob + Math.sin(ang + 2.5)*12); ctx.lineTo(kx + Math.cos(ang - 2.5)*12, g.y - 14 + bob + Math.sin(ang - 2.5)*12); ctx.fill();
+        ctx.restore();
+      }
+      return;
+    }
+    const top = 40, ah = footY - stairH*0.35 - top;
+    if(gs.helpLv === 2){
+      const bs = fitBs([tg.ans], W*0.5, ah), appear = Math.min(1, (now - tg.t)/300);
+      const fy = top + ah - PAD_BOT*bs;
+      stand(tg.ans, W/2, fy, bs, now, { alpha: appear*fade, wob: tg.done ? 0 : 1, hop: tg.done ? (sinceDone % 500)/500 : null });
+      if(!tg.done) bubble('たすけて〜', W/2, fy - blockSpec(tg.ans).rows*bs - PAD_TOP*bs*0.7, now);
+      return;
+    }
+    // たしざん：2にんが よって がったい
+    const [a, b] = tg.nums, bs = fitBs([tg.ans], W*0.36, ah), fy = top + ah - PAD_BOT*bs;
+    if(!tg.done || sinceDone < 450){
+      const k = tg.done ? Math.min(1, sinceDone/450) : 0, gap = W*0.2*(1 - k);
+      stand(a, W/2 - gap, fy, bs, now, { wob: tg.done ? 0 : 0.6 }); stand(b, W/2 + gap, fy, bs, now, { wob: tg.done ? 0 : 0.6 });
+      if(!tg.done){
+        text(a + ' と ' + b + ' で いくつ？', W/2, top + 20, 24, '#2b3a52');
+        bubble('がったい したい！', W/2, fy - Math.max(blockSpec(a).rows, blockSpec(b).rows)*bs - PAD_TOP*bs*0.7, now);
+      }
+    } else {
+      stand(tg.ans, W/2, fy, bs, now, { alpha: fade, hop: ((sinceDone - 450) % 500)/500 });
+      text(a + ' + ' + b + ' = ' + tg.ans, W/2, top + 20, 28, '#d08a00');
+    }
+  },
+};
+
+// ── きょく ──
+// しろい けんばんの ばんごう（ひだりから 1〜15。ド4＝5）で かいた きょく。つぎの おとが キャラで ならび、
+// その けんばんを ひくと すすむ（つぎの けんばんは うすく ひかる）。さいごまで ひけたら「できた！」。
+const SONGS = [
+  { name: 'きらきらぼし', notes: [5,5,9,9,10,10,9, 8,8,7,7,6,6,5, 9,9,8,8,7,7,6, 9,9,8,8,7,7,6, 5,5,9,9,10,10,9, 8,8,7,7,6,6,5] },
+  { name: 'かえるのうた', notes: [5,6,7,8,7,6,5, 7,8,9,10,9,8,7, 5,5,5,5, 5,5,6,6,7,7,8,8,7,6,5] },
+  { name: 'チューリップ', notes: [5,6,7, 5,6,7, 9,7,6,5,6,7,6, 5,6,7, 5,6,7, 9,7,6,5,6,7,5, 9,9,7,9,10,10,9, 7,7,6,6,5] },
+  { name: 'メリーさんのひつじ', notes: [7,6,5,6,7,7,7, 6,6,6, 7,9,9, 7,6,5,6,7,7,7, 6,6,7,6,5] },
+];
+const SONG = {
+  idx: 0, shown: 0, hop: 0, done: 0, wrong: null,
+  get notes(){ return SONGS[gs.song % SONGS.length].notes; },
+  reset(){ this.idx = 0; this.shown = 0; this.done = 0; this.hop = 0; this.wrong = null; },
+  glow(){ return this.done ? -1 : this.notes[this.idx] - 1; },
+  key(n, now){
+    if(this.done){ if(now - this.done > 2500) this.reset(); return; }   // できた あと すこし して ひくと はじめから
+    if(n === this.notes[this.idx]){
+      this.idx++; this.hop = now;
+      if(this.idx >= this.notes.length){ this.done = now; burst(W/2, H*0.3, 80); say('できた！🎵', W/2, H*0.22, now, '#d08a00', 40); }
+    } else this.wrong = { n, t: now };
+  },
+  sub(){ return SONGS.map((sg, i) => ({ text: sg.name, on: gs.song === i, act: () => { gs.song = i; saveGs(); this.reset(); } })); },
+  draw(now, g){
+    const notes = this.notes, sg = SONGS[gs.song % SONGS.length];
+    this.shown += (this.idx - this.shown)*0.18;
+    text(sg.name + '  ' + Math.min(this.idx, notes.length) + ' / ' + notes.length, W/2, 14, 15, '#5a6576', 800);
+    // しんちょく
+    const pw = W - 40; ctx.fillStyle = '#d8e4f2'; ctx.beginPath(); ctx.roundRect(20, 28, pw, 6, 3); ctx.fill();
+    ctx.fillStyle = '#f0a020'; ctx.beginPath(); ctx.roundRect(20, 28, Math.max(6, pw*this.idx/notes.length), 6, 3); ctx.fill();
+    const laneY = g.y - 30, cx0 = W*0.27, sp = Math.min(96, W/4.6);
+    const bsBig = fitBs([...new Set(notes)], W*0.42, laneY - 80, 24), bsSm = bsBig*0.55;   // きょくに でる いちばん 大きい キャラで きめる
+    if(this.done){
+      // できた：きょくに でてきた キャラが ならんで ぴょんぴょん
+      const uniq = [...new Set(notes)].sort((a, b) => a - b), w = W/(uniq.length + 1);
+      uniq.forEach((n, i) => stand(n, w*(i + 1), laneY, bsSm*1.2, now, { hop: ((now - this.done + i*120) % 600)/600 }));
+      if((now - this.done) % 700 < 20) burst(rint(40, W - 40), H*0.3, 25);
+      text('もういちど ひくと はじめから', W/2, laneY + 14, 13, '#6a7486', 700);
+      return;
+    }
+    for(let i = Math.max(0, this.idx - 2); i < Math.min(notes.length, this.idx + 6); i++){
+      const n = notes[i], x = cx0 + (i - this.shown)*sp, cur = i === this.idx, past = i < this.idx;
+      const bs = cur ? bsBig : bsSm, hop = past && i === this.idx - 1 ? (now - this.hop)/450 : null;
+      stand(n, x, laneY, bs, now, { alpha: past ? 0.35 : cur ? 1 : 0.75, hop });
+      if(cur){ ctx.save(); ctx.strokeStyle = '#f0a020'; ctx.lineWidth = 3; ctx.setLineDash([6, 5]);
+        const s = blockSpec(n); ctx.beginPath(); ctx.roundRect(x - s.cols*bs/2 - 10, laneY - s.rows*bs - PAD_TOP*bs - 4, s.cols*bs + 20, s.rows*bs + PAD_TOP*bs + 12, 10); ctx.stroke(); ctx.restore(); }
+    }
+    if(this.wrong && now - this.wrong.t < 700) text('つぎは ' + notes[this.idx], W/2, 56, 18, '#c0398a', 800);
+  },
+};
+
+// ── つくる ──
+// 「10 を つくろう」。ひいた かずの キャラが とんできて がったい。ぴったり で「ぴったり！」、こえたら「あふれちゃった」で やりなおし。
+// くろい けんばん でも やりなおし。★ は 3〜10、★★ は 6〜15。
+const MAKE = {
+  T: 0, parts: [], sum: 0, flying: [], done: 0, over: 0, last: 0, made: 0,
+  reset(){ this.made = 0; this.next(); },
+  next(){ let t; do{ t = gs.makeLv === 2 ? rint(6, 15) : rint(3, 10); } while(t === this.last); this.last = this.T = t; this.clear(); },
+  clear(){ this.parts = []; this.sum = 0; this.flying = []; this.done = 0; this.over = 0; },
+  key(n, now){ if(this.done || this.over) return; const g = keyboardGeom(); this.flying.push({ n, t: now, x: g.m + (n - 0.5)*g.kw, y: g.y - 20 }); },
+  black(){ if(!this.done) this.clear(); },
+  land(f, now){
+    this.parts.push(f.n); this.sum += f.n;
+    if(this.sum === this.T){ this.done = now; this.made++; burst(W*0.33, H*0.35, 70); say('ぴったり！', W/2, 60, now, '#d08a00', 36); }
+    else if(this.sum > this.T){ this.over = now; say('あふれちゃった！', W/2, 60, now, '#c0398a', 28); }
+  },
+  sub(){ return [['★ 10まで', 1], ['★★ 15まで', 2]].map(([t, lv]) => ({ text: t, on: gs.makeLv === lv, act: () => { gs.makeLv = lv; saveGs(); this.reset(); } }))
+           .concat([{ text: 'やりなおし', on: false, act: () => this.clear() }]); },
+  draw(now, g){
+    if(!this.T) this.next();
+    if(this.done && now - this.done > 2400) this.next();
+    if(this.over && now - this.over > 1600) this.clear();
+    const top = 34, footY = g.y - 18, ah = footY - top - 110;   // うえは しき・ことば の ぶん あける
+    const bs = fitBs([Math.max(this.T, this.sum, 1)], W*0.4, ah, 20);
+    const lx = W*0.32, rx = W*0.72;
+    text(this.T + ' を つくろう' + (this.made ? '  ' + '★'.repeat(Math.min(this.made, 10)) : ''), W/2, 14, 18, '#2b3a52', 900);
+    // めあて（うすい かげ）
+    const sT = blockSpec(this.T), gx = rx - sT.cols*bs/2, gy = footY - sT.rows*bs;
+    ctx.save(); ctx.globalAlpha = this.done ? 0.15 : 0.35; ctx.setLineDash([4, 3]); ctx.strokeStyle = '#6a7486'; ctx.lineWidth = 1.5;
+    for(const c of sT.cells){ ctx.fillStyle = rgb(c.colorRGB); ctx.globalAlpha = this.done ? 0.1 : 0.22; ctx.fillRect(gx + c.gx*bs, gy + c.gy*bs, bs, bs);
+      ctx.globalAlpha = this.done ? 0.15 : 0.45; ctx.strokeRect(gx + c.gx*bs + 0.5, gy + c.gy*bs + 0.5, bs - 1, bs - 1); }
+    ctx.restore();
+    text(String(this.T), rx, gy - 16, 22, '#6a7486', 900);
+    // いまの がったい
+    if(this.sum > 0) stand(this.sum, lx, footY, bs, now, { wob: this.over ? 1 : 0, hop: this.done ? ((now - this.done) % 500)/500 : null });
+    // しき
+    if(this.parts.length) text(this.parts.join(' + ') + ' = ' + this.sum, W/2, top + 66, 26, this.done ? '#d08a00' : this.over ? '#c0398a' : '#2b3a52');
+    // とんでくる キャラ
+    this.flying = this.flying.filter(f => {
+      const k = (now - f.t)/450;
+      if(k >= 1){ this.land(f, now); return false; }
+      const e = k < 0.5 ? 2*k*k : 1 - Math.pow(-2*k + 2, 2)/2;
+      stand(f.n, f.x + (lx - f.x)*e, f.y + (footY - f.y)*e - Math.sin(Math.PI*e)*60, bs*0.8, now);
+      return true;
+    });
+  },
+};
+const GAMES = { free: FREE, help: HELP, song: SONG, make: MAKE };
 
 // ── かく ──
 function keyboardGeom(){
@@ -194,40 +464,12 @@ function keyboardGeom(){
 }
 let maxCols = 1, maxRows = 1;
 for(let n = 1; n <= 15; n++){ const s = blockSpec(n); maxCols = Math.max(maxCols, s.cols); maxRows = Math.max(maxRows, s.rows); }
-function draw(now){
-  ctx.clearRect(0, 0, W, H);
-  const g = keyboardGeom();
-  // かいだん（けんばんの うえに ちいさく たつ）
-  const stairH = Math.min(H*0.38, g.y - 10);
-  // 2マス はばまでが 1けんばんに おさまる 大きさ（15 など はばの ひろい キャラは となりに すこし かさなる）
-  const bsS = Math.min((g.kw*0.95)/2, (stairH)/(maxRows + PAD_TOP + PAD_BOT));
-  const footY = g.y - 4;
-  for(const k in standing){
-    const n = +k, s = blockSpec(n), st = standing[k];
-    const cx = g.m + (n - 0.5)*g.kw;
-    const age = now - st.t, pop = Math.min(1, age/250), hop = now - st.hop < 450 ? Math.sin(Math.PI*(now - st.hop)/450)*bsS*2 : 0;
-    ctx.save(); ctx.globalAlpha = pop;
-    drawNumberblock(ctx, n, cx - s.cols*bsS/2, footY - PAD_BOT*bsS*0.4 - s.rows*bsS - hop, bsS, { t: now, animate: true });
-    ctx.restore();
-  }
-  // まんなかに 大きく
-  if(big){
-    const s = blockSpec(big.n), top = 10, bottom = footY - stairH - 6, ah = bottom - top;
-    if(ah > 40){
-      const bs = Math.min(26, (W*0.5)/(s.cols + PAD_X*2), ah/(s.rows + PAD_TOP + PAD_BOT));
-      const age = now - big.t, k = Math.min(1, age/300), sc = k < 1 ? 0.6 + 0.4*k + 0.15*Math.sin(Math.PI*k) : 1;
-      const cx = W/2, fy = top + ah - PAD_BOT*bs;
-      ctx.save(); ctx.translate(cx, fy); ctx.scale(sc, sc);
-      drawNumberblock(ctx, big.n, -s.cols*bs/2, -s.rows*bs, bs, { t: now, animate: true });
-      ctx.restore();
-    }
-  }
-  // けんばん
+function drawKeyboard(g, now, glow){
   const fl = now - flash.t < 400;
   for(let i = 0; i < 15; i++){
-    const x = g.m + i*g.kw, on = fl && flash.white === i, next = learning && learning.got.length === i;
-    ctx.fillStyle = on ? '#ffe08a' : next ? '#d8f0ff' : '#fff';
-    ctx.strokeStyle = next ? '#3f8fd0' : '#9aa6b8'; ctx.lineWidth = next ? 2.5 : 1;
+    const x = g.m + i*g.kw, on = fl && flash.white === i, next = learning ? learning.got.length === i : glow === i;
+    ctx.fillStyle = on ? '#ffe08a' : next ? (learning ? '#d8f0ff' : 'rgba(255,214,120,' + (0.45 + 0.25*Math.sin(now*0.008)) + ')') : '#fff';
+    ctx.strokeStyle = next ? (learning ? '#3f8fd0' : '#f0a020') : '#9aa6b8'; ctx.lineWidth = next ? 2.5 : 1;
     ctx.beginPath(); ctx.roundRect(x + 1, g.y, g.kw - 2, g.kh, [0, 0, 6, 6]); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#2b3a52'; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     ctx.font = '800 ' + Math.max(10, Math.min(16, g.kw*0.55)) + 'px sans-serif';
@@ -244,11 +486,32 @@ function draw(now){
     b++;
   }
 }
+function draw(now){
+  ctx.clearRect(0, 0, W, H);
+  const g = keyboardGeom(), gm = GAMES[gs.mode];
+  if(!learning) gm.draw(now, g);
+  drawKeyboard(g, now, !learning && gm.glow ? gm.glow() : -1);
+  drawFx(now);
+}
+
+// ── もうどの きりかえ ──
+const modesEl = document.getElementById('modes'), subEl = document.getElementById('sub');
+function renderModes(){
+  modesEl.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.m === gs.mode));
+  subEl.innerHTML = '';
+  for(const it of GAMES[gs.mode].sub()){
+    const b = document.createElement('button'); b.textContent = it.text; if(it.on) b.className = 'on';
+    b.addEventListener('click', () => { it.act(); renderModes(); }); subEl.appendChild(b);
+  }
+}
+function setGameMode(m){ if(!GAMES[m]) return; gs.mode = m; saveGs(); confetti = []; pops = []; GAMES[m].reset(performance.now()); renderModes(); }
+modesEl.querySelectorAll('button').forEach(b => b.addEventListener('click', () => setGameMode(b.dataset.m)));
+GAMES[gs.mode].reset(performance.now()); renderModes();
 
 // ── はじめる・おぼえなおす ──
 const startBox = document.getElementById('startBox'), tip = document.getElementById('learnTip');
 document.getElementById('start').addEventListener('click', async () => { if(await micOpen()) startBox.classList.remove('on'); });
-document.getElementById('relearn').addEventListener('click', () => { learning = { got: [] }; standing = {}; big = null; learnUi(); });
+document.getElementById('relearn').addEventListener('click', () => { learning = { got: [] }; learnUi(); });
 document.getElementById('learnUndo').addEventListener('click', () => { if(learning){ learning.got.pop(); learnUi(); } });
 document.getElementById('learnCancel').addEventListener('click', () => { learning = null; learnUi(); });
 function learnUi(){
@@ -268,8 +531,9 @@ function frame(now){
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-window.kenban = { onNote: f => onNote(f, performance.now()), whichKey, tune: () => tune, standing: () => standing, big: () => big, pitch, setSr: v => sr = v,
-                  learning: () => learning };
+window.kenban = { onNote: f => onNote(f, performance.now()), whichKey, tune: () => tune, standing: () => FREE.standing, big: () => FREE.big, pitch, setSr: v => sr = v,
+                  learning: () => learning, setMode: setGameMode, mode: () => gs.mode, game: m => GAMES[m || gs.mode], songs: SONGS, gs: () => gs,
+                  white: n => onNote(tune.white[n - 1], performance.now()), black: i => onNote(tune.black[i || 0], performance.now()) };
 </script>
 </body>
 </html>
