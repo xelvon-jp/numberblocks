@@ -146,7 +146,7 @@ function pitch(x){
 //   つぎの 1おん：おとが とぎれた（0.09びょう）・たかさが かわった（60セント）・おとが 6dB いじょう とびあがった（おなじ けんばんの れんだ）。
 // ※ まえは まわりを「3びょうの 2わりめ」、1おんを「0.11びょう」、つぎは「とぎれる か たかさが かわる」だけに していて、
 //   ずっと ひくと まわりが 大きく なって きこえない・おなじ けんばんの れんだ・みじかい タップ が でなかった。
-let recent = [], armed = true, quietSince = 0, lastNote = null, dbRecent = [], rising = false, micQuiet = true, micDb = -120, micFloor = -120;
+let recent = [], armed = true, quietSince = 0, lastNote = null, dbRecent = [], rising = false, micQuiet = true, micDb = -120, micFloor = -120, lastJumpAt = -1e9, mpmOther = { k: -1, t: -1e9 };
 function listen(now){
   if(!an) return;
   an.getFloatTimeDomainData(buf);
@@ -157,7 +157,9 @@ function listen(now){
   const floor = hist.length >= 20 ? hist.slice().sort((a, b) => a - b)[Math.floor(hist.length*0.1)] : 0;
   // おとの とびあがり（たたいた しゅんかん）
   dbRecent.push({ t: now, db }); while(dbRecent.length && now - dbRecent[0].t > 120) dbRecent.shift();
-  const up = db - Math.min(...dbRecent.map(d => d.db)) >= 6;
+  const jumpNow = db - Math.min(...dbRecent.map(d => d.db));
+  if(jumpNow >= CFG.jumpMin && db > -80) lastJumpAt = now;   // おとの とびあがり（けんばんを たたいた しるし）
+  const up = jumpNow >= 6;
   if(up && !rising){ armed = true; recent = []; }   // とびあがった しゅんかん だけ（つづいている あいだ ずっと やりなおさない）
   rising = up;
   // パパの ろくおんで：しずかな へやの こまかい おと -78dB（まえは これで すすんでいた）、いちばん ちいさい けんばんの おと -70dB、ふつうは -65〜-50dB。
@@ -179,7 +181,7 @@ function listen(now){
 }
 
 // ききわけの きまり（ためす とき は window.__CFG で かえられる）
-const CFG = Object.assign({ mpmCorr: 0.94, tplCorr: 0.85, tplDelay: 0, heMin: 0, minDb: -75 }, window.__CFG || {});   // パパの ろくおん（ばんそう なし）で きめた：0.97/0.9 だと ただしい おとを はじいていた
+const CFG = Object.assign({ mpmCorr: 0.94, tplCorr: 0.85, tplDelay: 0, heMin: 0, minDb: -75, jumpMin: 8, veto: 500 }, window.__CFG || {});   // パパの ろくおん（ばんそう なし）で きめた：0.97/0.9 だと ただしい おとを はじいていた
 let tplPend = null;
 
 // ── どの けんばん？ ──
@@ -223,6 +225,7 @@ function onNote(f, now){
   if(window.__klog) window.__klog.push({ src: 'mpm', k, corr: +kl.corr.toFixed(3), tonal: +kl.tonal.toFixed(1) });
   if(kl.corr < CFG.mpmCorr){ if(exp != null) dbg({ t: now, src: 'mpm', k, ok: 0, why: 'corr', exp, corr: +kl.corr.toFixed(3) }); return; }   // こえ・わらいごえ は ばいおんの ならびが ちがう
   flash25 = { k, t: now };
+  if(exp != null && k !== exp && !(PLAY.lastHitK === k && now - PLAY.lastHit < 600)) mpmOther = { k, t: now };   // べつの けんばんの おとが はっきり きこえた
   const gm = GAMES[gs.mode];
   if(gm.key25){ gm.key25(k, now, 'mpm'); return; }
   if(isBlack(k)){ if(gm.black) gm.black(now); return; }
@@ -547,11 +550,11 @@ function laneX(k, g){
 }
 // しらべ（🔍）：ひいた／ちがった の きろく。コピーして おくれる
 let dbgOn = false; const dbgLog = [];
-function dbg(e){ dbgLog.push(Object.assign({}, e, { t: Math.round(e.t) })); if(dbgLog.length > 200) dbgLog.shift(); if(dbgOn) dbgShow(); }
+function dbg(e){ dbgLog.push(Object.assign({}, e, { t: Math.round(e.t), db: Math.round(micDb), fl: Math.round(micFloor) })); if(dbgLog.length > 200) dbgLog.shift(); if(dbgOn) dbgShow(); }
 const dbgEl = document.getElementById('dbg');
 function dbgShow(){
   const nm = k => k == null ? '-' : (isBlack(k) ? '●' : '') + labelOf(k) + octOf(k);
-  const WHY = { corr: 'にていない', zure: 'たかさが ずれ', hayai: 'はやすぎ', mada: 'よわく ならない', weak: 'ほかの おとが つよい', quiet: 'ちいさい' };
+  const WHY = { betsu: 'べつの おとが きこえた', nojump: 'たたいた おとが ない', corr: 'にていない', zure: 'たかさが ずれ', hayai: 'はやすぎ', mada: 'よわく ならない', weak: 'ほかの おとが つよい', quiet: 'ちいさい' };
   dbgEl.querySelector('textarea').value = dbgLog.slice().reverse().map(e => (e.ok ? '○ ' : '× ') + nm(e.k) + (e.ok ? '' : '（つぎ ' + nm(e.exp) + '）')
     + (e.why ? ' ' + WHY[e.why] + (e.corr != null ? ' ' + e.corr : '') + (e.c != null ? ' ' + e.c + 'セント' : '') : '') + ' ' + e.src + ' ' + e.t).join('\n');
 }
@@ -739,11 +742,14 @@ function frame(now){
   listen(now);
   if(gs.mode === 'play' && !learning && an){
     const e = PLAY.expect(), r = TPL.tick(now, e, micQuiet);
+    // けんばんを たたいた ときは おとが きゅうに 大きく なる。その すぐ あと（0.2びょう いない）で なければ うごかない（テレビ・せんぷうき など ずっと なる おと で すすまない）
+    if(r && r.fire && CFG.jumpMin > 0 && now - lastJumpAt > 200){ dbg({ t: now, src: 'tpl', k: e, ok: 0, why: 'nojump', exp: e }); r.fire = false; }
     if(r && r.fire){ tplPend = { e, t: now };
       if(window.__ftrace){ const kl = TPL.keyLike(e); window.__ftrace.push({ t: Math.round(now - (window.__t0 || 0) - 300), k: e, he: +r.he.toFixed(5), hm: +r.hm.toFixed(5), low: +r.low.toFixed(5), ref: +(r.ref || 0).toFixed(5), db: +micDb.toFixed(1), fl: +micFloor.toFixed(1), jump: +(micDb - Math.min(...dbRecent.map(d => d.db))).toFixed(1), corr: +kl.corr.toFixed(3) }); } }
     // はねあがった すぐ は たたいた ざつおん・まえの しずけさ が まざって おとの かたちが くずれる。すこし まってから くらべる
     if(tplPend && now - tplPend.t >= CFG.tplDelay){ const pe = tplPend; tplPend = null;
-      if(pe.e === PLAY.expect()){ const kl = TPL.keyLike(pe.e); if(window.__klog) window.__klog.push({ src: 'tpl', k: pe.e, corr: +kl.corr.toFixed(3), tonal: +kl.tonal.toFixed(1) });
+      if(pe.e === PLAY.expect() && CFG.veto && Math.abs(now - mpmOther.t) < CFG.veto && mpmOther.k !== pe.e) dbg({ t: now, src: 'tpl', k: pe.e, ok: 0, why: 'betsu', exp: pe.e, other: mpmOther.k });
+      else if(pe.e === PLAY.expect()){ const kl = TPL.keyLike(pe.e); if(window.__klog) window.__klog.push({ src: 'tpl', k: pe.e, corr: +kl.corr.toFixed(3), tonal: +kl.tonal.toFixed(1) });
         if(kl.corr >= CFG.tplCorr) PLAY.key25(pe.e, now, 'tpl'); else dbg({ t: now, src: 'tpl', k: pe.e, ok: 0, why: 'corr', exp: pe.e, corr: +kl.corr.toFixed(3) }); } }
     else if(r && r.block) dbg({ t: now, src: 'tpl', k: e, ok: 0, why: r.block, exp: e, he: +r.he.toFixed(4), low: +r.low.toFixed(4), ref: +r.ref.toFixed(4), hm: +r.hm.toFixed(4) });
   }
