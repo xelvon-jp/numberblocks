@@ -11,8 +11,8 @@ srv.listen(0, async () => {
   const exe = ['/opt/pw-browsers/chromium'].find(fs.existsSync);
   const b = await chromium.launch({ executablePath: exe, args: ['--autoplay-policy=no-user-gesture-required'] });
   const p = await b.newPage();
-  if(cfg) await p.addInitScript(c => { window.__CFG = c; window.__klog = []; }, cfg);
-  else await p.addInitScript(() => { window.__klog = []; });
+  if(cfg) await p.addInitScript(c => { window.__CFG = c; window.__klog = []; window.__ftrace = []; }, cfg);
+  else await p.addInitScript(() => { window.__klog = []; window.__ftrace = []; });
   await p.goto('http://127.0.0.1:' + srv.address().port + '/kenban.html');
   await p.evaluate(([mode, song]) => { localStorage.setItem('nb_kenban_game', JSON.stringify({ mode: mode || 'play', play: 's0' })); }, [meta.mode]);
   await p.reload(); await p.waitForTimeout(500);
@@ -28,8 +28,8 @@ srv.listen(0, async () => {
   await p.waitForFunction(() => window.__dur, null, { timeout: 10000 });
   const dur = await p.evaluate(() => window.__dur);
   await p.waitForTimeout(dur*1000 + 1500);
-  const r = await p.evaluate(() => ({ idx: kenban.game().idx, klog: window.__klog, log: kenban.dbgLog().map(e => Object.assign({}, e, { rt: Math.round(e.t - window.__t0 - 300) })) }));
-  if(quiet){ console.log(JSON.stringify({ cfg, idx: r.idx, n: meta.notes && meta.notes.length, klog: r.klog })); await b.close(); srv.close(); return; }
+  const r = await p.evaluate(() => ({ idx: kenban.game().idx, klog: window.__klog, ftrace: window.__ftrace, log: kenban.dbgLog().map(e => Object.assign({}, e, { rt: Math.round(e.t - window.__t0 - 300) })) }));
+  if(quiet){ console.log(JSON.stringify({ cfg, idx: r.idx, n: meta.notes && meta.notes.length, klog: r.klog, ftrace: r.ftrace })); await b.close(); srv.close(); return; }
   console.log('ろくおん:', meta.memo, '/', meta.song, '/', dur.toFixed(1) + 'びょう');
   console.log('ろくおん した とき：ok', (meta.log || []).filter(e => e.ok).length, '／ さいせい：すすんだ', r.idx, 'ok', r.log.filter(e => e.ok).length);
   const nm = k => k == null ? '-' : String(k);

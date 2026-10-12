@@ -146,7 +146,7 @@ function pitch(x){
 //   つぎの 1おん：おとが とぎれた（0.09びょう）・たかさが かわった（60セント）・おとが 6dB いじょう とびあがった（おなじ けんばんの れんだ）。
 // ※ まえは まわりを「3びょうの 2わりめ」、1おんを「0.11びょう」、つぎは「とぎれる か たかさが かわる」だけに していて、
 //   ずっと ひくと まわりが 大きく なって きこえない・おなじ けんばんの れんだ・みじかい タップ が でなかった。
-let recent = [], armed = true, quietSince = 0, lastNote = null, dbRecent = [], rising = false, micQuiet = true;
+let recent = [], armed = true, quietSince = 0, lastNote = null, dbRecent = [], rising = false, micQuiet = true, micDb = -120, micFloor = -120;
 function listen(now){
   if(!an) return;
   an.getFloatTimeDomainData(buf);
@@ -160,8 +160,9 @@ function listen(now){
   const up = db - Math.min(...dbRecent.map(d => d.db)) >= 6;
   if(up && !rising){ armed = true; recent = []; }   // とびあがった しゅんかん だけ（つづいている あいだ ずっと やりなおさない）
   rising = up;
-  // しずかな へやは -85〜-80dB、けんばんの おとは -70〜-50dB（パパの ろくおん）。まえは「まわり＋8dB・-80dB」で、しずかな ときの こまかい おとで すすんでいた
-  micQuiet = !(db > floor + 12 && db > -74);
+  // パパの ろくおんで：しずかな へやの こまかい おと -78dB（まえは これで すすんでいた）、いちばん ちいさい けんばんの おと -70dB、ふつうは -65〜-50dB。
+  // あいだの -75dB で きる（「まわり＋12dB」に すると にぎやかな へや・とおい スマホ で ひいた おとまで はじいた）
+  micQuiet = !(db > floor + 8 && db > CFG.minDb); micDb = db; micFloor = floor;
   const p = !micQuiet ? pitch(x) : null;
   if(p && p.clarity >= 0.8 && p.f > 120 && p.f < 1200){
     quietSince = 0;
@@ -178,7 +179,7 @@ function listen(now){
 }
 
 // ききわけの きまり（ためす とき は window.__CFG で かえられる）
-const CFG = Object.assign({ mpmCorr: 0.94, tplCorr: 0.85, tplDelay: 0 }, window.__CFG || {});   // パパの ろくおん（ばんそう なし）で きめた：0.97/0.9 だと ただしい おとを はじいていた
+const CFG = Object.assign({ mpmCorr: 0.94, tplCorr: 0.85, tplDelay: 0, heMin: 0, minDb: -75 }, window.__CFG || {});   // パパの ろくおん（ばんそう なし）で きめた：0.97/0.9 だと ただしい おとを はじいていた
 let tplPend = null;
 
 // ── どの けんばん？ ──
@@ -391,7 +392,7 @@ const TPL = (() => {
     // たたいた ぶん ふえるので わかる。いちばん つよい ものの 2わり5ぶ いじょう。しずかな ときは うごかない。
     const rise = (ref > 0 && he - low >= 0.25*ref && he > 1.3*low) || he > 2*low + 1e-4;
     const gap = expect === lastK ? 250 : 160;
-    if(!quiet && hm > 0 && he >= 0.25*hm && rise && decayed && now - lastFire > gap){
+    if(!quiet && he >= CFG.heMin && hm > 0 && he >= 0.25*hm && rise && decayed && now - lastFire > gap){
       if(peakNow){ peaks.push(peakNow); if(peaks.length > 5) peaks.shift(); }
       lastFire = now; lastK = expect; minSince = he; peakSince = he; peakNow = he; return Object.assign(info, { fire: true });
     }
@@ -738,7 +739,8 @@ function frame(now){
   listen(now);
   if(gs.mode === 'play' && !learning && an){
     const e = PLAY.expect(), r = TPL.tick(now, e, micQuiet);
-    if(r && r.fire) tplPend = { e, t: now };
+    if(r && r.fire){ tplPend = { e, t: now };
+      if(window.__ftrace){ const kl = TPL.keyLike(e); window.__ftrace.push({ t: Math.round(now - (window.__t0 || 0) - 300), k: e, he: +r.he.toFixed(5), hm: +r.hm.toFixed(5), low: +r.low.toFixed(5), ref: +(r.ref || 0).toFixed(5), db: +micDb.toFixed(1), fl: +micFloor.toFixed(1), jump: +(micDb - Math.min(...dbRecent.map(d => d.db))).toFixed(1), corr: +kl.corr.toFixed(3) }); } }
     // はねあがった すぐ は たたいた ざつおん・まえの しずけさ が まざって おとの かたちが くずれる。すこし まってから くらべる
     if(tplPend && now - tplPend.t >= CFG.tplDelay){ const pe = tplPend; tplPend = null;
       if(pe.e === PLAY.expect()){ const kl = TPL.keyLike(pe.e); if(window.__klog) window.__klog.push({ src: 'tpl', k: pe.e, corr: +kl.corr.toFixed(3), tonal: +kl.tonal.toFixed(1) });
