@@ -122,7 +122,11 @@
     **こえ・わらいごえ よけ**（はなしても すすんでいた）：その けんばんの おとらしいか（`TPL.keyLike`：ばいおんの つよさの ならびが えほんで はかった かたちに にている corr）を みる。
     たかさの みはり は corr 0.97 いじょう・けんばんの ±35セント・たかさが ±15セント で ゆれない こと、つぎの おとの みはり は corr 0.9 いじょう。
     にせの こえ 15びょう：よぶ の キャラ 12 → 0、ひく の すすみ 14〜21 → 2〜3。けんばんは メロディ だけ 42/42、よぶ の ひきかた も ほぼ そのまま。ばんそう つき（きびしい にせもの）は 24〜30/42。
-    **のこり**：えんそうモードで ひいた 🔍 の きろくを もらって ちょうせい。
+    **🔍 しらべ**：ひいた ○ と、はじいた × と わけ（にていない corr・たかさが ずれ セント・よわく ならない（れんだ）・ほかの おとが つよい・はやすぎ）。
+    **ろくおん**：🔍 の「⏺ ろくおん」で 30びょう まで ろくおん → メモ → パパの Cloudflare（`sync/worker.js` の `PUT /rec`、どうき と おなじ あいことば、KV に 30にち）。
+    こちらで `node tools/rec.js list / get <id> <dir> / del <id>`（CLOUDFLARE_API_TOKEN・ACCOUNT_ID）でとり、`cd tests && node ../tools/replay.js <dir>/<id>.json` で
+    kenban.html に マイクの かわりに ながして おなじ ように きこえるか・どこで はじいたか を みる（ろくおん した ときと おなじ 結果に なる ことを たしかめずみ）。つかったら けす。
+    **のこり**：パパの ろくおん（ばんそう なし で ただしく ひいても すすまない ところが ある）で ちょうせい。
   - つくる（`MAKE`）：「10 を つくろう」。ひいた かずの キャラが とんで がったい。ぴったりで「ぴったり！」、こえたら「あふれちゃった！」で やりなおし。
     くろい けんばん・「やりなおし」でも やりなおし。★ 3〜10／★★ 6〜15。めあては うすい かげで となりに。
   わおん（いっしょに おす）は ほりゅう（oto.html ③ で ためし中。パパの キーボードの ばいおんで つくった おとで 34/38）。
@@ -184,6 +188,7 @@
 |---|---|
 | `kenban.html` | けんばん（`pitch` `whichKey` `onNote`。テスト用に `window.kenban`） |
 | `waru.html` | わけっこ（`layout` `go` `scene`。テスト用に `window.waru`） |
+| `tools/rec.js` `tools/replay.js` | けんばんの ろくおんを とる・ながして しらべる |
 | `ink.js` | よみとり（`recognize` / `rank` / `learn` / `unlearn` / `record` / `fixRecord`）。お手本は `BASE` |
 | `hissan.html` | ひっさんページ。E かく は「かく（E）」の 節（`WL` `inkDown` `judgeCell` `whyWrong` `askPick` `drawWrite`）、アニメは `celebrateWrite`、おぼえる・きろく は `drawTrain` `drawRecords` `drawMine`。ゲームの中は `EMBED` |
 | `index.html` | まぜまぜ：`advanceTask` `startHissanTask` `onHissanMessage` `noteHissanAnswer` `HISSAN_LEVELS` |

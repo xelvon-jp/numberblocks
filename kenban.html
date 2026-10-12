@@ -35,8 +35,12 @@
   .over button.sub { background:#dfe6ef; color:#2b3a52; box-shadow:none; font-size:15px; padding:10px 18px; }
   #dbg { position:absolute; left:6px; right:6px; top:40px; display:none; background:rgba(255,255,255,0.95); border-radius:10px; padding:6px; font-size:11px; z-index:5; }
   #dbg .row { display:flex; gap:6px; align-items:center; margin-bottom:4px; }
-  #dbg button { border:0; border-radius:8px; padding:4px 8px; font-size:12px; font-weight:700; background:#dfe6ef; }
+  #dbg .row { margin-top:4px; }
+  #dbg button { border:0; border-radius:8px; padding:6px 10px; font-size:13px; font-weight:700; background:#dfe6ef; white-space:nowrap; }
+  #dbg #recBtn { background:#ffe3e3; color:#c0392b; }
   #dbg textarea { width:100%; height:110px; font-size:10px; }
+  #recMsg { font-size:12px; font-weight:700; color:#c0398a; min-height:0; }
+  #recBtn.on { background:#e8423f; color:#fff; }
   #learnTip { position:absolute; left:0; right:0; top:8px; text-align:center; display:none; }
   #learnTip.on { display:block; }
   #learnTip .card { display:inline-block; background:#fff; border-radius:14px; padding:10px 14px; box-shadow:0 3px 10px rgba(40,60,90,0.2); }
@@ -50,7 +54,8 @@
   <button id="relearn">おぼえなおす</button></div>
 <div id="sub"></div>
 <div id="stage"><canvas id="c"></canvas>
-  <div id="dbg"><div class="row"><b>しらべ</b> ひいた（○）・ちがう（×）の きろく <button id="dbgCopy">コピー</button> <button id="dbgClear">けす</button></div><textarea readonly></textarea></div>
+  <div id="dbg"><div><b>しらべ</b>：ひいた（○）・はじいた（×）と わけ。ろくおんは 30びょう まで</div>
+    <div class="row"><button id="recBtn">⏺ ろくおん</button><button id="dbgCopy">コピー</button><button id="dbgClear">けす</button></div><div id="recMsg"></div><textarea readonly></textarea></div>
   <div id="startBox" class="over on"><div class="big">キーボードの しろい けんばんで<br>ナンバーブロックスと あそぼう</div>
     <div class="small">スマホを キーボードの ちかくに おいてね</div><button id="start">はじめる 🎤</button><div class="small" id="err"></div></div>
   <div id="learnTip"><div class="card"><div class="big"></div><div class="small">ひとつずつ ゆっくり おしてね（くろい けんばんは つかわない）</div>
@@ -93,18 +98,19 @@ window.addEventListener('resize', resize);
 if(window.ResizeObserver) new ResizeObserver(resize).observe(stageEl);
 
 // ── マイクと たかさ ──
-let stream = null, ac = null, an = null, buf = null, sr = 48000, hist = [];
+let stream = null, ac = null, an = null, buf = null, sr = 48000, hist = [], micSrc = null;
 async function micOpen(){
   try{
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
     const AC = window.AudioContext || window.webkitAudioContext;
     ac = new AC(); if(ac.state === 'suspended') await ac.resume();
     sr = ac.sampleRate; an = ac.createAnalyser(); an.fftSize = 2048; buf = new Float32Array(an.fftSize);
-    const src = ac.createMediaStreamSource(stream); src.connect(an); TPL.attach(ac, src); hist = [];
+    const src = ac.createMediaStreamSource(stream); src.connect(an); TPL.attach(ac, src); micSrc = src; hist = [];
     return true;
   }catch(e){ micClose(); document.getElementById('err').textContent = 'マイクが つかえません（' + (e.name || e) + '）'; return false; }
 }
 function micClose(){
+  if(typeof rec !== 'undefined' && rec){ clearInterval(rec.timer); rec = null; }
   if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
   if(ac){ try{ ac.close(); }catch(e){} ac = null; }
   an = null; TPL.detach();
@@ -201,10 +207,15 @@ function onNote(f, now){
     learnUi(); return;
   }
   const k = keyIndex(f);
-  if(k == null) return;
+  const exp = gs.mode === 'play' ? PLAY.expect() : null;
+  if(k == null){
+    // けんばんから ずれて いた（つぎの おとの ちかく なら きろく）
+    if(exp != null){ const c = cents(k25()[exp], f); if(Math.abs(c) < 150) dbg({ t: now, src: 'mpm', ok: 0, why: 'zure', exp, c: Math.round(c) }); }
+    return;
+  }
   const kl = TPL.keyLike(k);
   if(window.__klog) window.__klog.push({ src: 'mpm', k, corr: +kl.corr.toFixed(3), tonal: +kl.tonal.toFixed(1) });
-  if(kl.corr < 0.97) return;          // こえ・わらいごえ は ばいおんの ならびが ちがう
+  if(kl.corr < 0.97){ if(exp != null) dbg({ t: now, src: 'mpm', k, ok: 0, why: 'corr', exp, corr: +kl.corr.toFixed(3) }); return; }   // こえ・わらいごえ は ばいおんの ならびが ちがう
   flash25 = { k, t: now };
   const gm = GAMES[gs.mode];
   if(gm.key25){ gm.key25(k, now, 'mpm'); return; }
@@ -330,7 +341,7 @@ const allSongs = () => SONGS.concat(mySongs);
 const PROF_DEF = [[0.02,0.3,0.78,0.06,0.46,0.5,1,0.13,0.19,0.06],[0.1,0.42,0.47,0.53,0.73,1,0.44,0.09,0.18,0.06],[0.22,0.62,0.7,0.59,1,0.8,0.68,0.08,0.16,0.22],[0.16,0.6,0.75,0.86,1,0.58,0.44,0.05,0.16,0.21],[0.27,1,0.89,0.73,0.62,0.36,0.51,0.2,0.42,0.05],[0.33,0.96,1,0.96,0.83,0.48,0.83,0.24,0.47,0.05],[0.34,1,0.83,0.65,0.41,0.3,0.38,0.34,0.31,0.06],[0.17,1,0.52,0.63,0.24,0.18,0.18,0.17,0.18,0.04],[0.24,0.51,0.57,1,0.45,0.06,0.26,0.13,0.18,0.03],[0.3,0.73,0.58,1,0.34,0.07,0.23,0.17,0.18,0.03],[0.31,0.81,0.64,1,0.26,0.06,0.13,0.29,0.2,0.01],[0.39,0.38,0.82,1,0.57,0.11,0.27,0.21,0.25,0.02],[0.27,0.07,1,0.26,0.07,0.09,0.03,0.04,0.02,0.01],[0.47,0.09,1,0.15,0.05,0.12,0.05,0.04,0.06,0],[0.44,0.08,1,0.2,0.08,0.09,0.05,0.02,0.06,0],[0.18,1,0.46,0.06,0.01,0.04,0.06,0.04,0,0],[0.54,1,0.58,0.06,0.02,0.09,0.1,0.09,0,0],[0.29,1,0.21,0.03,0.01,0.08,0.08,0.04,0,0],[0.28,1,0.17,0.04,0.01,0.04,0.1,0.02,0,0],[0.45,1,0.23,0.05,0.02,0.03,0.14,0.01,0,0],[1,0.08,0.04,0.02,0.1,0.04,0,0,0,0],[1,0.08,0.01,0.01,0.06,0.07,0,0,0,0],[1,0.04,0.01,0.03,0.05,0.03,0,0,0,0],[1,0.07,0.05,0.03,0.07,0.01,0,0,0,0],[1,0.07,0.04,0.03,0.09,0,0,0,0,0]];
 const TPL = (() => {
   const FFT = 4096, LO = 100, HI = 5000, PW = 0.6, NH = 10;
-  let an2 = null, spec = null, W = null, WtW = null, key = '', loB = 0, n = 0, noise = null, h = null, hist = [], lastFire = -1e9, lastK = -1, minSince = 0, peakSince = 0, peaks = [], peakNow = 0;
+  let an2 = null, spec = null, W = null, WtW = null, key = '', loB = 0, n = 0, noise = null, h = null, hist = [], lastFire = -1e9, lastK = -1, minSince = 0, peakSince = 0, peaks = [], peakNow = 0, lastBlock = -1e9;
   function attach(ac, src){ an2 = ac.createAnalyser(); an2.fftSize = FFT; an2.smoothingTimeConstant = 0; spec = new Float32Array(FFT/2); src.connect(an2); key = ''; noise = null; h = null; hist = []; }
   function detach(){ an2 = null; }
   function profs(){ try{ const p = JSON.parse(localStorage.getItem('nb_oto_prof') || 'null'); if(Array.isArray(p) && p.length === 25 && p.every(Boolean)) return p; }catch(e){} return PROF_DEF; }
@@ -378,6 +389,12 @@ const TPL = (() => {
     if(!quiet && hm > 0 && he >= 0.25*hm && rise && decayed && now - lastFire > gap){
       if(peakNow){ peaks.push(peakNow); if(peaks.length > 5) peaks.shift(); }
       lastFire = now; lastK = expect; minSince = he; peakSince = he; peakNow = he; return Object.assign(info, { fire: true });
+    }
+    // はねあがった のに うごかなかった わけ（🔍 の きろく よう。0.3びょうに 1かい まで）
+    if(rise && now - lastBlock > 300 && now - lastFire > 160){
+      // しずかな ときの ゆれ・ごく ちいさな もの は きろく しない
+      const why = quiet ? '' : he < 0.25*hm ? 'weak' : !decayed ? 'mada' : now - lastFire <= gap ? 'hayai' : '';
+      if(why && (!ref || he >= 0.15*ref)){ lastBlock = now; return Object.assign(info, { block: why }); }
     }
     return info;
   }
@@ -528,10 +545,59 @@ function dbg(e){ dbgLog.push(Object.assign({}, e, { t: Math.round(e.t) })); if(d
 const dbgEl = document.getElementById('dbg');
 function dbgShow(){
   const nm = k => k == null ? '-' : (isBlack(k) ? '●' : '') + labelOf(k) + octOf(k);
-  dbgEl.querySelector('textarea').value = dbgLog.slice().reverse().map(e => (e.ok ? '○ ' : '× ') + nm(e.k) + (e.ok ? '' : '（つぎ ' + nm(e.exp) + '）') + ' ' + e.src + ' ' + e.t).join('\n');
+  const WHY = { corr: 'にていない', zure: 'たかさが ずれ', hayai: 'はやすぎ', mada: 'よわく ならない', weak: 'ほかの おとが つよい', quiet: 'ちいさい' };
+  dbgEl.querySelector('textarea').value = dbgLog.slice().reverse().map(e => (e.ok ? '○ ' : '× ') + nm(e.k) + (e.ok ? '' : '（つぎ ' + nm(e.exp) + '）')
+    + (e.why ? ' ' + WHY[e.why] + (e.corr != null ? ' ' + e.corr : '') + (e.c != null ? ' ' + e.c + 'セント' : '') : '') + ' ' + e.src + ' ' + e.t).join('\n');
 }
 document.getElementById('dbgCopy').addEventListener('click', () => { const v = JSON.stringify({ song: PLAY.songName(), log: dbgLog }); try{ navigator.clipboard.writeText(v); }catch(e){} dbgEl.querySelector('textarea').value = v; });
 document.getElementById('dbgClear').addEventListener('click', () => { dbgLog.length = 0; dbgShow(); });
+// ── ろくおん（ちょうせい よう）──
+// 🔍 の「ろくおん」で 30びょう まで マイクの おとを ろくおんし、ひいた きろくと いっしょに パパの Cloudflare（sync/worker.js の /rec）へ おくる。
+// 16kHz の WAV。あいことばは どうき と おなじ もの。30にち で じどうで きえる。ちょうせいに つかったら けす（tools/rec.js）。
+const REC_SEC = 30;
+let rec = null;    // { sp, chunks, t0, timer }
+const recBtn = document.getElementById('recBtn'), recMsg = document.getElementById('recMsg');
+recBtn.addEventListener('click', () => rec ? recStop() : recStart());
+function recStart(){
+  if(!an || !micSrc){ recMsg.textContent = 'さきに「はじめる 🎤」を おしてね'; return; }
+  const sp = ac.createScriptProcessor(4096, 1, 1), chunks = [];
+  sp.onaudioprocess = e => { chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+  micSrc.connect(sp); sp.connect(ac.destination);
+  rec = { sp, chunks, t0: performance.now(), sr: ac.sampleRate };
+  rec.timer = setInterval(() => { const t = (performance.now() - rec.t0)/1000; recMsg.textContent = '⏺ ろくおん中 ' + Math.floor(t) + ' / ' + REC_SEC + 'びょう'; if(t >= REC_SEC) recStop(); }, 250);
+  recBtn.classList.add('on'); recBtn.textContent = '⏹ とめる';
+}
+function wavBase64(chunks, from){
+  const n = chunks.reduce((a, c) => a + c.length, 0), x = new Float32Array(n); let o = 0; for(const c of chunks){ x.set(c, o); o += c.length; }
+  const R = 16000, m = Math.floor(n*R/from), pcm = new Int16Array(m);
+  for(let i = 0; i < m; i++){ const p = i*from/R, j = Math.floor(p), f = p - j, v = (x[j] || 0)*(1 - f) + (x[j + 1] || 0)*f; pcm[i] = Math.max(-32768, Math.min(32767, Math.round(v*32767))); }
+  const buf = new ArrayBuffer(44 + m*2), dv = new DataView(buf), w = (o, t) => { for(let i = 0; i < t.length; i++) dv.setUint8(o + i, t.charCodeAt(i)); };
+  w(0, 'RIFF'); dv.setUint32(4, 36 + m*2, true); w(8, 'WAVEfmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+  dv.setUint32(24, R, true); dv.setUint32(28, R*2, true); dv.setUint16(32, 2, true); dv.setUint16(34, 16, true); w(36, 'data'); dv.setUint32(40, m*2, true);
+  new Int16Array(buf, 44).set(pcm);
+  const u8 = new Uint8Array(buf); let s = ''; for(let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+async function recStop(){
+  if(!rec) return;
+  const r = rec; rec = null; clearInterval(r.timer);
+  try{ micSrc && micSrc.disconnect(r.sp); r.sp.disconnect(); }catch(e){}
+  recBtn.classList.remove('on'); recBtn.textContent = '⏺ ろくおん';
+  const memo = prompt('メモ（なにを ひいたか・すすまなかった ところ など）', gs.mode === 'play' ? PLAY.songName() + '・ばんそう なし' : '');
+  if(memo === null){ recMsg.textContent = 'ろくおんを すてました'; return; }
+  recMsg.textContent = 'おくって います…';
+  try{
+    const code = localStorage.getItem('nb_sync_code') || '';
+    if(code.length < 16){ recMsg.textContent = 'せっていの「どうき」で あいことばを きめてから おくってね'; return; }
+    const url = (localStorage.getItem('nb_sync_url') || 'https://numberblocks-sync.xelvon-jp.workers.dev/save').replace(/\/save$/, '/rec');
+    const body = JSON.stringify({ wav: wavBase64(r.chunks, r.sr), sr: 16000, memo, at: Date.now(), mode: gs.mode,
+      song: gs.mode === 'play' ? PLAY.songName() : null, notes: gs.mode === 'play' ? PLAY.notes : null, k25: k25(),
+      log: dbgLog.filter(e => e.t >= r.t0 - 500).map(e => Object.assign({}, e, { rt: Math.round(e.t - r.t0) })), ua: navigator.userAgent });
+    const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Family': code }, body });
+    const j = await res.json().catch(() => ({}));
+    recMsg.textContent = res.ok ? 'おくりました！（' + String(j.id || '').slice(-6) + '）' : 'おくれませんでした（' + res.status + '）';
+  }catch(e){ recMsg.textContent = 'おくれませんでした（' + (e.message || e) + '）'; }
+}
 
 // ── つくる ──
 // 「10 を つくろう」。ひいた かずの キャラが とんできて がったい。ぴったり で「ぴったり！」、こえたら「あふれちゃった」で やりなおし。
@@ -667,7 +733,9 @@ function frame(now){
   listen(now);
   if(gs.mode === 'play' && !learning && an){
     const e = PLAY.expect(), r = TPL.tick(now, e, micQuiet);
-    if(r && r.fire){ const kl = TPL.keyLike(e); if(window.__klog) window.__klog.push({ src: 'tpl', k: e, corr: +kl.corr.toFixed(3), tonal: +kl.tonal.toFixed(1) }); if(kl.corr >= 0.9) PLAY.key25(e, now, 'tpl'); }
+    if(r && r.fire){ const kl = TPL.keyLike(e); if(window.__klog) window.__klog.push({ src: 'tpl', k: e, corr: +kl.corr.toFixed(3), tonal: +kl.tonal.toFixed(1) });
+      if(kl.corr >= 0.9) PLAY.key25(e, now, 'tpl'); else dbg({ t: now, src: 'tpl', k: e, ok: 0, why: 'corr', exp: e, corr: +kl.corr.toFixed(3) }); }
+    else if(r && r.block) dbg({ t: now, src: 'tpl', k: e, ok: 0, why: r.block, exp: e, he: +r.he.toFixed(4), low: +r.low.toFixed(4), ref: +r.ref.toFixed(4), hm: +r.hm.toFixed(4) });
   }
   draw(now);
   requestAnimationFrame(frame);
