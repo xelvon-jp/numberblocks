@@ -119,23 +119,33 @@ function pitch(x){
   const sh = (a - c)/(2*(a - 2*b + c)) || 0;
   return { f: sr/(pick + (Math.abs(sh) < 1 ? sh : 0)), clarity: b };
 }
-// おなじ たかさが 0.11びょう つづいたら 1おん。おとが とぎれるか たかさが かわったら つぎを まつ
-let recent = [], armed = true, quietSince = 0, lastNote = null;
+// 1おんの きめかた：
+//   まわりの おと＝さいきん 6びょうの しずかな ほう（1わりめ）。それより 8dB 大きく、たかさが はっきり（0.8 いじょう）
+//   おなじ たかさ（±30セント）が 0.05びょう つづいたら 1おん。
+//   つぎの 1おん：おとが とぎれた（0.09びょう）・たかさが かわった（60セント）・おとが 6dB いじょう とびあがった（おなじ けんばんの れんだ）。
+// ※ まえは まわりを「3びょうの 2わりめ」、1おんを「0.11びょう」、つぎは「とぎれる か たかさが かわる」だけに していて、
+//   ずっと ひくと まわりが 大きく なって きこえない・おなじ けんばんの れんだ・みじかい タップ が でなかった。
+let recent = [], armed = true, quietSince = 0, lastNote = null, dbRecent = [], rising = false;
 function listen(now){
   if(!an) return;
   an.getFloatTimeDomainData(buf);
   const x = buf.subarray(buf.length - WIN);
   let s = 0; for(let i = 0; i < WIN; i++) s += x[i]*x[i];
   const db = 20*Math.log10(Math.max(1e-7, Math.sqrt(s/WIN)));
-  if(db > -110){ hist.push(db); if(hist.length > 180) hist.shift(); }
-  const floor = hist.length >= 20 ? hist.slice().sort((a, b) => a - b)[Math.floor(hist.length*0.2)] : 0;
-  const p = db > floor + 12 && db > -75 ? pitch(x) : null;
-  if(p && p.clarity >= 0.85 && p.f > 120 && p.f < 1200){
+  if(db > -110){ hist.push(db); if(hist.length > 360) hist.shift(); }
+  const floor = hist.length >= 20 ? hist.slice().sort((a, b) => a - b)[Math.floor(hist.length*0.1)] : 0;
+  // おとの とびあがり（たたいた しゅんかん）
+  dbRecent.push({ t: now, db }); while(dbRecent.length && now - dbRecent[0].t > 120) dbRecent.shift();
+  const up = db - Math.min(...dbRecent.map(d => d.db)) >= 6;
+  if(up && !rising){ armed = true; recent = []; }   // とびあがった しゅんかん だけ（つづいている あいだ ずっと やりなおさない）
+  rising = up;
+  const p = db > floor + 8 && db > -80 ? pitch(x) : null;
+  if(p && p.clarity >= 0.8 && p.f > 120 && p.f < 1200){
     quietSince = 0;
-    recent.push({ t: now, f: p.f }); while(recent.length && now - recent[0].t > 140) recent.shift();
-    if(recent.length >= 4 && now - recent[0].t >= 110){
+    recent.push({ t: now, f: p.f }); while(recent.length && now - recent[0].t > 90) recent.shift();
+    if(recent.length >= 3 && now - recent[0].t >= 45){
       const fs = recent.map(r => r.f).sort((a, b) => a - b), med = fs[fs.length >> 1];
-      if(fs.every(f => Math.abs(cents(med, f)) < 25) && (armed || (lastNote && Math.abs(cents(lastNote, med)) > 60))){ armed = false; lastNote = med; onNote(med, now); }
+      if(fs.every(f => Math.abs(cents(med, f)) < 30) && (armed || (lastNote && Math.abs(cents(lastNote, med)) > 60))){ armed = false; lastNote = med; onNote(med, now); }
     }
   } else {
     recent = [];
