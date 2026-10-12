@@ -38,9 +38,9 @@
   #dbg .row { margin-top:4px; }
   #dbg button { border:0; border-radius:8px; padding:6px 10px; font-size:13px; font-weight:700; background:#dfe6ef; white-space:nowrap; }
   #dbg #recBtn { background:#ffe3e3; color:#c0392b; }
+  #dbg #ver { color:#8a94a6; font-weight:700; }
   #dbg textarea { width:100%; height:110px; font-size:10px; }
   #recMsg { font-size:12px; font-weight:700; color:#c0398a; min-height:0; }
-  #recBtn.on { background:#e8423f; color:#fff; }
   #learnTip { position:absolute; left:0; right:0; top:8px; text-align:center; display:none; }
   #learnTip.on { display:block; }
   #learnTip .card { display:inline-block; background:#fff; border-radius:14px; padding:10px 14px; box-shadow:0 3px 10px rgba(40,60,90,0.2); }
@@ -54,8 +54,8 @@
   <button id="relearn">おぼえなおす</button></div>
 <div id="sub"></div>
 <div id="stage"><canvas id="c"></canvas>
-  <div id="dbg"><div><b>しらべ</b>：ひいた（○）・はじいた（×）と わけ。ろくおんは 30びょう まで</div>
-    <div class="row"><button id="recBtn">⏺ ろくおん</button><button id="dbgCopy">コピー</button><button id="dbgClear">けす</button></div><div id="recMsg"></div><textarea readonly></textarea></div>
+  <div id="dbg"><div><b>しらべ</b>：ひいた（○）・はじいた（×）と わけ。「あれ？」と おもったら すぐ おくる <span id="ver"></span></div>
+    <div class="row"><button id="recBtn">📮 さっきの 30びょうを おくる</button><button id="dbgCopy">コピー</button><button id="dbgClear">けす</button></div><div id="recMsg"></div><textarea readonly></textarea></div>
   <div id="startBox" class="over on"><div class="big">キーボードの しろい けんばんで<br>ナンバーブロックスと あそぼう</div>
     <div class="small">スマホを キーボードの ちかくに おいてね</div><button id="start">はじめる 🎤</button><div class="small" id="err"></div></div>
   <div id="learnTip"><div class="card"><div class="big"></div><div class="small">ひとつずつ ゆっくり おしてね（くろい けんばんは つかわない）</div>
@@ -73,16 +73,22 @@
 // たかさは マイクの おとから（McLeod pitch method。oto.html と おなじ）。
 // けんばんは 25こ（ファ3〜ファ5、くろい けんばん こみ）。はじめは パパの キーボードで はかった たかさ（WHITE・BLACK）。
 // 「おぼえなおす」で しろい 15こを ひだりから ならすと おぼえなおす（くろいのは となりの しろいの あいだ から きめる）。
+//   たかさ と いっしょに おとの かたち（ばいおん）も はかる。こえよけ（corr）は その かたちと くらべるので、
+//   たかい けんばん（ド5〜ファ5。えほんで はかった かたちは ほぼ きほんの おと だけ）は ばいおんが すこし ちがう だけで はじかれて いた（13の レ が でにくい）。
 // ひいた おとに いちばん ちかい けんばん（±45セント いない）を えらぶ。くろい けんばん なら なにも でない。
 // ひいた けんばんの うえに ちいさな キャラが たつ（かいだんに なる）。まんなかに 大きく その キャラ。
+// はん（版）の しるし：かえたら ここも かえる（おくった おと・🔍 に のる。ふるい はんの まま ためして いないか すぐ わかる）
+const KENBAN_VER = '2026-10-12b';
 const WHITE_DEF = [176.5, 197.6, 222.6, 249.4, 264.1, 296.2, 332.8, 349.6, 392.4, 441.6, 495.7, 525, 589.4, 665.2, 703.9];
 const BLACK_DEF = [186.6, 209.2, 236, 279.5, 314.1, 370.3, 416.8, 467.8, 557.1, 625.8];
 // くろい けんばんが どの しろの みぎに あるか（ファ ソ ラ シ ド レ ミ ファ ソ ラ シ ド レ ミ ファ）
 const HAS_BLACK = [1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 0, 1, 1, 0, 0];
 const NAMES = ['ファ', 'ソ', 'ラ', 'シ', 'ド', 'レ', 'ミ', 'ファ', 'ソ', 'ラ', 'シ', 'ド', 'レ', 'ミ', 'ファ'];
 const KEY = 'nb_kenban';
-let tune = { white: WHITE_DEF.slice(), black: BLACK_DEF.slice() };
-try{ const v = JSON.parse(localStorage.getItem(KEY)); if(v && v.white && v.white.length === 15) tune = { white: v.white, black: v.black || blackFrom(v.white) }; }catch(e){}
+// prof：おぼえなおし で はかった しろい 15この おとの かたち（はかれなかった ものは null → えほんで はかった もの）
+let tune = { white: WHITE_DEF.slice(), black: BLACK_DEF.slice(), prof: null };
+try{ const v = JSON.parse(localStorage.getItem(KEY)); if(v && v.white && v.white.length === 15) tune = { white: v.white, black: v.black || blackFrom(v.white), prof: Array.isArray(v.prof) && v.prof.length === 15 ? v.prof : null }; }catch(e){}
+const saveTune = () => { try{ localStorage.setItem(KEY, JSON.stringify(tune)); }catch(e){} };
 function blackFrom(w){ const b = []; for(let i = 0; i < 14; i++) if(HAS_BLACK[i]) b.push(Math.sqrt(w[i]*w[i + 1])); return b; }
 const cents = (a, b) => 1200*Math.log2(b/a);
 
@@ -105,12 +111,12 @@ async function micOpen(){
     const AC = window.AudioContext || window.webkitAudioContext;
     ac = new AC(); if(ac.state === 'suspended') await ac.resume();
     sr = ac.sampleRate; an = ac.createAnalyser(); an.fftSize = 2048; buf = new Float32Array(an.fftSize);
-    const src = ac.createMediaStreamSource(stream); src.connect(an); TPL.attach(ac, src); micSrc = src; hist = [];
+    const src = ac.createMediaStreamSource(stream); src.connect(an); TPL.attach(ac, src); micSrc = src; hist = []; ringStart();
     return true;
   }catch(e){ micClose(); document.getElementById('err').textContent = 'マイクが つかえません（' + (e.name || e) + '）'; return false; }
 }
 function micClose(){
-  if(typeof rec !== 'undefined' && rec){ clearInterval(rec.timer); rec = null; }
+  ringStop();
   if(stream){ stream.getTracks().forEach(t => t.stop()); stream = null; }
   if(ac){ try{ ac.close(); }catch(e){} ac = null; }
   an = null; TPL.detach();
@@ -201,15 +207,25 @@ let gs = { mode: 'free', play: 's0', makeLv: 1 };
 try{ const v = JSON.parse(localStorage.getItem(GKEY)); if(v && typeof v === 'object') gs = Object.assign(gs, v); }catch(e){}
 if(gs.mode === 'help' || gs.mode === 'song') gs.mode = 'play';      // まえの「たすける」「きょく」は「ひく」に まとめた
 const saveGs = () => { try{ localStorage.setItem(GKEY, JSON.stringify(gs)); }catch(e){} };
-let learning = null;    // おぼえなおし中：{ got: [] }
+let learning = null;    // おぼえなおし中：{ got: [], prof: [] }
 const rint = (a, b) => a + Math.floor(Math.random()*(b - a + 1));
 function onNote(f, now){
   if(learning){
-    learning.got.push(+f.toFixed(1));
-    flash25 = { k: W2K[learning.got.length - 1], t: now };
-    if(learning.got.length === 15){
-      tune = { white: learning.got, black: blackFrom(learning.got) };
-      try{ localStorage.setItem(KEY, JSON.stringify(tune)); }catch(e){}
+    const lv = learning, i = lv.got.length, fv = +f.toFixed(1);
+    lv.got.push(fv); lv.prof[i] = null;
+    flash25 = { k: W2K[i], t: now };
+    // おとの かたち：FFT の まどに おとが いっぱいに なってから 3かい はかって まんなか（oto.html と おなじ）。
+    // 15こめ は おぼえおわった あとに とどくので、そのとき tune に いれて しまいなおす
+    const snaps = [];
+    [150, 250, 350].forEach((ms, j) => setTimeout(() => {
+      if(lv.got[i] !== fv) return;     // 「ひとつ もどる」で けされた
+      const a = TPL.shape(fv); if(a) snaps.push(a);
+      if(j === 2 && snaps.length){ lv.prof[i] = snaps[0].map((_, h) => +snaps.map(sn => sn[h]).sort((x, y) => x - y)[snaps.length >> 1].toFixed(3));
+        if(tune.prof === lv.prof) saveTune(); }
+    }, ms));
+    if(lv.got.length === 15){
+      tune = { white: lv.got, black: blackFrom(lv.got), prof: lv.prof };
+      saveTune();
       learning = null; GAMES[gs.mode].reset(now);
     }
     learnUi(); return;
@@ -223,11 +239,13 @@ function onNote(f, now){
   }
   const kl = TPL.keyLike(k);
   if(window.__klog) window.__klog.push({ src: 'mpm', k, corr: +kl.corr.toFixed(3), tonal: +kl.tonal.toFixed(1) });
-  if(kl.corr < CFG.mpmCorr){ if(exp != null) dbg({ t: now, src: 'mpm', k, ok: 0, why: 'corr', exp, corr: +kl.corr.toFixed(3) }); return; }   // こえ・わらいごえ は ばいおんの ならびが ちがう
+  const gm = GAMES[gs.mode];
+  // よぶ・つくる でも 🔍 に のこす（どの けんばんが どれだけ にていなくて はじかれたか）
+  if(kl.corr < CFG.mpmCorr){ if(exp != null || !gm.key25) dbg({ t: now, src: 'mpm', k, ok: 0, why: 'corr', exp, corr: +kl.corr.toFixed(3) }); return; }   // こえ・わらいごえ は ばいおんの ならびが ちがう
   flash25 = { k, t: now };
   if(exp != null && k !== exp && !(PLAY.lastHitK === k && now - PLAY.lastHit < 600)) mpmOther = { k, t: now };   // べつの けんばんの おとが はっきり きこえた
-  const gm = GAMES[gs.mode];
   if(gm.key25){ gm.key25(k, now, 'mpm'); return; }
+  dbg({ t: now, src: 'mpm', k, ok: 1, corr: +kl.corr.toFixed(3) });
   if(isBlack(k)){ if(gm.black) gm.black(now); return; }
   gm.key(W2K.indexOf(k) + 1, now);
 }
@@ -292,7 +310,7 @@ const FREE = {
   standing: {}, big: null,
   reset(){ this.standing = {}; this.big = null; },
   key(n, now){ this.standing[n] = { t: this.standing[n] ? this.standing[n].t : now, hop: now }; this.big = { n, t: now }; },
-  sub(){ return [{ text: 'かたづける', on: false, act: () => this.reset() }]; },
+  sub(){ return [{ text: 'かたづける', on: false, act: () => this.reset() }, dbgItem()]; },
   draw(now, g){
     const stairH = Math.min(H*0.38, g.y - 10), bsS = Math.min((g.kw*0.95)/2, stairH/(maxRows + PAD_TOP + PAD_BOT)), footY = g.y - 4;
     for(const k in this.standing){
@@ -353,7 +371,13 @@ const TPL = (() => {
   let an2 = null, spec = null, W = null, WtW = null, key = '', loB = 0, n = 0, noise = null, h = null, hist = [], lastFire = -1e9, lastK = -1, minSince = 0, peakSince = 0, peaks = [], peakNow = 0, lastBlock = -1e9;
   function attach(ac, src){ an2 = ac.createAnalyser(); an2.fftSize = FFT; an2.smoothingTimeConstant = 0; spec = new Float32Array(FFT/2); src.connect(an2); key = ''; noise = null; h = null; hist = []; }
   function detach(){ an2 = null; }
-  function profs(){ try{ const p = JSON.parse(localStorage.getItem('nb_oto_prof') || 'null'); if(Array.isArray(p) && p.length === 25 && p.every(Boolean)) return p; }catch(e){} return PROF_DEF; }
+  // おとの かたち：oto.html で はかりなおし たら そちら、おぼえなおし で はかった しろい けんばんは さらに そちら
+  function profs(){
+    let base = PROF_DEF;
+    try{ const p = JSON.parse(localStorage.getItem('nb_oto_prof') || 'null'); if(Array.isArray(p) && p.length === 25 && p.every(Boolean)) base = p; }catch(e){}
+    if(!tune.prof) return base;
+    const out = base.slice(); tune.prof.forEach((a, i) => { if(Array.isArray(a) && a.some(v => v > 0)) out[W2K[i]] = a; }); return out;
+  }
   function build(){
     const freqs = k25(), pr = profs(), binHz = sr/FFT;
     loB = Math.floor(LO/binHz); n = Math.ceil(HI/binHz) - loB;
@@ -362,12 +386,13 @@ const TPL = (() => {
         for(let b = Math.max(0, Math.floor(c - 3*sg)); b <= Math.min(n - 1, Math.ceil(c + 3*sg)); b++) w[b] += a*Math.exp(-0.5*((b - c)/sg)**2); }
       let s = 0; for(let b = 0; b < n; b++) s += w[b]*w[b]; s = Math.sqrt(s) || 1; for(let b = 0; b < n; b++) w[b] /= s; return w; });
     WtW = W.map(a => W.map(b => { let s = 0; for(let i = 0; i < n; i++) s += a[i]*b[i]; return s; }));
-    key = freqs.join(',') + sr;
+    key = bkey();
   }
+  const bkey = () => k25().join(',') + sr + JSON.stringify(tune.prof);
   // まいフレーム。expect：つぎの けんばん k。ひいたと みたら true
   function tick(now, expect, quiet){
     if(!an2 || expect == null) return null;
-    if(key !== k25().join(',') + sr) build();
+    if(key !== bkey()) build();
     an2.getFloatFrequencyData(spec);
     const v = new Float32Array(n);
     if(!noise) noise = new Float32Array(n);
@@ -434,7 +459,16 @@ const TPL = (() => {
     const peaky = 20*lp/ord.length;   // dB
     return { corr, tonal, peaky };
   }
-  return { attach, detach, tick, keyLike, live: () => !!an2, reset(){ hist = []; lastK = -1; } };
+  // おぼえなおし よう：たかさ f の おとの ばいおん 1〜10 の つよさ（いちばん つよい ものを 1。keyLike と おなじ はかりかた）
+  function shape(f){
+    if(!an2) return null;
+    an2.getFloatFrequencyData(spec);
+    const binHz = sr/FFT, a = [];
+    for(let hh = 1; hh <= NH; hh++){ const fh = f*hh; if(fh > HI){ a.push(0); continue; }
+      let m = 0; for(let b = Math.floor(fh*0.985/binHz); b <= Math.ceil(fh*1.015/binHz); b++) m = Math.max(m, Math.pow(10, spec[b]/20)); a.push(m); }
+    const mx = Math.max(...a); return mx > 0 ? a.map(v => v/mx) : null;
+  }
+  return { attach, detach, tick, keyLike, shape, live: () => !!an2, reset(){ hist = []; lastK = -1; } };
 })();
 
 // ── ひく（おちてくる おんぷ）──
@@ -481,7 +515,7 @@ const PLAY = {
     const i = +this.src.slice(1);
     if(this.src !== 'one' && i >= SONGS.length) items.push({ text: 'この きょくを けす', act: () => { if(confirm('「' + this.songName() + '」を けしますか？')){ mySongs.splice(i - SONGS.length, 1); saveSongs(); gs.play = 's0'; saveGs(); this.reset(); } } });
     items.push({ text: '＋きょくを おぼえる', act: () => { this.rec = []; } });
-    items.push({ text: '🔍', on: dbgOn, act: () => { dbgOn = !dbgOn; dbgEl.style.display = dbgOn ? 'block' : 'none'; } });
+    items.push(dbgItem());
     return items;
   },
   finishRec(){
@@ -558,30 +592,34 @@ function laneX(k, g){
 let dbgOn = false; const dbgLog = [];
 function dbg(e){ dbgLog.push(Object.assign({}, e, { t: Math.round(e.t), db: Math.round(micDb), fl: Math.round(micFloor) })); if(dbgLog.length > 200) dbgLog.shift(); if(dbgOn) dbgShow(); }
 const dbgEl = document.getElementById('dbg');
+const dbgItem = () => ({ text: '🔍', on: dbgOn, act: () => { dbgOn = !dbgOn; dbgEl.style.display = dbgOn ? 'block' : 'none'; if(dbgOn) dbgShow(); } });
 function dbgShow(){
   const nm = k => k == null ? '-' : (isBlack(k) ? '●' : '') + labelOf(k) + octOf(k);
   const WHY = { gasa: 'ガサゴソ（おとが とがって いない）', betsu: 'べつの おとが きこえた', nojump: 'たたいた おとが ない', corr: 'にていない', zure: 'たかさが ずれ', hayai: 'はやすぎ', mada: 'よわく ならない', weak: 'ほかの おとが つよい', quiet: 'ちいさい' };
-  dbgEl.querySelector('textarea').value = dbgLog.slice().reverse().map(e => (e.ok ? '○ ' : '× ') + nm(e.k) + (e.ok ? '' : '（つぎ ' + nm(e.exp) + '）')
+  dbgEl.querySelector('textarea').value = dbgLog.slice().reverse().map(e => (e.ok ? '○ ' : '× ') + nm(e.k) + (e.ok || e.exp == null ? '' : '（つぎ ' + nm(e.exp) + '）')
     + (e.why ? ' ' + WHY[e.why] + (e.corr != null ? ' ' + e.corr : '') + (e.c != null ? ' ' + e.c + 'セント' : '') : '') + ' ' + e.src + ' ' + e.t).join('\n');
 }
-document.getElementById('dbgCopy').addEventListener('click', () => { const v = JSON.stringify({ song: PLAY.songName(), log: dbgLog }); try{ navigator.clipboard.writeText(v); }catch(e){} dbgEl.querySelector('textarea').value = v; });
+document.getElementById('dbgCopy').addEventListener('click', () => { const v = JSON.stringify({ ver: KENBAN_VER, mode: gs.mode, song: PLAY.songName(), log: dbgLog }); try{ navigator.clipboard.writeText(v); }catch(e){} dbgEl.querySelector('textarea').value = v; });
 document.getElementById('dbgClear').addEventListener('click', () => { dbgLog.length = 0; dbgShow(); });
-// ── ろくおん（ちょうせい よう）──
-// 🔍 の「ろくおん」で 30びょう まで マイクの おとを ろくおんし、ひいた きろくと いっしょに パパの Cloudflare（sync/worker.js の /rec）へ おくる。
-// 16kHz の WAV。あいことばは どうき と おなじ もの。30にち で じどうで きえる。ちょうせいに つかったら けす（tools/rec.js）。
+// ── さっきの 30びょうを おくる（ちょうせい よう）──
+// マイクを つかって いる あいだ、さいきんの 30びょうの おとを メモリに もって おく（ふるい ものから すてる。どこへも おくらない）。
+// 「あれ？」と おもったら 🔍 の「📮 さっきの 30びょうを おくる」で、その まえの 30びょうと 🔍 の きろくを パパの Cloudflare（sync/worker.js の /rec）へ。
+// おさなければ なにも おくらない。16kHz の WAV。あいことばは どうき と おなじ もの。30にち で じどうで きえる。ちょうせいに つかったら けす（tools/rec.js）。
+// ※ まえは「⏺ ろくおん」を おして から 30びょう だった（おかしな ことは おわった あとで きづくので、とれなかった）。
 const REC_SEC = 30;
-let rec = null;    // { sp, chunks, t0, timer }
+let ring = null;   // { sp, chunks: [{ x, t }], n, sr }
 const recBtn = document.getElementById('recBtn'), recMsg = document.getElementById('recMsg');
-recBtn.addEventListener('click', () => rec ? recStop() : recStart());
-function recStart(){
-  if(!an || !micSrc){ recMsg.textContent = 'さきに「はじめる 🎤」を おしてね'; return; }
-  const sp = ac.createScriptProcessor(4096, 1, 1), chunks = [];
-  sp.onaudioprocess = e => { chunks.push(new Float32Array(e.inputBuffer.getChannelData(0))); };
+document.getElementById('ver').textContent = 'はん ' + KENBAN_VER;
+recBtn.addEventListener('click', recSend);
+function ringStart(){
+  if(!ac || !micSrc) return;
+  const sp = ac.createScriptProcessor(4096, 1, 1), r = { sp, chunks: [], n: 0, sr: ac.sampleRate };
+  sp.onaudioprocess = e => { const x = new Float32Array(e.inputBuffer.getChannelData(0)); r.chunks.push({ x, t: performance.now() }); r.n += x.length;
+    while(r.chunks.length > 1 && r.n - r.chunks[0].x.length >= REC_SEC*r.sr) r.n -= r.chunks.shift().x.length; };
   micSrc.connect(sp); sp.connect(ac.destination);
-  rec = { sp, chunks, t0: performance.now(), sr: ac.sampleRate };
-  rec.timer = setInterval(() => { const t = (performance.now() - rec.t0)/1000; recMsg.textContent = '⏺ ろくおん中 ' + Math.floor(t) + ' / ' + REC_SEC + 'びょう'; if(t >= REC_SEC) recStop(); }, 250);
-  recBtn.classList.add('on'); recBtn.textContent = '⏹ とめる';
+  ring = r;
 }
+function ringStop(){ if(!ring) return; try{ micSrc && micSrc.disconnect(ring.sp); ring.sp.disconnect(); }catch(e){} ring = null; }
 function wavBase64(chunks, from){
   const n = chunks.reduce((a, c) => a + c.length, 0), x = new Float32Array(n); let o = 0; for(const c of chunks){ x.set(c, o); o += c.length; }
   const R = 16000, m = Math.floor(n*R/from), pcm = new Int16Array(m);
@@ -593,21 +631,21 @@ function wavBase64(chunks, from){
   const u8 = new Uint8Array(buf); let s = ''; for(let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
   return btoa(s);
 }
-async function recStop(){
-  if(!rec) return;
-  const r = rec; rec = null; clearInterval(r.timer);
-  try{ micSrc && micSrc.disconnect(r.sp); r.sp.disconnect(); }catch(e){}
-  recBtn.classList.remove('on'); recBtn.textContent = '⏺ ろくおん';
-  const memo = prompt('メモ（なにを ひいたか・すすまなかった ところ など）', gs.mode === 'play' ? PLAY.songName() + '・ばんそう なし' : '');
-  if(memo === null){ recMsg.textContent = 'ろくおんを すてました'; return; }
+async function recSend(){
+  if(!ring || !ring.chunks.length){ recMsg.textContent = 'さきに「はじめる 🎤」を おしてね'; return; }
+  // おした ときの 30びょうを とって おく（メモを かいて いる あいだの おとは いれない）
+  const chunks = ring.chunks.map(c => c.x), sr0 = ring.sr, tEnd = ring.chunks[ring.chunks.length - 1].t, t0 = tEnd - ring.n/sr0*1000, sec = ring.n/sr0;
+  const log = dbgLog.filter(e => e.t >= t0 - 500).map(e => Object.assign({}, e, { rt: Math.round(e.t - t0) }));
+  const memo = prompt('さっきの ' + Math.round(sec) + 'びょうを おくります。なにが あった？\n（れい：13の レを ひいたのに でない／なにも ひいて いないのに すすんだ）', '');
+  if(memo === null){ recMsg.textContent = 'おくるのを やめました'; return; }
   recMsg.textContent = 'おくって います…';
   try{
     const code = localStorage.getItem('nb_sync_code') || '';
     if(code.length < 16){ recMsg.textContent = 'せっていの「どうき」で あいことばを きめてから おくってね'; return; }
     const url = (localStorage.getItem('nb_sync_url') || 'https://numberblocks-sync.xelvon-jp.workers.dev/save').replace(/\/save$/, '/rec');
-    const body = JSON.stringify({ wav: wavBase64(r.chunks, r.sr), sr: 16000, memo, at: Date.now(), mode: gs.mode,
-      song: gs.mode === 'play' ? PLAY.songName() : null, notes: gs.mode === 'play' ? PLAY.notes : null, k25: k25(),
-      log: dbgLog.filter(e => e.t >= r.t0 - 500).map(e => Object.assign({}, e, { rt: Math.round(e.t - r.t0) })), ua: navigator.userAgent });
+    const body = JSON.stringify({ wav: wavBase64(chunks, sr0), sr: 16000, sec: +sec.toFixed(1), memo, at: Date.now(), ver: KENBAN_VER, mode: gs.mode,
+      song: gs.mode === 'play' ? PLAY.songName() : null, notes: gs.mode === 'play' ? PLAY.notes : null, k25: k25(), prof: tune.prof, cfg: CFG,
+      log, ua: navigator.userAgent });
     const res = await fetch(url, { method: 'PUT', headers: { 'Content-Type': 'application/json', 'X-Family': code }, body });
     const j = await res.json().catch(() => ({}));
     recMsg.textContent = res.ok ? 'おくりました！（' + String(j.id || '').slice(-6) + '）' : 'おくれませんでした（' + res.status + '）';
@@ -630,7 +668,7 @@ const MAKE = {
     else if(this.sum > this.T){ this.over = now; say('あふれちゃった！', W/2, 60, now, '#c0398a', 28); }
   },
   sub(){ return [['★ 10まで', 1], ['★★ 15まで', 2]].map(([t, lv]) => ({ text: t, on: gs.makeLv === lv, act: () => { gs.makeLv = lv; saveGs(); this.reset(); } }))
-           .concat([{ text: 'やりなおし', on: false, act: () => this.clear() }]); },
+           .concat([{ text: 'やりなおし', on: false, act: () => this.clear() }, dbgItem()]); },
   draw(now, g){
     if(!this.T) this.next();
     if(this.done && now - this.done > 2400) this.next();
@@ -730,8 +768,8 @@ cv.addEventListener('pointerdown', e => { if(gs.mode !== 'play' || PLAY.rec || P
 // ── はじめる・おぼえなおす ──
 const startBox = document.getElementById('startBox'), tip = document.getElementById('learnTip');
 document.getElementById('start').addEventListener('click', async () => { if(await micOpen()) startBox.classList.remove('on'); });
-document.getElementById('relearn').addEventListener('click', () => { learning = { got: [] }; learnUi(); });
-document.getElementById('learnUndo').addEventListener('click', () => { if(learning){ learning.got.pop(); learnUi(); } });
+document.getElementById('relearn').addEventListener('click', () => { learning = { got: [], prof: [] }; learnUi(); });
+document.getElementById('learnUndo').addEventListener('click', () => { if(learning){ learning.got.pop(); learning.prof.length = learning.got.length; learnUi(); } });
 document.getElementById('learnCancel').addEventListener('click', () => { learning = null; learnUi(); });
 function learnUi(){
   tip.classList.toggle('on', !!learning);
