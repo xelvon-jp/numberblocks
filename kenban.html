@@ -78,7 +78,7 @@
 // ひいた おとに いちばん ちかい けんばん（±45セント いない）を えらぶ。くろい けんばん なら なにも でない。
 // ひいた けんばんの うえに ちいさな キャラが たつ（かいだんに なる）。まんなかに 大きく その キャラ。
 // はん（版）の しるし：かえたら ここも かえる（おくった おと・🔍 に のる。ふるい はんの まま ためして いないか すぐ わかる）
-const KENBAN_VER = '2026-10-12b';
+const KENBAN_VER = '2026-10-12c';
 const WHITE_DEF = [176.5, 197.6, 222.6, 249.4, 264.1, 296.2, 332.8, 349.6, 392.4, 441.6, 495.7, 525, 589.4, 665.2, 703.9];
 const BLACK_DEF = [186.6, 209.2, 236, 279.5, 314.1, 370.3, 416.8, 467.8, 557.1, 625.8];
 // くろい けんばんが どの しろの みぎに あるか（ファ ソ ラ シ ド レ ミ ファ ソ ラ シ ド レ ミ ファ）
@@ -306,22 +306,26 @@ function bubble(t, x, y, now){
 
 // ── よぶ（じゆう）──
 // ひいた けんばんの うえに ちいさく たつ（かいだん）。まんなかに 大きく。
+// しばらく（LIFE）ひかないと、うすく なって きえる（かたづける を おさなくて いい）。また ひくと のびる。
 const FREE = {
-  standing: {}, big: null,
+  standing: {}, big: null, LIFE: 5000, FADE: 600,
   reset(){ this.standing = {}; this.big = null; },
   key(n, now){ this.standing[n] = { t: this.standing[n] ? this.standing[n].t : now, hop: now }; this.big = { n, t: now }; },
   sub(){ return [{ text: 'かたづける', on: false, act: () => this.reset() }, dbgItem()]; },
+  fade(t0, now){ return Math.max(0, Math.min(1, (this.LIFE - (now - t0))/this.FADE)); },
   draw(now, g){
+    for(const k in this.standing) if(now - this.standing[k].hop > this.LIFE) delete this.standing[k];
+    if(this.big && now - this.big.t > this.LIFE) this.big = null;
     const stairH = Math.min(H*0.38, g.y - 10), bsS = Math.min((g.kw*0.95)/2, stairH/(maxRows + PAD_TOP + PAD_BOT)), footY = g.y - 4;
     for(const k in this.standing){
       const n = +k, st = this.standing[k];
-      stand(n, g.m + (n - 0.5)*g.kw, footY - PAD_BOT*bsS*0.4, bsS, now, { hop: (now - st.hop)/450, alpha: Math.min(1, (now - st.t)/250) });
+      stand(n, g.m + (n - 0.5)*g.kw, footY - PAD_BOT*bsS*0.4, bsS, now, { hop: (now - st.hop)/450, alpha: Math.min(1, (now - st.t)/250, this.fade(st.hop, now)) });
     }
     if(this.big){
       const top = 10, ah = footY - stairH - 6 - top;
       if(ah > 40){
         const bs = fitBs([this.big.n], W*0.5, ah), k = Math.min(1, (now - this.big.t)/300);
-        ctx.save(); ctx.translate(W/2, top + ah - PAD_BOT*bs); const sc = k < 1 ? 0.6 + 0.4*k + 0.15*Math.sin(Math.PI*k) : 1; ctx.scale(sc, sc);
+        ctx.save(); ctx.globalAlpha = this.fade(this.big.t, now); ctx.translate(W/2, top + ah - PAD_BOT*bs); const sc = k < 1 ? 0.6 + 0.4*k + 0.15*Math.sin(Math.PI*k) : 1; ctx.scale(sc, sc);
         stand(this.big.n, 0, 0, bs, now); ctx.restore();
       }
     }
@@ -477,14 +481,15 @@ const TPL = (() => {
 // きょくを おぼえる：パパが メロディを 1かい ひくと そのまま きょくに なる（えほんと おなじ ちょう に なる）。
 // まちがいは かぞえない（ちがう けんばんは その けんばんが すこし ひかる だけ）。れんぞくで ○れんぞく！
 const PLAY = {
-  idx: 0, shown: 0, done: 0, combo: 0, lastHit: -1e9, wrong: null, hits: [], rec: null, oneQ: [], stars: 0,
+  idx: 0, shown: 0, done: 0, combo: 0, lastHit: -1e9, wrong: null, hits: [], chars: [], rec: null, oneQ: [], stars: 0,
+  CHAR_MS: 1200,    // ただしく ひけたら、その けんばんの かずの キャラが けんばんの うえに ぴょんと でて きえる（くろい けんばんは かずが ないので でない）
   get src(){ return gs.play || 's0'; },
   get notes(){
     if(this.src === 'one') return this.oneQ;
     const i = +this.src.slice(1), s = allSongs()[i]; return s ? s.notes : SONGS[0].notes;
   },
   songName(){ if(this.src === 'one') return '1おんずつ'; const s = allSongs()[+this.src.slice(1)]; return s ? s.name : SONGS[0].name; },
-  reset(){ this.idx = 0; this.shown = 0; this.done = 0; this.combo = 0; this.hits = []; this.wrong = null; this.stars = 0; this.lastHit = -1e9; this.lastHitK = -1;
+  reset(){ this.idx = 0; this.shown = 0; this.done = 0; this.combo = 0; this.hits = []; this.chars = []; this.wrong = null; this.stars = 0; this.lastHit = -1e9; this.lastHitK = -1;
     if(this.src === 'one'){ this.oneQ = []; this.fillOne(); } TPL.reset(); },
   fillOne(){ const pool = [7, 9, 11, 12, 14, 16, 18, 19]; while(this.oneQ.length < this.idx + 12){ let k; do{ k = pool[rint(0, pool.length - 1)]; } while(k === this.oneQ[this.oneQ.length - 1]); this.oneQ.push(k); } },
   expect(){ return this.rec || this.done ? null : this.notes[this.idx]; },
@@ -496,6 +501,7 @@ const PLAY = {
       if(now - this.lastHit < 160) return;        // ふたつの みはりが おなじ おとを 2かい かぞえない
       this.lastHit = now; this.lastHitK = k; this.hits.push({ k, t: now }); this.idx++; this.combo++;
       const g = keyboardGeom(); burst(laneX(k, g), g.y - 26, 14, colorOf(k));
+      if(!isBlack(k)) this.chars.push({ n: W2K.indexOf(k) + 1, k, t: now });
       if(this.combo % 10 === 0 || this.combo === 5) say(this.combo + 'れんぞく！', W/2, H*0.3, now, '#d08a00', 30);
       if(this.src === 'one'){ this.stars++; this.fillOne(); }
       else if(this.idx >= this.notes.length){ this.done = now; burst(W/2, H*0.35, 90); say('できた！🎵', W/2, H*0.25, now, '#d08a00', 42); }
@@ -565,6 +571,13 @@ const PLAY = {
     // ひいた おんぷ：はじけて きえる
     this.hits = this.hits.filter(hh => now - hh.t < 400);
     for(const hh of this.hits){ const a = (now - hh.t)/400; ctx.save(); ctx.globalAlpha = 1 - a; mark(hh.k, laneX(hh.k, g), hitY, sz*(1 + a*0.8), 1); ctx.restore(); }
+    // ただしく ひけた キャラ（おんぷの まえ。おなじ おとが つづくと うしろだと かくれるので、すこし すけて はやめに きえる）
+    this.chars = this.chars.filter(c => now - c.t < this.CHAR_MS);
+    if(this.chars.length){
+      const stairH = Math.min(H*0.3, hitY - 60), bsC = Math.min((g.kw*1.1)/2, stairH/(maxRows + PAD_TOP + PAD_BOT));
+      for(const c of this.chars){ const a = now - c.t;
+        stand(c.n, laneX(c.k, g), g.y - 4, bsC, now, { hop: a/450, alpha: Math.min(1, a/120, (this.CHAR_MS - a)/500)*0.9 }); }
+    }
     if(this.src === 'one' && this.idx > 40){ this.oneQ.splice(0, 20); this.idx -= 20; this.shown -= 20; }
   },
 };
