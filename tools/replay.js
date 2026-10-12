@@ -4,13 +4,15 @@
 const fs = require('fs'), path = require('path'), http = require('http');
 const { chromium } = require(path.join(__dirname, '../tests/node_modules/playwright-core'));
 const ROOT = path.join(__dirname, '..');
-const jf = process.argv[2], meta = JSON.parse(fs.readFileSync(jf, 'utf8')), wav = fs.readFileSync(jf.replace(/\.json$/, '.wav')).toString('base64');
+const jf = process.argv[2], cfg = process.argv[3] ? JSON.parse(process.argv[3]) : null, quiet = process.argv[4] === 'sum', meta = JSON.parse(fs.readFileSync(jf, 'utf8')), wav = fs.readFileSync(jf.replace(/\.json$/, '.wav')).toString('base64');
 const srv = http.createServer((q, r) => { const f = path.join(ROOT, decodeURIComponent(q.url.split('?')[0]));
   fs.readFile(f, (e, d) => { if(e){ r.writeHead(404); r.end(); return; } r.writeHead(200, { 'Content-Type': f.endsWith('.html') ? 'text/html; charset=utf-8' : 'text/javascript; charset=utf-8' }); r.end(d); }); });
 srv.listen(0, async () => {
   const exe = ['/opt/pw-browsers/chromium'].find(fs.existsSync);
   const b = await chromium.launch({ executablePath: exe, args: ['--autoplay-policy=no-user-gesture-required'] });
   const p = await b.newPage();
+  if(cfg) await p.addInitScript(c => { window.__CFG = c; window.__klog = []; }, cfg);
+  else await p.addInitScript(() => { window.__klog = []; });
   await p.goto('http://127.0.0.1:' + srv.address().port + '/kenban.html');
   await p.evaluate(([mode, song]) => { localStorage.setItem('nb_kenban_game', JSON.stringify({ mode: mode || 'play', play: 's0' })); }, [meta.mode]);
   await p.reload(); await p.waitForTimeout(500);
@@ -26,7 +28,8 @@ srv.listen(0, async () => {
   await p.waitForFunction(() => window.__dur, null, { timeout: 10000 });
   const dur = await p.evaluate(() => window.__dur);
   await p.waitForTimeout(dur*1000 + 1500);
-  const r = await p.evaluate(() => ({ idx: kenban.game().idx, log: kenban.dbgLog().map(e => Object.assign({}, e, { rt: Math.round(e.t - window.__t0 - 300) })) }));
+  const r = await p.evaluate(() => ({ idx: kenban.game().idx, klog: window.__klog, log: kenban.dbgLog().map(e => Object.assign({}, e, { rt: Math.round(e.t - window.__t0 - 300) })) }));
+  if(quiet){ console.log(JSON.stringify({ cfg, idx: r.idx, n: meta.notes && meta.notes.length, klog: r.klog })); await b.close(); srv.close(); return; }
   console.log('ろくおん:', meta.memo, '/', meta.song, '/', dur.toFixed(1) + 'びょう');
   console.log('ろくおん した とき：ok', (meta.log || []).filter(e => e.ok).length, '／ さいせい：すすんだ', r.idx, 'ok', r.log.filter(e => e.ok).length);
   const nm = k => k == null ? '-' : String(k);
