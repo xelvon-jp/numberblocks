@@ -160,7 +160,8 @@ function listen(now){
   const up = db - Math.min(...dbRecent.map(d => d.db)) >= 6;
   if(up && !rising){ armed = true; recent = []; }   // とびあがった しゅんかん だけ（つづいている あいだ ずっと やりなおさない）
   rising = up;
-  micQuiet = !(db > floor + 8 && db > -80);
+  // しずかな へやは -85〜-80dB、けんばんの おとは -70〜-50dB（パパの ろくおん）。まえは「まわり＋8dB・-80dB」で、しずかな ときの こまかい おとで すすんでいた
+  micQuiet = !(db > floor + 12 && db > -74);
   const p = !micQuiet ? pitch(x) : null;
   if(p && p.clarity >= 0.8 && p.f > 120 && p.f < 1200){
     quietSince = 0;
