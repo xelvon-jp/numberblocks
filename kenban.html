@@ -136,7 +136,7 @@ function pitch(x){
 }
 // 1おんの きめかた：
 //   まわりの おと＝さいきん 6びょうの しずかな ほう（1わりめ）。それより 8dB 大きく、たかさが はっきり（0.8 いじょう）
-//   おなじ たかさ（±30セント）が 0.05びょう つづいたら 1おん。
+//   おなじ たかさ（±15セント）が 0.05びょう つづいたら 1おん。けんばんの ±35セント いない、ばいおんの ならびが その けんばんに にている（0.97 いじょう）。
 //   つぎの 1おん：おとが とぎれた（0.09びょう）・たかさが かわった（60セント）・おとが 6dB いじょう とびあがった（おなじ けんばんの れんだ）。
 // ※ まえは まわりを「3びょうの 2わりめ」、1おんを「0.11びょう」、つぎは「とぎれる か たかさが かわる」だけに していて、
 //   ずっと ひくと まわりが 大きく なって きこえない・おなじ けんばんの れんだ・みじかい タップ が でなかった。
@@ -161,7 +161,7 @@ function listen(now){
     recent.push({ t: now, f: p.f }); while(recent.length && now - recent[0].t > 90) recent.shift();
     if(recent.length >= 3 && now - recent[0].t >= 45){
       const fs = recent.map(r => r.f).sort((a, b) => a - b), med = fs[fs.length >> 1];
-      if(fs.every(f => Math.abs(cents(med, f)) < 30) && (armed || (lastNote && Math.abs(cents(lastNote, med)) > 60))){ armed = false; lastNote = med; onNote(med, now); }
+      if(fs.every(f => Math.abs(cents(med, f)) < 15) && (armed || (lastNote && Math.abs(cents(lastNote, med)) > 60))){ armed = false; lastNote = med; onNote(med, now); }   // けんばんは たかさが ゆれない（こえは ゆれる）
     }
   } else {
     recent = [];
@@ -202,6 +202,9 @@ function onNote(f, now){
   }
   const k = keyIndex(f);
   if(k == null) return;
+  const kl = TPL.keyLike(k);
+  if(window.__klog) window.__klog.push({ src: 'mpm', k, corr: +kl.corr.toFixed(3), tonal: +kl.tonal.toFixed(1) });
+  if(kl.corr < 0.97) return;          // こえ・わらいごえ は ばいおんの ならびが ちがう
   flash25 = { k, t: now };
   const gm = GAMES[gs.mode];
   if(gm.key25){ gm.key25(k, now, 'mpm'); return; }
@@ -305,7 +308,7 @@ function kOfName(t){ const m = /^(ド|レ|ミ|ファ|ソ|ラ|シ)(#?)(\d)$/.exec
 const song = (name, s) => ({ name, notes: s.trim().split(/\s+/).map(kOfName) });
 function k25(){ const a = []; let b = 0; for(let i = 0; i < 15; i++){ a.push(tune.white[i]); if(i < 14 && HAS_BLACK[i]) a.push(tune.black[b++]); } return a; }
 // いちばん ちかい けんばん（±45セント）。なければ null
-function keyIndex(f){ const a = k25(); let best = null, bc = 46; a.forEach((x, k) => { const c = Math.abs(cents(x, f)); if(c < bc){ bc = c; best = k; } }); return best; }
+function keyIndex(f){ const a = k25(); let best = null, bc = 36; a.forEach((x, k) => { const c = Math.abs(cents(x, f)); if(c < bc){ bc = c; best = k; } }); return best; }
 
 // えほんの きょく（ハッピー・バースデイ は えほんの がくふ どおり ヘちょうちょう）。ほかの きょくは「きょくを おぼえる」で たせる
 const SONGS = [
@@ -378,7 +381,28 @@ const TPL = (() => {
     }
     return info;
   }
-  return { attach, detach, tick, live: () => !!an2, reset(){ hist = []; lastK = -1; } };
+  // いまの おとが その けんばんの おとらしいか：① ばいおんの つよさの ならびが えほんで はかった かたち に にている（corr）
+  // ② いちばん つよい ばいおんの やまが するどい（tonal。けんばんは たかさが かわらない。こえは ゆれるので やまが ひろがる）
+  function keyLike(k){
+    if(!an2 || k == null) return { ok: true, corr: 1, tonal: 99 };
+    an2.getFloatFrequencyData(spec);
+    const f0 = k25()[k], pr = profs()[k], binHz = sr/FFT, mag = b => Math.pow(10, spec[b]/20);
+    const a = [], p = []; let best = -1, bestP = -1;
+    for(let hh = 1; hh <= 8; hh++){
+      const fh = f0*hh; if(fh > HI) break;
+      let m = 0; for(let b = Math.floor(fh*0.985/binHz); b <= Math.ceil(fh*1.015/binHz); b++) m = Math.max(m, mag(b));
+      a.push(Math.sqrt(m)); p.push(Math.sqrt(pr[hh - 1] || 0));
+      if((pr[hh - 1] || 0) > bestP){ bestP = pr[hh - 1]; best = hh; }
+    }
+    let ab = 0, aa = 0, pp = 0; for(let i = 0; i < a.length; i++){ ab += a[i]*p[i]; aa += a[i]*a[i]; pp += p[i]*p[i]; }
+    const corr = aa && pp ? ab/Math.sqrt(aa*pp) : 0;
+    const fh = f0*best, around = [];
+    for(let b = Math.floor(fh*0.9/binHz); b <= Math.ceil(fh*1.1/binHz); b++){ const fq = b*binHz; if(Math.abs(fq - fh) > fh*0.03) around.push(mag(b)); }
+    around.sort((x, y) => x - y);
+    const tonal = around.length ? Math.pow(a[best - 1], 2)/(around[around.length >> 1] || 1e-9) : 99;
+    return { corr, tonal };
+  }
+  return { attach, detach, tick, keyLike, live: () => !!an2, reset(){ hist = []; lastK = -1; } };
 })();
 
 // ── ひく（おちてくる おんぷ）──
@@ -643,7 +667,7 @@ function frame(now){
   listen(now);
   if(gs.mode === 'play' && !learning && an){
     const e = PLAY.expect(), r = TPL.tick(now, e, micQuiet);
-    if(r && r.fire){ PLAY.key25(e, now, 'tpl'); }
+    if(r && r.fire){ const kl = TPL.keyLike(e); if(window.__klog) window.__klog.push({ src: 'tpl', k: e, corr: +kl.corr.toFixed(3), tonal: +kl.tonal.toFixed(1) }); if(kl.corr >= 0.9) PLAY.key25(e, now, 'tpl'); }
   }
   draw(now);
   requestAnimationFrame(frame);
