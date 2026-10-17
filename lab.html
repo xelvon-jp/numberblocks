@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-512.png">
+<title>ためし</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { background:#eef4f8; color:#2b3a52; font-family:-apple-system, system-ui, sans-serif; padding:14px 14px calc(20px + env(safe-area-inset-bottom, 0px)); }
+  header { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+  h1 { font-size:22px; font-weight:900; flex:1; }
+  .back { text-decoration:none; background:#dfe6ef; color:#2b3a52; font-weight:800; font-size:14px; padding:8px 12px; border-radius:12px; }
+  .note { font-size:13px; color:#6a7486; margin-bottom:14px; line-height:1.5; }
+  .exp { display:block; text-decoration:none; color:inherit; background:#fff; border-radius:16px; padding:14px 16px; margin-bottom:10px; box-shadow:0 1px 3px rgba(40,60,90,0.12); }
+  .exp b { font-size:18px; }
+  .exp .st { display:inline-block; font-size:11px; font-weight:800; padding:2px 8px; border-radius:999px; margin-left:6px; vertical-align:2px; }
+  .exp .st.try { background:#fff1c2; color:#8a5a00; }
+  .exp .st.done { background:#d9f2dc; color:#256b2f; }
+  .exp p { font-size:13px; color:#6a7486; margin-top:4px; line-height:1.45; }
+</style>
+</head>
+<body>
+<header><h1>🧪 ためし</h1><a class="back" href="index.html">← ゲームへ</a></header>
+<div class="note">ほんたいに いれる まえに ためす ページ です。ためして よかったら ほんたいに いれる か きめます。<br>
+ここで うごかしても ゲームの きろくは かわりません。</div>
+<div id="list"></div>
+<script>
+// ── ためしの いちらん ──
+// あたらしい ためしは ここに 1ぎょう たす（file・なまえ・せつめい・st：try＝ためし中 / done＝ほんたいに いれた）
+const EXPERIMENTS = [
+  { file: 'lab-mizu.html', name: '🌊 かたむけて みずを うごかす', st: 'try',
+    desc: 'スマホの かたむき（ジャイロ）で ガラスの なかの みずが すいへいを たもつ・ゆれる。「はんぶん」の 0.1〜0.9 に いれるか けんとう。' },
+];
+const list = document.getElementById('list');
+for(const e of EXPERIMENTS){
+  const a = document.createElement('a'); a.className = 'exp';
+  a.href = e.file + '?v=' + Date.now();       // キャッシュの 古い版を ひらかない
+  a.innerHTML = '<b></b><span class="st"></span><p></p>';
+  a.querySelector('b').textContent = e.name;
+  const s = a.querySelector('.st'); s.textContent = e.st === 'done' ? 'ほんたいに いれた' : 'ためし中'; s.classList.add(e.st);
+  a.querySelector('p').textContent = e.desc;
+  list.appendChild(a);
+}
+</script>
+</body>
+</html>

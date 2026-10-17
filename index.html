@@ -4155,7 +4155,8 @@ function drawSettings(ctx){
   // ずかん・ひっさん（ためしの ページ）・全画面（全画面は使える端末だけ）
   // どうき（かぞくの スマホと セーブデータを あわせる）も ここ
   // けんばん（キーボードの おもちゃを ひくと キャラが でる。kenban.html を タブの 下に かさねる）
-  const n = CAN_FULLSCREEN ? 5 : 4, g2 = 8, bw2 = (w - 32 - g2*(n-1)) / n;
+  // ためし（lab.html。ほんたいに いれる まえに ためす ページの いちらん）
+  const n = CAN_FULLSCREEN ? 6 : 5, g2 = 8, bw2 = (w - 32 - g2*(n-1)) / n;
   drawCardBtn(ctx, x+16, ty, bw2, bigH, 'ずかん', 'rgba(228,233,242,0.98)', '#22314a');
   setBtns.push({ x:x+16, y:ty, w:bw2, h:bigH, val:'zukan' });
   drawCardBtn(ctx, x+16+bw2+g2, ty, bw2, bigH, 'ひっさん', 'rgba(255,236,190,0.98)', '#6b4a00');
@@ -4164,10 +4165,12 @@ function drawSettings(ctx){
   setBtns.push({ x:x+16+(bw2+g2)*2, y:ty, w:bw2, h:bigH, val:'kenban' });
   drawCardBtn(ctx, x+16+(bw2+g2)*3, ty, bw2, bigH, sync.label(), 'rgba(214,236,255,0.98)', '#1d4a7a');
   setBtns.push({ x:x+16+(bw2+g2)*3, y:ty, w:bw2, h:bigH, val:'sync' });
+  drawCardBtn(ctx, x+16+(bw2+g2)*4, ty, bw2, bigH, 'ためし', 'rgba(240,226,255,0.98)', '#4a2a7a');
+  setBtns.push({ x:x+16+(bw2+g2)*4, y:ty, w:bw2, h:bigH, val:'lab' });
   if(CAN_FULLSCREEN){
-    drawCardBtn(ctx, x+16+(bw2+g2)*4, ty, bw2, bigH, document.fullscreenElement ? 'やめる' : 'ぜんがめん',
+    drawCardBtn(ctx, x+16+(bw2+g2)*5, ty, bw2, bigH, document.fullscreenElement ? 'やめる' : 'ぜんがめん',
                 'rgba(228,233,242,0.98)', '#22314a');
-    setBtns.push({ x:x+16+(bw2+g2)*4, y:ty, w:bw2, h:bigH, val:'fs' });
+    setBtns.push({ x:x+16+(bw2+g2)*5, y:ty, w:bw2, h:bigH, val:'fs' });
   }
   ty += bigH + (tight ? 8 : 12);
 
@@ -4220,6 +4223,7 @@ function handleSettingsTap(x, y){
     else if(b.val==='halloween'){ try{ localStorage.setItem('nb_halloween', b.v); }catch(e){} halloweenOn = isHalloween(); }
     else if(b.val==='zukan') location.href = 'zukan.html?v=' + Date.now();   // キャッシュの 古い版を ひらかない
     else if(b.val==='hissan') location.href = 'hissan.html?v=' + Date.now();
+    else if(b.val==='lab')   location.href = 'lab.html?v=' + Date.now();
     else if(b.val==='kenban'){ setOpen = false; if(taskOn) setTaskOn(false); setMode('kenban'); }
     else if(b.val==='fs')    toggleFullscreen();
     else if(b.val==='arc')   { setOpen = false; openArcTuner(); }

@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-512.png">
+<title>ためし：みず</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#dff3f6; color:#2b3a52; font-family:-apple-system, system-ui, sans-serif;
+               overscroll-behavior:none; touch-action:none; user-select:none; -webkit-user-select:none; }
+  body { display:flex; flex-direction:column; }
+  header { flex:none; display:flex; align-items:center; gap:8px; padding:8px 10px 4px; }
+  header h1 { flex:1; font-size:17px; font-weight:900; }
+  .back { text-decoration:none; background:#fff; color:#2b3a52; font-weight:800; font-size:13px; padding:7px 10px; border-radius:10px; }
+  #go { border:0; border-radius:12px; padding:9px 12px; font-size:15px; font-weight:900; background:#3f8fd0; color:#fff; }
+  #go.on { background:#3ebb47; }
+  #info { flex:none; overflow:hidden; font-size:11px; color:#5a6576; padding:0 12px 2px; font-family:ui-monospace, Menlo, monospace; white-space:pre; min-height:28px; }
+  #stage { flex:1; position:relative; min-height:0; }
+  canvas { display:block; position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
+  #panel { flex:none; background:rgba(255,255,255,0.75); padding:6px 10px calc(8px + env(safe-area-inset-bottom, 0px)); }
+  .row { display:flex; align-items:center; gap:6px; margin:3px 0; font-size:12px; font-weight:800; }
+  .row label { width:76px; flex:none; white-space:nowrap; }
+  .row input[type=range] { flex:1; }
+  .row .v { width:34px; text-align:right; font-family:ui-monospace, Menlo, monospace; }
+  #fills { display:grid; grid-template-columns:repeat(9, 1fr); gap:4px; flex:1; }
+  #fills button { border:0; border-radius:8px; padding:6px 0; font-size:13px; font-weight:900; background:#e3eaf2; color:#2b3a52; }
+  #fills button.on { background:#3f8fd0; color:#fff; }
+  .chk { display:flex; gap:12px; }
+  .chk label { width:auto; display:flex; align-items:center; gap:4px; }
+</style>
+</head>
+<body>
+<header><a class="back" href="lab.html">← ためし</a><h1>🌊 かたむけて みず</h1><button id="go">センサーを つかう</button></header>
+<div id="info"></div>
+<div id="stage"><canvas id="c"></canvas></div>
+<div id="panel">
+  <div class="row"><label>みずの かず</label><div id="fills"></div></div>
+  <div class="row"><label>ばね</label><input id="k" type="range" min="10" max="300" value="90"><span class="v" id="kv"></span></div>
+  <div class="row"><label>ねばり</label><input id="damp" type="range" min="1" max="30" value="6"><span class="v" id="dv"></span></div>
+  <div class="row"><label>ゆれ</label><input id="shk" type="range" min="0" max="30" value="10"><span class="v" id="sv"></span></div>
+  <div class="row chk"><label><input id="faces" type="checkbox" checked>かお</label><label><input id="small" type="checkbox" checked>ちいさい ガラス 9こ</label><label><input id="level" type="checkbox" checked>すいへいを たもつ</label></div>
+</div>
+<script>
+(function(){
+  var v = encodeURIComponent(document.lastModified);
+  ['overrides.js', 'engine.js'].forEach(function(f){ document.write('<script src="' + f + '?v=' + v + '"><\/script>'); });
+})();
+</script>
+<script>
+// ─── ためし：スマホの かたむきで ガラスの なかの みずを うごかす ─────────────────
+// 「はんぶん」の 0.1〜0.9（ガラスの キャラ）に いれるか ためす ページ。
+//   ・DeviceOrientation の gamma（よこの かたむき）で、みずの おもてが いつも すいへいに なる（がめんの なかでは ぎゃくに かたむく）
+//   ・ばね と ねばり で すこし おくれて ついてきて ゆれる（ちいさい ガラス ほど はやく ゆれる）
+//   ・DeviceMotion の acceleration（ふった いきおい）で なみが たつ
+//   ・iPhone は ゆびで ボタンを おして から でないと センサーを つかえない（DeviceOrientationEvent.requestPermission）
+//   ・センサーが ない（パソコンなど）ときは、ぶたいを ゆびで よこに なぞると かたむく
+// ばね・ねばり・ゆれ の つまみで うごきかたを ためして、よい あたいを ほんたいに つかう。
+const cv = document.getElementById('c'), ctx = cv.getContext('2d'), stageEl = document.getElementById('stage'), infoEl = document.getElementById('info');
+let W = 0, H = 0;
+function resize(){ const dpr = Math.min(3, window.devicePixelRatio || 1); W = stageEl.clientWidth; H = stageEl.clientHeight;
+  cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
+window.addEventListener('resize', resize);
+
+// ── せってい（つまみ）──
+const $ = id => document.getElementById(id);
+const opt = { k: 90, damp: 6, shk: 10, faces: true, small: true, level: true, fill: 5 };
+function bindRange(id, vid, key, f){ const el = $(id), show = () => { opt[key] = +el.value; $(vid).textContent = f ? f(opt[key]) : opt[key]; }; el.addEventListener('input', show); show(); }
+bindRange('k', 'kv', 'k'); bindRange('damp', 'dv', 'damp'); bindRange('shk', 'sv', 'shk');
+['faces', 'small', 'level'].forEach(id => { const el = $(id); el.addEventListener('change', () => { opt[id] = el.checked; }); });
+const fillsEl = $('fills');
+for(let d = 1; d <= 9; d++){ const b = document.createElement('button'); b.textContent = '0.' + d; b.addEventListener('click', () => { opt.fill = d; fillUi(); }); fillsEl.appendChild(b); }
+function fillUi(){ [...fillsEl.children].forEach((b, i) => b.classList.toggle('on', i + 1 === opt.fill)); }
+fillUi();
+
+// ── センサー ──
+const sens = { on: false, gamma: 0, beta: 0, ax: 0, ay: 0, n: 0, rate: 0, t0: performance.now(), msg: 'まだ（「センサーを つかう」を おしてね）', fake: 0 };
+function onOrient(e){ if(e.gamma == null) return; sens.gamma = e.gamma; sens.beta = e.beta || 0; sens.n++; sens.got = true; }
+function onMotion(e){ const a = e.acceleration || {}; sens.ax = a.x || 0; sens.ay = a.y || 0; }
+async function start(){
+  try{
+    // iPhone（iOS 13〜）：ゆびで おした とき だけ きける
+    if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+      const r = await DeviceOrientationEvent.requestPermission();
+      if(r !== 'granted'){ sens.msg = 'ゆるされなかった（' + r + '）。せっていの Safari → モーションと かたむき も みてね'; return; }
+      if(typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){ try{ await DeviceMotionEvent.requestPermission(); }catch(e){} }
+    }
+    window.addEventListener('deviceorientation', onOrient);
+    window.addEventListener('devicemotion', onMotion);
+    sens.on = true; sens.msg = 'オン（0かい/びょう なら センサーが ない）';
+    $('go').classList.add('on'); $('go').textContent = 'センサー オン';
+  }catch(e){ sens.msg = 'だめ でした：' + (e && e.message || e); }
+}
+$('go').addEventListener('click', start);
+
+// センサーが ないとき：ゆびで よこに なぞると かたむく（はなすと もどる）
+let drag = null;
+cv.addEventListener('pointerdown', e => { drag = { x: e.clientX }; try{ cv.setPointerCapture(e.pointerId); }catch(_){} });
+cv.addEventListener('pointermove', e => { if(drag) sens.fake = Math.max(-60, Math.min(60, (e.clientX - drag.x)/W*120)); });
+const endDrag = () => { drag = null; sens.fake = 0; };
+cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
+
+// ── ガラスの え（hanbun.html と おなじ かきかた）──
+const ART = 96, KEY_RGB = [255, 0, 255];
+const liqCol = d => darken(oneCellColor(d, 0), 0.22);
+function keyOut(o, S){ const im = o.getImageData(0, 0, S*2, S*2), a = im.data;
+  for(let i = 0; i < a.length; i += 4){ const m = Math.min(a[i], a[i+2]) - a[i+1]; if(m > 60 && Math.abs(a[i] - a[i+2]) < 90) a[i+3] = Math.round(a[i+3]*(1 - Math.min(1, (m - 60)/120))); }
+  o.putImageData(im, 0, 0); }
+const artCache = {};
+function artCanvas(){ const S = ART*4, oc = document.createElement('canvas'); oc.width = oc.height = S*2; const o = oc.getContext('2d'); o.scale(2, 2); return { oc, o, S, x0: S/2 - ART/2, y0: S/2 - ART/2 }; }
+function faceArt(d){ if(artCache['f' + d]) return artCache['f' + d];
+  const s = blockSpec(d), A = artCanvas();
+  const face = Object.assign({}, s.face, { buttons: 0, limbRGB: KEY_RGB, limbGrad: null, shoes: null, gloves: null });
+  const fg = { faceScale: 0.74, faceOffsetY: -0.1, mouthOffsetY: -0.04, mouthOffsetX: -0.05, eyeScale: d === 1 ? 1.1 : 0.9, limbRGB: KEY_RGB, limbGrad: null };
+  const sp = Object.assign({}, s, { face, faceGeom: fg, rows: 1, cols: 1, cells: [{ gx: 0, gy: 0, group: 0, colorRGB: KEY_RGB, borderRGB: KEY_RGB, isTen: false, isHundred: false }],
+    groups: [{ kind: 'one', cellIndexes: [0], fillRGB: KEY_RGB, borderRGB: KEY_RGB }] });
+  drawNumberblock(A.o, d, A.x0, A.y0, ART, { t: 0, numberling: false, spec: sp }); keyOut(A.o, A.S); return (artCache['f' + d] = A); }
+function limbArt(d){ if(artCache['l' + d]) return artCache['l' + d];
+  const f = blockSpec(d).face, s1 = blockSpec(1), A = artCanvas();
+  const rgbL = f.limbRGB || (f.limbGrad ? null : darken(liqCol(d), 0.15)), grad = f.limbGrad || null;
+  const sp = Object.assign({}, s1, { face: Object.assign({}, s1.face, { limbRGB: rgbL, limbGrad: grad, shoes: null, gloves: null }), faceGeom: { limbRGB: rgbL, limbGrad: grad } });
+  A.o.save(); A.o.beginPath(); A.o.rect(0, 0, A.S, A.S); A.o.rect(A.x0 + ART, A.y0, -ART, ART); A.o.clip('evenodd');
+  drawNumberblock(A.o, 1, A.x0, A.y0, ART, { t: 0, numberling: false, spec: sp }); A.o.restore(); return (artCache['l' + d] = A); }
+function drawArt(A, cx, cy, bs){ const S = A.S*bs/ART; ctx.drawImage(A.oc, cx - S/2, cy - S/2, S, S); }
+
+// ── みずの うごき ──
+// g：ガラス 1こ ぶんの じょうたい。th：みずの おもての かたむき（がめんの なかで。ラジアン）、om：その はやさ、amp：なみの 大きさ
+function mkGlass(d, size){ return { d, size, th: 0, om: 0, amp: 0, ph: Math.random()*6 }; }
+let big = mkGlass(5, 1), smalls = [];
+for(let d = 1; d <= 9; d++) smalls.push(mkGlass(d, 0.4));
+function tilt(){ return (sens.on && sens.got ? sens.gamma : 0) + sens.fake; }        // よこの かたむき（ど）
+function stepGlass(g, dt, jolt){
+  // めざす かたむき：スマホを みぎに かたむけたら、がめんの なかでは ひだりに かたむく（そとから みて すいへい）
+  const lim = 45, tg = opt.level ? -Math.max(-lim, Math.min(lim, tilt()))*Math.PI/180 : 0;
+  const k = opt.k/Math.sqrt(g.size), c = opt.damp/Math.sqrt(g.size);   // ちいさい ほど はやく ゆれる
+  g.om += (k*(tg - g.th) - c*g.om)*dt; g.th += g.om*dt;
+  g.th = Math.max(-1.1, Math.min(1.1, g.th));
+  g.amp += (Math.abs(g.om)*0.02 + jolt*opt.shk*0.004)*dt*60; g.amp *= Math.pow(0.12, dt); g.amp = Math.min(0.12, g.amp);
+  g.ph += dt*(6 + 4/Math.sqrt(g.size));
+}
+// ── かく ──
+function glass(x0, y0, bs, g){
+  const r = bs*0.09, inset = bs*0.055, ix = x0 + inset, iy = y0 + inset, iw = bs - inset*2, ih = bs - inset*2, col = liqCol(g.d), fill = g.d/10;
+  ctx.save();
+  ctx.fillStyle = 'rgba(214,236,248,0.6)'; ctx.beginPath(); ctx.roundRect(x0, y0, bs, bs, r); ctx.fill();
+  // みず：おもては (cx, ly) を とおる かたむいた せん（＋なみ）。その した がわを ぬる
+  ctx.save(); ctx.beginPath(); ctx.roundRect(ix, iy, iw, ih, r*0.7); ctx.clip();
+  const cx = ix + iw/2, ly = iy + ih*(1 - fill), ux = Math.cos(g.th), uy = Math.sin(g.th), nx = -uy, ny = ux, L = iw*1.6;
+  const pts = []; for(let i = 0; i <= 24; i++){ const t = -L + 2*L*i/24, w = Math.sin(t/iw*Math.PI*2.2 + g.ph)*g.amp*bs + Math.sin(t/iw*Math.PI*1.1 - g.ph*0.7)*bs*0.012;
+    pts.push([cx + ux*t - nx*w, ly + uy*t - ny*w]); }
+  const gr = ctx.createLinearGradient(0, ly - bs*0.3, 0, y0 + bs); gr.addColorStop(0, rgb(mixWhite(col, 0.12))); gr.addColorStop(1, rgb(darken(col, 0.12)));
+  ctx.fillStyle = gr; ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
+  const e = pts[pts.length - 1], s = pts[0]; ctx.lineTo(e[0] + nx*L*2, e[1] + ny*L*2); ctx.lineTo(s[0] + nx*L*2, s[1] + ny*L*2); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = rgba(mixWhite(col, 0.55), 0.9); ctx.lineWidth = Math.max(1, bs*0.022); ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
+  ctx.restore();
+  ctx.strokeStyle = 'rgba(70,100,130,0.35)'; ctx.lineWidth = Math.max(0.8, bs*0.012); ctx.beginPath();
+  for(let i = 1; i < 10; i++){ const yy = iy + ih - ih*i/10, w = i === 5 ? bs*0.16 : bs*0.09; ctx.moveTo(ix, yy); ctx.lineTo(ix + w, yy); } ctx.stroke();
+  ctx.strokeStyle = 'rgba(110,145,175,0.95)'; ctx.lineWidth = Math.max(1.2, bs*0.04); ctx.beginPath(); ctx.roundRect(x0, y0, bs, bs, r); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = Math.max(1.2, bs*0.035); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x0 + bs*0.8, y0 + bs*0.12); ctx.lineTo(x0 + bs*0.88, y0 + bs*0.12); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x0 + bs*0.88, y0 + bs*0.2); ctx.lineTo(x0 + bs*0.88, y0 + bs*0.42); ctx.stroke();
+  ctx.restore();
+}
+function label(s, cx, cy, h){ const gw = h*0.56, sp = h*0.2, dotW = h*0.3, ws = [...s].map(ch => ch === '.' ? dotW : gw), tot = ws.reduce((a, b) => a + b, 0) + sp*(s.length - 1);
+  ctx.save(); ctx.lineWidth = h*0.22; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#000'; ctx.fillStyle = '#000';
+  let x = cx - tot/2; [...s].forEach((ch, i) => { if(ch === '.'){ ctx.beginPath(); ctx.arc(x + dotW/2, cy + h/2 - h*0.11, h*0.13, 0, Math.PI*2); ctx.fill(); } else { digitPath(ctx, ch, x + gw/2, cy, h); ctx.stroke(); } x += ws[i] + sp; });
+  ctx.restore(); }
+function charAt(g, cx, foot, bs){
+  if(opt.faces) drawArt(limbArt(g.d), cx, foot - bs/2, bs);
+  glass(cx - bs/2, foot - bs, bs, g);
+  if(opt.faces) drawArt(faceArt(g.d), cx, foot - bs/2, bs);
+  label('0.' + g.d, cx, foot - bs - bs*(0.3 + (g.d === 3 ? 0.42 : g.d === 7 ? 0.3 : 0)), bs*0.3);
+}
+
+// ── まいフレーム ──
+let last = performance.now();
+function frame(now){
+  const dt = Math.min(0.05, (now - last)/1000); last = now;
+  if(now - sens.t0 > 1000){ sens.rate = sens.n; sens.n = 0; sens.t0 = now; }
+  const jolt = Math.min(20, Math.hypot(sens.ax, sens.ay));
+  big.d = opt.fill;
+  stepGlass(big, dt, jolt); for(const g of smalls) stepGlass(g, dt, jolt);
+  ctx.clearRect(0, 0, W, H);
+  const showSmall = opt.small, bigBs = Math.min(W*0.42, (showSmall ? H*0.45 : H*0.6) - 40), bigFoot = (showSmall ? H*0.62 : H*0.8);
+  charAt(big, W/2, bigFoot, bigBs);
+  if(showSmall){ const bs = Math.min(W/9/1.9, H*0.16), foot = H - bs*0.75;
+    smalls.forEach((g, i) => charAt(g, W*(i + 0.5)/9, foot, bs)); }
+  // かたむきの めじるし（そとから みた すいへい せん）
+  const a = -tilt()*Math.PI/180; ctx.save(); ctx.strokeStyle = 'rgba(63,143,208,0.35)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(W/2 - Math.cos(a)*W, 24 - Math.sin(a)*W); ctx.lineTo(W/2 + Math.cos(a)*W, 24 + Math.sin(a)*W); ctx.stroke(); ctx.restore();
+  infoEl.textContent = 'センサー：' + sens.msg + '\n' + 'よこ γ ' + sens.gamma.toFixed(1) + '°  たて β ' + sens.beta.toFixed(1) + '°  ゆび ' + sens.fake.toFixed(0) + '°  ふり ' + jolt.toFixed(1) + '  ' + sens.rate + 'かい/びょう';
+  requestAnimationFrame(frame);
+}
+resize(); requestAnimationFrame(frame);
+
+// テスト よう
+window.mizu = { big: () => big, sens: () => sens, opt: () => opt, feed: g => onOrient({ gamma: g, beta: 0 }), start };
+</script>
+</body>
+</html>
