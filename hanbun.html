@@ -20,11 +20,11 @@
   #stage { flex:1; position:relative; min-height:0; }
   canvas { display:block; position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
   #bar { flex:none; display:flex; gap:6px; align-items:center; padding:6px 10px calc(8px + env(safe-area-inset-bottom, 0px)); background:rgba(255,255,255,0.7); }
-  #nums { flex:1; min-width:0; display:grid; grid-template-columns:repeat(6, 1fr); gap:5px; }
+  #nums { flex:1; min-width:0; display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; }
   #nums button { height:40px; min-width:0; border:2px solid var(--b); border-radius:11px; background:var(--f); color:#2b3a52;
-                 font-size:clamp(17px, 5.6vw, 22px); font-weight:900; line-height:1; padding:0; box-shadow:0 2px 0 var(--b); }
+                 font-size:clamp(14px, 4.6vw, 21px); font-weight:900; line-height:1; padding:0; box-shadow:0 2px 0 var(--b); }
   #nums button:active { transform:translateY(2px); box-shadow:none; }
-  #nums #clear { --f:#dfe6ef; --b:#b8c3d2; font-size:clamp(10px, 3.1vw, 13px); font-weight:800; }
+  #nums #clear { --f:#dfe6ef; --b:#b8c3d2; font-size:clamp(11px, 3.4vw, 14px); font-weight:800; grid-column:span 2; }
   #home { flex:none; width:clamp(44px, 14vw, 56px); height:85px; border:0; border-radius:14px; background:#fff; box-shadow:0 1px 3px rgba(40,60,90,0.15);
           display:flex; align-items:center; justify-content:center; transition:transform 0.12s; }
   #home.on { background:#fff4c8; box-shadow:0 0 0 3px #e7b400; }        /* つれて いける ときは ひかる */
@@ -53,26 +53,87 @@
 //   ドラッグして かさねると くっつく（いままで どおり たしざん）：2.5 ＋ 2.5 ＝ 5。
 //   はんぶん（0.5）は ながしかくの ブロック（1 の はんぶん の たかさ。0.5 の「5」から 5 の なかま：5 の いろを すこし こく した いろ・5 の かお）。2.5 は 2 の あたまに のる。
 //   ぼうし・かみの けが ある キャラ（3・7・20）は かくれて しまうので、あしもとの みぎよこに つく。
-//   はんぶんの はんぶん（0.25）は まだ ださない（2.5 や 0.5 は わけられない）。
+//   0.1〜0.9（パパと きめた キャラシート あん2）：1 と おなじ 大きさの ガラスの キューブに、その かずの いろの みずが 0.いくつ ぶん。
+//   かおは 1〜9 の もの（つぶさない）、てあしは みんな 1 と おなじ かたち・ばしょ で いろ だけ ちがう。2.3 は 2 の あたまに みずが 0.3 の ガラス。
+//   1（と 0.いくつ）を ダブルタップ すると 0.1 に パラパラ（1 → 0.1 が 10こ）。かさねると みずを そそぐ（0.9 ＋ 0.1 ＝ いっぱい ＝ 1）。
+//   はんぶんこ は 0.1 の かずが ぐうすう の とき だけ（0.4 → 0.2 と 0.2）。0.05（0.01 の くらい）は まだ ださない（0.5 や 2.5 は わけられない）。
 //   つまんで ひろげると ねばねば のびて（よこに のび たてに ちぢむ）、わかれると ねばねばの いとで つながった まま はなれ、ぷつっと きれて ぷるん と ゆれる。
 //   ひだりしたの おうち 🏠 に つれて いって はなすと その キャラだけ かえる（きえる）。
 //   たくさん わけても ちいさく なりすぎない ように、ぶんしょうの ように たて・よこに ならべる（だん）。
 // この たんまつの localStorage（nb_hanbun）に いる キャラと「だす」かずを おぼえる。
 const V_MAX = 100, MAX_CHARS = 24;
-const ADD_NUMS = [0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];   // したの ボタン（おすと その かずの キャラが でる）
+const ADD_NUMS = [0.1, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];   // したの ボタン（おすと その かずの キャラが でる）
 const BS_MAX = 40;
 const SPLIT_PX = 45;        // ゆびが これだけ ひろがったら はんぶんこ
-// はんぶんの ブロック：0.5 の「5」から、5 の なかま（5 の シアンを すこし こく した いろ）。2.5 などに のる ブロックも おなじ いろ
-const HALF_RGB = darken(DIGIT_COLORS[5], 0.22);
-// 0.5 の キャラ：5 の かお（ほしの マスク・あかい くちびる・ほしの てぶくろ）の まま、キューブ 1こ を はんぶんの たかさに した もの
-let halfSpec = null;
-function halfCharSpec(){
-  if(halfSpec) return halfSpec;
-  const s5 = blockSpec(5), bor = darken(HALF_RGB, 0.34);
-  halfSpec = Object.assign({}, s5, { rows: 1, cols: 1,
-    cells: [{ gx: 0, gy: 0, group: 0, colorRGB: HALF_RGB, borderRGB: bor, isTen: false, isHundred: false }],
-    groups: [{ kind: 'one', cellIndexes: [0], fillRGB: HALF_RGB, borderRGB: bor }] });
-  return halfSpec;
+// ── ガラスの キャラ（0.1〜0.9）──
+// え は ART の 大きさで 1かい かいて とっておき、bs に あわせて ちぢめて つかう（bs は うごくので まいかい かかない）
+const ART = 96, KEY_RGB = [255, 0, 255];
+const liqCol = d => darken(oneCellColor(d, 0), 0.22);          // みずの いろ：d の いろを すこし こく
+const HALF_RGB = liqCol(5);
+function keyOut(o, S){
+  const im = o.getImageData(0, 0, S*2, S*2), a = im.data;
+  for(let i = 0; i < a.length; i += 4){ const m = Math.min(a[i], a[i+2]) - a[i+1];
+    if(m > 60 && Math.abs(a[i] - a[i+2]) < 90) a[i+3] = Math.round(a[i+3]*(1 - Math.min(1, (m - 60)/120))); }
+  o.putImageData(im, 0, 0);
+}
+const artCache = {};
+function artCanvas(){ const S = ART*4, oc = document.createElement('canvas'); oc.width = oc.height = S*2; const o = oc.getContext('2d'); o.scale(2, 2); return { oc, o, S, x0: S/2 - ART/2, y0: S/2 - ART/2 }; }
+// d の かお（ぼうし・かみ・めがね こみ）。からだ と てあし は すきとおらせる
+function faceArt(d){
+  if(artCache['f' + d]) return artCache['f' + d];
+  const s = blockSpec(d), A = artCanvas();
+  const face = Object.assign({}, s.face, { buttons: 0, limbRGB: KEY_RGB, limbGrad: null, shoes: null, gloves: null });
+  const fg = { faceScale: 0.74, faceOffsetY: -0.1, mouthOffsetY: -0.04, mouthOffsetX: -0.05, eyeScale: d === 1 ? 1.1 : 0.9, limbRGB: KEY_RGB, limbGrad: null };
+  const sp = Object.assign({}, s, { face, faceGeom: fg, rows: 1, cols: 1,
+    cells: [{ gx: 0, gy: 0, group: 0, colorRGB: KEY_RGB, borderRGB: KEY_RGB, isTen: false, isHundred: false }],
+    groups: [{ kind: 'one', cellIndexes: [0], fillRGB: KEY_RGB, borderRGB: KEY_RGB }] });
+  drawNumberblock(A.o, d, A.x0, A.y0, ART, { t: 0, numberling: false, spec: sp });
+  keyOut(A.o, A.S);
+  return (artCache['f' + d] = A);
+}
+// てあし：みんな 1 と おなじ かたち・ばしょ。いろ だけ d の てあしの いろ（なければ みずの いろを すこし こく）
+function limbArt(d){
+  if(artCache['l' + d]) return artCache['l' + d];
+  const f = blockSpec(d).face, s1 = blockSpec(1), A = artCanvas();
+  const rgbL = f.limbRGB || (f.limbGrad ? null : darken(liqCol(d), 0.15)), grad = f.limbGrad || null;
+  const sp = Object.assign({}, s1, { face: Object.assign({}, s1.face, { limbRGB: rgbL, limbGrad: grad, shoes: null, gloves: null }), faceGeom: { limbRGB: rgbL, limbGrad: grad } });
+  A.o.save(); A.o.beginPath(); A.o.rect(0, 0, A.S, A.S); A.o.rect(A.x0 + ART, A.y0, -ART, ART); A.o.clip('evenodd');   // キューブの そと だけ
+  drawNumberblock(A.o, 1, A.x0, A.y0, ART, { t: 0, numberling: false, spec: sp }); A.o.restore();
+  return (artCache['l' + d] = A);
+}
+function drawArt(A, cx, cy){ const k = bs/ART, S = A.S*k; ctx.drawImage(A.oc, cx - S/2, cy - S/2, S, S); }
+// ガラスの キューブ（x0, y0 が ひだりうえ、1 と おなじ 大きさ）。fill：0〜1 の みずの たかさ
+function glassCube(x0, y0, fill, col, ph){
+  const r = bs*0.09, inset = bs*0.055;
+  ctx.save();
+  ctx.fillStyle = 'rgba(214,236,248,0.6)'; ctx.beginPath(); ctx.roundRect(x0, y0, bs, bs, r); ctx.fill();
+  if(fill > 0){
+    ctx.save(); ctx.beginPath(); ctx.roundRect(x0 + inset, y0 + inset, bs - inset*2, bs - inset*2, r*0.7); ctx.clip();
+    const top = y0 + bs - inset - (bs - inset*2)*fill, amp = fill < 1 ? bs*0.018 : 0;
+    const g = ctx.createLinearGradient(0, top, 0, y0 + bs); g.addColorStop(0, rgb(mixWhite(col, 0.12))); g.addColorStop(1, rgb(darken(col, 0.12)));
+    const wv = i => top + Math.sin(i/16*Math.PI*2 + ph)*amp;
+    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x0, y0 + bs);
+    for(let i = 0; i <= 16; i++) ctx.lineTo(x0 + bs*i/16, wv(i));
+    ctx.lineTo(x0 + bs, y0 + bs); ctx.closePath(); ctx.fill();
+    if(fill < 1){ ctx.strokeStyle = rgba(mixWhite(col, 0.55), 0.9); ctx.lineWidth = Math.max(1, bs*0.022); ctx.beginPath();
+      for(let i = 0; i <= 16; i++){ const xx = x0 + bs*i/16; i ? ctx.lineTo(xx, wv(i)) : ctx.moveTo(xx, wv(i)); } ctx.stroke(); }
+    ctx.restore();
+  }
+  // めもり 10こ（まんなかの 5 は ながい）
+  ctx.strokeStyle = 'rgba(70,100,130,0.35)'; ctx.lineWidth = Math.max(0.8, bs*0.012); ctx.beginPath();
+  for(let i = 1; i < 10; i++){ const yy = y0 + bs - inset - (bs - inset*2)*i/10, w = i === 5 ? bs*0.16 : bs*0.09; ctx.moveTo(x0 + inset, yy); ctx.lineTo(x0 + inset + w, yy); }
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(110,145,175,0.95)'; ctx.lineWidth = Math.max(1.2, bs*0.04); ctx.beginPath(); ctx.roundRect(x0, y0, bs, bs, r); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = Math.max(1.2, bs*0.035); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x0 + bs*0.8, y0 + bs*0.12); ctx.lineTo(x0 + bs*0.88, y0 + bs*0.12); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x0 + bs*0.88, y0 + bs*0.2); ctx.lineTo(x0 + bs*0.88, y0 + bs*0.42); ctx.stroke();
+  ctx.restore();
+}
+// 0.d の キャラ（cx：まんなか、foot：キューブの した）
+function drawGlassChar(d, cx, foot, ph){
+  drawArt(limbArt(d), cx, foot - bs/2);
+  glassCube(cx - bs/2, foot - bs, d/10, liqCol(d), ph);
+  drawArt(faceArt(d), cx, foot - bs/2);
 }
 
 const cv = document.getElementById('c'), ctx = cv.getContext('2d'), stageEl = document.getElementById('stage');
@@ -90,34 +151,42 @@ window.addEventListener('resize', resize);
 const KEY = 'nb_hanbun';
 let st = { chars: [5] };
 try{ const v = JSON.parse(localStorage.getItem(KEY)); if(v && typeof v === 'object') st = Object.assign(st, v); }catch(e){}
-const okV = v => typeof v === 'number' && v >= 0.5 && v <= V_MAX && Math.abs(v*2 - Math.round(v*2)) < 1e-9;
+// かずは 0.1 きざみ（なかでは 0.1 が なんこ か で かんがえる。0.1＋0.2 が 0.30000000000000004 に ならない ように）
+const tenths = v => Math.round(v*10), norm = v => Math.round(v*10)/10;
+const okV = v => typeof v === 'number' && tenths(v) >= 1 && v <= V_MAX && Math.abs(v*10 - tenths(v)) < 1e-6;
 function save(){ try{ localStorage.setItem(KEY, JSON.stringify({ chars: chars.map(c => c.v) })); }catch(e){} }
 
 // ── かずの かきかた ──
-const fmt = v => Number.isInteger(v) ? String(v) : String(Math.floor(v)) + '.5';
-const yomi = v => Number.isInteger(v) ? '' : (v < 1 ? '0.5 は「はんぶん」' : fmt(v) + ' は「' + Math.floor(v) + ' と はんぶん」');
+const intOf = v => Math.floor(tenths(v)/10), fracOf = v => tenths(v) % 10;
+const fmt = v => fracOf(v) ? intOf(v) + '.' + fracOf(v) : String(intOf(v));
+const YOMI = ['', 'いち', 'に', 'さん', 'よん', 'ご', 'ろく', 'なな', 'はち', 'きゅう'];
+function yomi(v){
+  const k = intOf(v), f = fracOf(v); if(!f) return '';
+  if(!k) return f === 5 ? '0.5 は「はんぶん」' : '0.' + f + ' は「れいてん ' + YOMI[f] + '」';
+  return fmt(v) + ' は「' + k + ' と ' + (f === 5 ? 'はんぶん' : '0.' + f) + '」';
+}
 
 // ── キャラ ──
 // c：{ v, x（まんなか）, y（あしもと＝いちばん したの キューブの した）, drag, born, hop, shake }
 let chars = [];
 let bs = 30;
 const now0 = () => performance.now();
-const isHalf = v => !Number.isInteger(v);
-// はんぶんの ブロックの ばしょ：いちばん うえの だんの みぎはしの うえ（top）か、ぼうし・かみの けが あれば いちばん したの みぎよこ（side）
-function halfAt(k){
+const isFrac = v => fracOf(v) !== 0;
+// 2.3 の ガラス（0.3）の ばしょ：いちばん うえの だんの みぎはしの うえ（top）か、ぼうし・かみの けが あれば いちばん したの みぎよこ（side）
+function glassAt(k){
   const s = blockSpec(k), f = s.face || {};
-  if(f.jesterHat || f.hair || f.tophat){ let b = null; for(const c of s.cells) if(!b || c.gy > b.gy || (c.gy === b.gy && c.gx > b.gx)) b = c; return { side: true, gx: b.gx + 1, gy: b.gy + 0.5 }; }
+  if(f.jesterHat || f.hair || f.tophat){ let b = null; for(const c of s.cells) if(!b || c.gy > b.gy || (c.gy === b.gy && c.gx > b.gx)) b = c; return { side: true, gx: b.gx + 1, gy: b.gy }; }
   let t = null; for(const c of s.cells) if(!t || c.gy < t.gy || (c.gy === t.gy && c.gx > t.gx)) t = c;
-  return { side: false, gx: t.gx, gy: t.gy - 0.5 };
+  return { side: false, gx: t.gx, gy: t.gy - 1 };
 }
 // キャラの おおきさ（キューブ なんこぶん）
 function dims(v){
-  const k = Math.floor(v);
-  if(k === 0) return { cols: 1, rows: 0.5 };
+  const k = intOf(v);
+  if(k === 0) return { cols: 1, rows: 1 };
   const s = blockSpec(k);
-  if(!isHalf(v)) return { cols: s.cols, rows: s.rows };
-  const h = halfAt(k);
-  return h.side ? { cols: s.cols + 1, rows: s.rows } : { cols: s.cols, rows: s.rows + 0.5 };
+  if(!isFrac(v)) return { cols: s.cols, rows: s.rows };
+  const h = glassAt(k);
+  return h.side ? { cols: s.cols + 1, rows: s.rows } : { cols: s.cols, rows: s.rows + 1 };
 }
 // ── ならべかた ──
 // chars の じゅんばんに、ぶんしょうの ように ひだりから ならべ、はいらなく なったら つぎの だん（たて・よこ に ならぶ）。
@@ -169,9 +238,9 @@ function addChar(v){
 // ── はんぶんこ・くっつく ──
 function split(c, ang){
   const t = now0();
-  if(isHalf(c.v)){ c.shake = t; say(fmt(c.v) + ' は もう はんぶんこ できないよ', 'はんぶんの はんぶん は また こんど'); return false; }
+  if(tenths(c.v) % 2){ c.shake = t; say(fmt(c.v) + ' は はんぶんこ できないよ', 'はんぶんに すると 0.1 より こまかく なっちゃう'); return false; }
   if(chars.length >= MAX_CHARS){ c.shake = t; say('いっぱい だよ', 'くっつけてから わけてね'); return false; }
-  const h = c.v/2, d = dims(h), dc = dims(c.v), i = chars.indexOf(c);
+  const h = tenths(c.v)/20, d = dims(h), dc = dims(c.v), i = chars.indexOf(c);
   // ひろげた むきに わかれる（うえ・したに ひろげたら うえ・した、ななめなら ななめ）。ang：ゆびの むき（ラジアン）
   ang = ang == null ? 0 : ang;
   let ux = Math.cos(ang), uy = Math.sin(ang); if(ux < 0 || (ux === 0 && uy < 0)){ ux = -ux; uy = -uy; }
@@ -191,12 +260,16 @@ function split(c, ang){
   save(); return true;
 }
 function merge(a, b){
-  const t = now0(), v = a.v + b.v;
+  const t = now0(), v = norm(a.v + b.v);
   if(v > V_MAX){ b.shake = t; a.shake = t; say(V_MAX + ' より おおきく なっちゃう', ''); return false; }
   const c = mk(v, b.x, t); c.y = b.y; c.hop = t; c.hx = b.x; c.hy = b.y; holdUntil = t + HOLD_MS;   // くっついた ばしょで しばらく まつ
   chars.splice(chars.indexOf(b), 1, c); chars = chars.filter(x => x !== a);
   burst(c.x, c.y - dims(v).rows*bs/2, 26);
-  say(fmt(a.v) + ' ＋ ' + fmt(b.v) + ' ＝ ' + fmt(v), yomi(v), true);
+  // みずが ちょうど いっぱいに なった（0.3 ＋ 0.7、0.9 ＋ 0.1、1.4 ＋ 0.6 …）：きんいろに ひかる
+  const full = isFrac(a.v) && isFrac(b.v) && !isFrac(v);
+  if(full){ c.gold = t; burst(c.x, c.y - dims(v).rows*bs/2, 30, true); }
+  say(fmt(a.v) + ' ＋ ' + fmt(b.v) + ' ＝ ' + fmt(v),
+      full ? (a.v < 1 && b.v < 1 ? 'いっぱい！ ' + fracOf(a.v) + ' と ' + fracOf(b.v) + ' で 10 と おなじ' : 'みずが いっぱい に なったよ') : yomi(v), true);
   save(); return c;
 }
 
@@ -206,7 +279,7 @@ const GOO_MS = 520;
 const HOLD_MS = 1400;        // わけた・くっつけた あと、ならびなおす まで まつ（どこが どう なったか 目で おえる ように）
 let holdUntil = 0;
 let goos = [];
-const colorOf = v => v < 1 ? HALF_RGB : mainColorOf(Math.floor(v));
+const colorOf = v => intOf(v) === 0 ? liqCol(fracOf(v)) : mainColorOf(intOf(v));
 function drawGoo(g, now){
   const k = (now - g.t)/GOO_MS; if(k >= 1) return false;
   const ra = rect(g.a), rb = rect(g.b);
@@ -233,8 +306,9 @@ function sayIdle(){ say('ゆび 2ほんで ひろげて はんぶんこ', 'か�
 // ── かみふぶき ──
 let confetti = [];
 const CONF = ['#e5242a', '#f39220', '#f9d62d', '#3ebb47', '#29bee2', '#3f48cc', '#923cc0'];
-function burst(x, y, n){ for(let i = 0; i < n; i++){ const a = Math.random()*Math.PI*2, s = 2 + Math.random()*4;
-  confetti.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s - 2, r: Math.random()*6, c: CONF[i % 7], life: 1 }); } }
+const GOLDS = ['#f6c343', '#e7a400', '#ffe08a', '#d08a00'];
+function burst(x, y, n, gold){ for(let i = 0; i < n; i++){ const a = Math.random()*Math.PI*2, s = 2 + Math.random()*4;
+  confetti.push({ x, y, vx: Math.cos(a)*s, vy: Math.sin(a)*s - 2, r: Math.random()*6, c: gold ? GOLDS[i % 4] : CONF[i % 7], life: 1 }); } }
 
 // ── かく ──
 function rect(c){ const d = dims(c.v), w = d.cols*bs, h = d.rows*bs; return { x: c.x - w/2, y: c.y - h, w, h }; }
@@ -252,13 +326,9 @@ function drawLabel(v, cx, by){
   });
   ctx.restore();
 }
-function halfCube(x, y){
-  const in_ = bs*0.018, r = bs*0.07;
-  ctx.fillStyle = 'rgb(' + HALF_RGB.join(',') + ')';
-  ctx.beginPath(); ctx.roundRect(x + in_, y + in_, bs - in_*2, bs/2 - in_*2, r); ctx.fill();
-}
+const hatLift = d => d === 3 ? 0.42 : d === 7 ? 0.3 : 0;     // 3 の ぼうし・7 の かみ の ぶん かずを うえに
 function drawChar(c, now){
-  const k = Math.floor(c.v), half = isHalf(c.v), d = dims(c.v);
+  const k = intOf(c.v), f = fracOf(c.v), d = dims(c.v), ph = now*0.004 + c.born*0.001;
   let x = c.x, footY = c.y;
   const age = now - c.born, hop = (now - c.hop)/450, sh = now - c.shake;
   if(hop < 1 && !c.drag) footY -= Math.sin(Math.PI*hop)*bs*1.4;
@@ -272,23 +342,25 @@ function drawChar(c, now){
   const st = stretchOf(c, now);
   if(st){ const py = footY - d.rows*bs/2;    // まんなかを ちゅうしんに、ゆびの むきへ のばす
     ctx.translate(x, py); ctx.rotate(st.ang); ctx.scale(st.s, 1/Math.sqrt(st.s)); ctx.rotate(-st.ang); ctx.translate(-x, -py); }
+  // みずが いっぱいに なった ときの きんいろの ひかり
+  const gk = c.gold != null ? (now - c.gold)/1400 : 1;
+  if(gk < 1){ const r0 = Math.max(d.cols, d.rows)*bs*0.9 + bs, cy = footY - d.rows*bs/2, g = ctx.createRadialGradient(x, cy, 0, x, cy, r0);
+    g.addColorStop(0, 'rgba(255,214,80,' + (0.75*(1 - gk)) + ')'); g.addColorStop(1, 'rgba(255,214,80,0)'); ctx.fillStyle = g; ctx.fillRect(x - r0, cy - r0, r0*2, r0*2); }
   if(c.drag){ ctx.shadowColor = 'rgba(30,50,80,0.25)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 6; }
   if(k === 0){
-    // 0.5：5 の なかまの キャラを たてに はんぶんに つぶした かたち（ちいさな ながしかく）
-    ctx.save(); ctx.translate(x, footY); ctx.scale(1, 0.5);
-    drawNumberblock(ctx, 5, -bs/2, -bs, bs, { t: now, animate: !c.drag, numberling: false, spec: halfCharSpec() });
-    ctx.restore();
-    drawLabel(c.v, x, footY - bs/2);
+    // 0.1〜0.9：ガラスの キューブに みずが 0.いくつ
+    drawGlassChar(f, x, footY, ph);
+    drawLabel(c.v, x, footY - bs - hatLift(f)*bs);
   } else {
     const s = blockSpec(k), y0 = footY - s.rows*bs;
-    if(half){
-      const h = halfAt(k), x0 = x - d.cols*bs/2;
-      if(!h.side) halfCube(x0 + h.gx*bs, y0 + h.gy*bs);
+    if(f){
+      const h = glassAt(k), x0 = x - d.cols*bs/2;
       drawNumberblock(ctx, k, x0, y0, bs, { t: now, animate: !c.drag, numberling: false });
-      if(h.side) halfCube(x0 + h.gx*bs, y0 + h.gy*bs);
+      ctx.shadowColor = 'transparent';
+      glassCube(x0 + h.gx*bs, y0 + h.gy*bs, f/10, liqCol(f), ph);
       // かずは キャラの まんなかの うえ（ぼうし・かみの けの ぶん あける）
       const lift = s.face && (s.face.jesterHat || s.face.hair) ? bs*0.55 : s.face && s.face.tophat ? bs*1.15 : 0;
-      drawLabel(c.v, x0 + s.cols*bs/2, y0 + Math.min(0, h.side ? 0 : h.gy)*bs - lift);
+      drawLabel(c.v, x0 + s.cols*bs/2, y0 + Math.min(0, h.side ? 0 : h.gy)*bs - (h.side ? lift : 0));
     } else {
       drawNumberblock(ctx, k, x - s.cols*bs/2, y0, bs, { t: now, animate: !c.drag });
     }
@@ -365,7 +437,7 @@ cv.addEventListener('pointerdown', e => {
   }
   const c = hit(p.x, p.y, 0.4);
   if(c && !c.drag) c.drag = e.pointerId;
-  ptrs.set(e.pointerId, { x: p.x, y: p.y, c: c && c.drag === e.pointerId ? c : null, ox: c ? c.x - p.x : 0, oy: c ? c.y - p.y : 0 });
+  ptrs.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y, t: now0(), c: c && c.drag === e.pointerId ? c : null, ox: c ? c.x - p.x : 0, oy: c ? c.y - p.y : 0 });
 });
 cv.addEventListener('pointermove', e => {
   const q = ptrs.get(e.pointerId); if(!q) return;
@@ -385,9 +457,42 @@ function up(e){
   c.drag = null;
   if(e.type === 'pointercancel') return;
   if(overHome(c)){ goHome(c); return; }
+  // うごかさずに ポンと おした：2かい つづけて おすと（ダブルタップ）0.1 に パラパラ
+  if(Math.hypot(q.x - q.sx, q.y - q.sy) < 12 && now0() - q.t < 400){
+    const t = now0();
+    if(lastTap && lastTap.c === c && t - lastTap.t < 420){ lastTap = null; scatter(c); }
+    else lastTap = { c, t };
+    return;
+  }
   const o = overlapWith(c);
   if(o) merge(c, o);
   else { insertAt(c, q.x, q.y); holdUntil = 0; save(); }     // はなした ところの じゅんばんに はいる
+}
+// ── ダブルタップ：1（と 0.いくつ）を 0.1 に パラパラ ──
+// 10 が 1 の 10にん なのと おなじ ように、1 は 0.1 の 10にん。あつめる（かさねる）と また 1 に もどる
+let lastTap = null;
+function scatter(c){
+  const t = now0(), n = tenths(c.v);
+  if(n === 1){ c.shake = t; say('0.1 は いちばん ちいさい よ', '0.1 を 10こ あつめると 1'); return false; }
+  if(c.v > 1){ c.shake = t; say('1 か 0.いくつ を ダブルタップ してね', '0.1 に パラパラ わかれるよ'); return false; }
+  if(chars.length - 1 + n > MAX_CHARS){ c.shake = t; say('いっぱい だよ', 'くっつけてから やってね'); return false; }
+  // 10こ ぶん はいる 大きさに すぐ する（まって いる あいだに かさならない）
+  const i = chars.indexOf(c), keep = chars.slice(); chars.splice(i, 1, ...Array.from({ length: n }, () => mk(0.1, 0, t))); bs = Math.min(bs, targetBs()); chars = keep;
+  const per = Math.max(1, Math.min(n, Math.floor((W - 16)/((1 + 1.6)*bs)))), rowsN = Math.ceil(n/per);
+  const sp = Math.min((1 + 1.6)*bs, (W - 16)/per), rowH = (1 + PAD_TOP + PAD_BOT + 0.3)*bs, cy = c.y - dims(c.v).rows*bs/2;
+  const gw = Math.min(n, per)*sp, gcx = Math.max(gw/2 + 8, Math.min(W - gw/2 - 8, c.x));   // まとまりごと がめんの なかに
+  const out = [];
+  for(let j = 0; j < n; j++){
+    const r = Math.floor(j/per), m = Math.min(per, n - r*per), col = j - r*per, p = mk(0.1, c.x, t + j*25);
+    p.y = c.y; p.jelly = t + j*25;
+    p.hx = gcx + (col - (m - 1)/2)*sp;
+    p.hy = Math.max((1 + PAD_TOP)*bs + 4, Math.min(H - PAD_BOT*bs - 4, cy + bs/2 + (r - (rowsN - 1)/2)*rowH + (col % 2 ? -bs*0.25 : 0)));
+    out.push(p);
+  }
+  chars.splice(i, 1, ...out); holdUntil = t + HOLD_MS + 500;
+  burst(c.x, cy, 22);
+  say(fmt(c.v) + ' を パラパラ → 0.1 が ' + n + 'こ', '0.1 が 10こ あつまると 1', true);
+  save(); return true;
 }
 // ── おうち：つれて いって はなすと その キャラだけ かえる ──
 const homeEl = document.getElementById('home');
@@ -411,11 +516,12 @@ cv.addEventListener('pointerup', up);
 cv.addEventListener('pointercancel', up);
 
 // ── した の ボタン ──
-// 0.5・1〜10 の ボタン（その かずの いろ。7 は にじ）。おすと その キャラが でる
+// 0.1・0.5・1〜10 の ボタン（その かずの いろ。7 は にじ）。おすと その キャラが でる
 const numsEl = document.getElementById('nums'), clearEl = document.getElementById('clear');
 for(const v of ADD_NUMS){
   const b = document.createElement('button'), col = colorOf(v);
   b.textContent = fmt(v); b.dataset.v = v;
+  if(v < 1) b.classList.add('dec');
   b.style.setProperty('--f', v === 7 ? 'linear-gradient(90deg,#fbb,#fdc,#ffe9a8,#c8efc0,#bdeefa,#c7c4f0,#e3c6f2)' : rgb(mixWhite(col, 0.6)));
   b.style.setProperty('--b', rgb(v === 10 ? [229, 36, 42] : v === 7 ? [150, 110, 190] : darken(col, 0.15)));
   b.addEventListener('click', () => { if(addChar(v)) say(fmt(v) + ' が きたよ', yomi(v) || 'ゆび 2ほんで ひろげると はんぶんこ'); });
@@ -435,7 +541,7 @@ requestAnimationFrame(frame);
 // テスト よう
 window.hanbun = { chars: () => chars.map(c => c.v), add: v => addChar(v), split: i => split(chars[i]), merge: (i, j) => merge(chars[i], chars[j]),
   at: i => { const c = chars[i], r = rect(c); return { x: c.x, y: r.y + r.h/2, w: r.w, h: r.h }; }, bs: () => bs, say: () => sayBig.textContent + '｜' + saySub.textContent,
-  clear: () => { chars = []; save(); } };
+  clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]) };
 </script>
 </body>
 </html>

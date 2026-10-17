@@ -62,6 +62,29 @@ module.exports = {
     t.eq((await vals(f)).filter(v => v === 0.5).length, 2, '0.5 が わかれた');
   },
 
+  '0.1〜0.9：1 を ダブルタップ すると 0.1 が 10こ。かさねて あつめると また 1。0.4 は 0.2 と 0.2、0.3 は わけられない': async t => {
+    const { f } = await openHanbun(t, [1]);
+    const a = await f.evaluate(() => hanbun.at(0));
+    for(let k = 0; k < 2; k++){ await ptr(f, 'pointerdown', 1, a.x, a.y); await ptr(f, 'pointerup', 1, a.x, a.y); await f.waitForTimeout(80); }
+    t.eq(await vals(f), Array(10).fill(0.1), 'パラパラ しない');
+    t.ok((await f.evaluate(() => hanbun.say())).includes('0.1 が 10こ'), 'ことば');
+    // 0.1 を ひとつずつ あつめる（0.1 ＋ 0.2 が 0.30000000000000004 に ならない）
+    for(let k = 0; k < 9; k++) await f.evaluate(() => hanbun.merge(0, 1));
+    t.eq(await vals(f), [1], '1 に もどらない');
+    t.ok((await f.evaluate(() => hanbun.say())).startsWith('0.9 ＋ 0.1 ＝ 1'), 'しき ' + await f.evaluate(() => hanbun.say()));
+    await f.evaluate(() => { hanbun.clear(); hanbun.add(0.4); hanbun.add(0.3); });
+    await f.evaluate(() => hanbun.split(0));
+    t.eq(await vals(f), [0.2, 0.2, 0.3], '0.4 が わかれない');
+    await f.evaluate(() => hanbun.split(2));
+    t.eq(await vals(f), [0.2, 0.2, 0.3], '0.3 が わかれた');
+    await f.evaluate(() => { hanbun.clear(); hanbun.add(0.3); hanbun.add(0.7); hanbun.merge(0, 1); });
+    t.eq(await vals(f), [1], '0.3 ＋ 0.7');
+    t.ok((await f.evaluate(() => hanbun.say())).includes('いっぱい'), 'いっぱい の ことば');
+    await f.evaluate(() => { hanbun.clear(); hanbun.add(2); hanbun.add(0.3); hanbun.merge(1, 0); });
+    t.eq(await vals(f), [2.3], '2 ＋ 0.3');
+    t.ok((await f.evaluate(() => hanbun.say())).includes('2.3 は「2 と 0.3」'), 'よみかた');
+  },
+
   'うえ・したに ひろげると うえ・したに わかれる。わけた あと しばらく その ばしょで まってから ならびなおす': async t => {
     const { f } = await openHanbun(t, [4]);
     const a = await f.evaluate(() => hanbun.at(0));
@@ -101,6 +124,7 @@ module.exports = {
     const a = await f.evaluate(() => hanbun.at(0));
     await ptr(f, 'pointerdown', 1, a.x, a.y);
     for(let k = 1; k <= 8; k++) await ptr(f, 'pointermove', 1, a.x + (h.x - a.x)*k/8, a.y + (h.y - a.y)*k/8);
+    await f.waitForTimeout(80);      // ひかるのは つぎの フレーム
     t.ok(await f.evaluate(() => document.getElementById('home').classList.contains('over')), 'おうちが ひからない');
     await ptr(f, 'pointerup', 1, h.x, h.y);
     t.eq(await vals(f), [4], '3 が かえらない');
@@ -123,7 +147,7 @@ module.exports = {
 
   'だす・かたづける。はんぶんの キャラも ぶたいの 中に おさまる': async t => {
     const { f } = await openHanbun(t, []);
-    t.eq(await f.evaluate(() => [...document.querySelectorAll('#nums button')].map(b => b.textContent)), ['0.5', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'かたづける'], 'ボタン');
+    t.eq(await f.evaluate(() => [...document.querySelectorAll('#nums button')].map(b => b.textContent)), ['0.1', '0.5', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'かたづける'], 'ボタン');
     await f.evaluate(() => { [...document.querySelectorAll('#nums button')].find(b => b.textContent === '7').click(); [...document.querySelectorAll('#nums button')].find(b => b.textContent === '0.5').click(); });
     t.eq(await vals(f), [7, 0.5], 'だす');
     await f.evaluate(() => { hanbun.clear(); [0.5, 2.5, 3.5, 6.5, 7.5, 10.5, 20.5, 99.5].forEach(v => hanbun.add(v)); });
