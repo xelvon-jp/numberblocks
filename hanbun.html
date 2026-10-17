@@ -49,14 +49,25 @@
 // ひなたが 0.5 に きょうみを もったので つくった（ゲームの「はんぶん」タブの 中で ひらく）。もんだいは ださない。
 //   ゆび 2ほんで キャラを ひろげる（ピンチアウト）と はんぶんこ：4 → 2 と 2、5 → 2.5 と 2.5、1 → 0.5 と 0.5。
 //   ドラッグして かさねると くっつく（いままで どおり たしざん）：2.5 ＋ 2.5 ＝ 5。
-//   はんぶん（0.5）は ながしかくの ブロック（1 の はんぶん の たかさ。1 と おなじ あか）。2.5 は 2 の あたまに のる。
+//   はんぶん（0.5）は ながしかくの ブロック（1 の はんぶん の たかさ。0.5 の「5」から 5 の なかま：5 の いろを すこし こく した いろ・5 の かお）。2.5 は 2 の あたまに のる。
 //   ぼうし・かみの けが ある キャラ（3・7・20）は かくれて しまうので、あしもとの みぎよこに つく。
 //   はんぶんの はんぶん（0.25）は まだ ださない（2.5 や 0.5 は わけられない）。
 // この たんまつの localStorage（nb_hanbun）に いる キャラと「だす」かずを おぼえる。
 const V_MAX = 100, N_MAX = 20, MAX_CHARS = 12;
 const BS_MAX = 40;
 const SPLIT_PX = 45;        // ゆびが これだけ ひろがったら はんぶんこ
-const HALF_RGB = [229, 36, 42];    // はんぶんの ブロック（1 と おなじ あか）
+// はんぶんの ブロック：0.5 の「5」から、5 の なかま（5 の シアンを すこし こく した いろ）。2.5 などに のる ブロックも おなじ いろ
+const HALF_RGB = darken(DIGIT_COLORS[5], 0.22);
+// 0.5 の キャラ：5 の かお（ほしの マスク・あかい くちびる・ほしの てぶくろ）の まま、キューブ 1こ を はんぶんの たかさに した もの
+let halfSpec = null;
+function halfCharSpec(){
+  if(halfSpec) return halfSpec;
+  const s5 = blockSpec(5), bor = darken(HALF_RGB, 0.34);
+  halfSpec = Object.assign({}, s5, { rows: 1, cols: 1,
+    cells: [{ gx: 0, gy: 0, group: 0, colorRGB: HALF_RGB, borderRGB: bor, isTen: false, isHundred: false }],
+    groups: [{ kind: 'one', cellIndexes: [0], fillRGB: HALF_RGB, borderRGB: bor }] });
+  return halfSpec;
+}
 
 const cv = document.getElementById('c'), ctx = cv.getContext('2d'), stageEl = document.getElementById('stage');
 const sayBig = document.querySelector('#say .big'), saySub = document.querySelector('#say .sub');
@@ -188,9 +199,9 @@ function drawChar(c, now){
   ctx.save(); ctx.translate(x, footY); ctx.scale(sc, sc); ctx.translate(-x, -footY);
   if(c.drag){ ctx.shadowColor = 'rgba(30,50,80,0.25)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 6; }
   if(k === 0){
-    // 0.5：1 を たてに はんぶんに つぶした かたち（かおも てあしも ある、ちいさな ながしかく）
+    // 0.5：5 の なかまの キャラを たてに はんぶんに つぶした かたち（ちいさな ながしかく）
     ctx.save(); ctx.translate(x, footY); ctx.scale(1, 0.5);
-    drawNumberblock(ctx, 1, -bs/2, -bs, bs, { t: now, animate: !c.drag, numberling: false });
+    drawNumberblock(ctx, 5, -bs/2, -bs, bs, { t: now, animate: !c.drag, numberling: false, spec: halfCharSpec() });
     ctx.restore();
     drawLabel(c.v, x, footY - bs/2);
   } else {
