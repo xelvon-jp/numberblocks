@@ -62,6 +62,21 @@ module.exports = {
     t.eq((await vals(f)).filter(v => v === 0.5).length, 2, '0.5 が わかれた');
   },
 
+  'うえ・したに ひろげると うえ・したに わかれる。わけた あと しばらく その ばしょで まってから ならびなおす': async t => {
+    const { f } = await openHanbun(t, [4]);
+    const a = await f.evaluate(() => hanbun.at(0));
+    await ptr(f, 'pointerdown', 1, a.x, a.y - 4); await ptr(f, 'pointerdown', 2, a.x, a.y + 4);
+    for(let k = 1; k <= 6; k++){ await ptr(f, 'pointermove', 1, a.x, a.y - 4 - k*8); await ptr(f, 'pointermove', 2, a.x, a.y + 4 + k*8); }
+    await ptr(f, 'pointerup', 1, a.x, a.y - 52); await ptr(f, 'pointerup', 2, a.x, a.y + 52);
+    t.eq(await vals(f), [2, 2], 'わかれない');
+    await f.waitForTimeout(700);
+    const m = await f.evaluate(() => [hanbun.at(0), hanbun.at(1)]);
+    t.ok(Math.abs(m[0].x - m[1].x) < 10 && m[1].y - m[0].y > m[0].h, 'うえ・したに わかれない ' + JSON.stringify(m));
+    await f.waitForTimeout(1500);
+    const e = await f.evaluate(() => [hanbun.at(0), hanbun.at(1)]);
+    t.ok(Math.abs(e[0].y - e[1].y) < 2 && Math.abs(e[0].x - e[1].x) > e[0].w, 'ならびなおさない ' + JSON.stringify(e));
+  },
+
   'ドラッグで かさねると くっつく（2.5 ＋ 2.5 ＝ 5、0.5 ＋ 0.5 ＝ 1）。はなれた ところで はなすと くっつかない。ひらきなおしても のこる': async t => {
     const { f } = await openHanbun(t, [2.5, 2.5, 0.5, 0.5]);
     await dragOnto(f, 0, 1);
@@ -108,8 +123,9 @@ module.exports = {
 
   'だす・かたづける。はんぶんの キャラも ぶたいの 中に おさまる': async t => {
     const { f } = await openHanbun(t, []);
-    await f.evaluate(() => { document.querySelector('.spin .p').click(); document.querySelector('.spin .p').click(); document.getElementById('add').click(); });
-    t.eq(await vals(f), [7], 'だす');
+    t.eq(await f.evaluate(() => [...document.querySelectorAll('#nums button')].map(b => b.textContent)), ['0.5', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'かたづける'], 'ボタン');
+    await f.evaluate(() => { [...document.querySelectorAll('#nums button')].find(b => b.textContent === '7').click(); [...document.querySelectorAll('#nums button')].find(b => b.textContent === '0.5').click(); });
+    t.eq(await vals(f), [7, 0.5], 'だす');
     await f.evaluate(() => { hanbun.clear(); [0.5, 2.5, 3.5, 6.5, 7.5, 10.5, 20.5, 99.5].forEach(v => hanbun.add(v)); });
     await f.waitForTimeout(1500);
     const r = await f.evaluate(() => { const W = document.getElementById('c').clientWidth, H = document.getElementById('c').clientHeight;
