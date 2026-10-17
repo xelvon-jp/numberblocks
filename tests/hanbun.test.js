@@ -80,6 +80,32 @@ module.exports = {
     t.eq(saved, [1, 5], 'のこらない');
   },
 
+  'おうちに つれて いって はなすと その キャラだけ かえる。とちゅうまで ひろげて はなすと わかれない': async t => {
+    const { f } = await openHanbun(t, [3, 4]);
+    const h = await f.evaluate(() => { const r = document.getElementById('home').getBoundingClientRect(), cr = document.getElementById('c').getBoundingClientRect(); return { x: r.left + r.width/2 - cr.left, y: r.top + r.height/2 - cr.top }; });
+    const a = await f.evaluate(() => hanbun.at(0));
+    await ptr(f, 'pointerdown', 1, a.x, a.y);
+    for(let k = 1; k <= 8; k++) await ptr(f, 'pointermove', 1, a.x + (h.x - a.x)*k/8, a.y + (h.y - a.y)*k/8);
+    t.ok(await f.evaluate(() => document.getElementById('home').classList.contains('over')), 'おうちが ひからない');
+    await ptr(f, 'pointerup', 1, h.x, h.y);
+    t.eq(await vals(f), [4], '3 が かえらない');
+    t.ok((await f.evaluate(() => hanbun.say())).includes('おうちに かえった'), 'ことば');
+    await f.waitForTimeout(400);
+    const b = await f.evaluate(() => hanbun.at(0));
+    await ptr(f, 'pointerdown', 1, b.x - 4, b.y); await ptr(f, 'pointerdown', 2, b.x + 4, b.y);
+    await ptr(f, 'pointermove', 1, b.x - 20, b.y); await ptr(f, 'pointermove', 2, b.x + 20, b.y);
+    await ptr(f, 'pointerup', 1, b.x - 20, b.y); await ptr(f, 'pointerup', 2, b.x + 20, b.y);
+    t.eq(await vals(f), [4], 'とちゅうで わかれた');
+  },
+
+  'たくさん わけても たて・よこに ならんで ちいさく なりすぎない（0.5 が 16にん）': async t => {
+    const { f } = await openHanbun(t, Array(16).fill(0.5));
+    await f.waitForTimeout(1200);
+    const r = await f.evaluate(() => { const ys = new Set(hanbun.chars().map((_, i) => Math.round(hanbun.at(i).y))); return { rows: ys.size, bs: hanbun.bs() }; });
+    t.ok(r.rows >= 2, 'よこ 1れつ の まま');
+    t.ok(r.bs >= 25, 'ちいさい ' + r.bs);
+  },
+
   'だす・かたづける。はんぶんの キャラも ぶたいの 中に おさまる': async t => {
     const { f } = await openHanbun(t, []);
     await f.evaluate(() => { document.querySelector('.spin .p').click(); document.querySelector('.spin .p').click(); document.getElementById('add').click(); });

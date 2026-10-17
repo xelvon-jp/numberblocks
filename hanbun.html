@@ -19,21 +19,27 @@
   #say .ok { color:#d08a00; }
   #stage { flex:1; position:relative; min-height:0; }
   canvas { display:block; position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
-  #bar { flex:none; display:flex; gap:8px; align-items:center; padding:6px 10px calc(8px + env(safe-area-inset-bottom, 0px)); background:rgba(255,255,255,0.7); }
+  #bar { flex:none; display:flex; gap:6px; align-items:center; padding:6px 10px calc(8px + env(safe-area-inset-bottom, 0px)); background:rgba(255,255,255,0.7); }
   .spin { display:flex; align-items:center; background:#fff; border-radius:14px; padding:4px; box-shadow:0 1px 3px rgba(40,60,90,0.15); }
   .spin button { width:clamp(34px, 10.5vw, 42px); height:42px; border:0; border-radius:11px; background:#3f8fd0; color:#fff; font-size:26px; font-weight:700; line-height:1; }
   .spin button:active { background:#2d74ad; }
   .spin button.off { opacity:0.3; }
-  .spin .val { width:clamp(34px, 11vw, 48px); text-align:center; font-size:28px; font-weight:900; }
+  .spin .val { width:clamp(28px, 9vw, 48px); text-align:center; font-size:28px; font-weight:900; }
   #add { flex:1; height:50px; border:0; border-radius:14px; background:#f0a020; color:#fff; font-size:20px; font-weight:900; box-shadow:0 3px 0 #c07a10; white-space:nowrap; }
   #add:active { transform:translateY(2px); box-shadow:0 1px 0 #c07a10; }
-  #clear { flex:none; height:50px; border:0; border-radius:14px; padding:0 10px; background:#dfe6ef; color:#2b3a52; font-size:clamp(13px, 3.9vw, 15px); font-weight:800; }
+  #home { flex:none; width:clamp(42px, 13vw, 50px); height:50px; border:0; border-radius:14px; background:#fff; box-shadow:0 1px 3px rgba(40,60,90,0.15);
+          display:flex; align-items:center; justify-content:center; transition:transform 0.12s; }
+  #home.on { background:#fff4c8; box-shadow:0 0 0 3px #e7b400; }        /* つれて いける ときは ひかる */
+  #home.over { transform:scale(1.18); background:#ffe08a; }
+  #home.bye { transform:scale(1.25) rotate(-6deg); }
+  #clear { flex:none; height:50px; border:0; border-radius:14px; padding:0 8px; background:#dfe6ef; color:#2b3a52; font-size:clamp(12px, 3.7vw, 15px); font-weight:800; }
 </style>
 </head>
 <body>
 <div id="say"><div class="big"></div><div class="sub"></div></div>
 <div id="stage"><canvas id="c"></canvas></div>
 <div id="bar">
+  <button id="home" aria-label="おうち"><svg viewBox="0 0 40 40" width="32" height="32"><path d="M20 5 L37 19 L32 19 L32 35 L8 35 L8 19 L3 19 Z" fill="#e8a04a" stroke="#8a5a20" stroke-width="2.4" stroke-linejoin="round"/><rect x="16" y="23" width="8" height="12" rx="1.5" fill="#8a5a20"/><path d="M20 5 L37 19 L3 19 Z" fill="#d0503c" stroke="#8a3020" stroke-width="2.4" stroke-linejoin="round"/></svg></button>
   <div class="spin"><button class="m" aria-label="へらす">−</button><div class="val"></div><button class="p" aria-label="ふやす">＋</button></div>
   <button id="add">だす</button><button id="clear">かたづける</button>
 </div>
@@ -52,8 +58,11 @@
 //   はんぶん（0.5）は ながしかくの ブロック（1 の はんぶん の たかさ。0.5 の「5」から 5 の なかま：5 の いろを すこし こく した いろ・5 の かお）。2.5 は 2 の あたまに のる。
 //   ぼうし・かみの けが ある キャラ（3・7・20）は かくれて しまうので、あしもとの みぎよこに つく。
 //   はんぶんの はんぶん（0.25）は まだ ださない（2.5 や 0.5 は わけられない）。
+//   つまんで ひろげると ねばねば のびて（よこに のび たてに ちぢむ）、わかれると ねばねばの いとで つながった まま はなれ、ぷつっと きれて ぷるん と ゆれる。
+//   ひだりしたの おうち 🏠 に つれて いって はなすと その キャラだけ かえる（きえる）。
+//   たくさん わけても ちいさく なりすぎない ように、ぶんしょうの ように たて・よこに ならべる（だん）。
 // この たんまつの localStorage（nb_hanbun）に いる キャラと「だす」かずを おぼえる。
-const V_MAX = 100, N_MAX = 20, MAX_CHARS = 12;
+const V_MAX = 100, N_MAX = 20, MAX_CHARS = 24;
 const BS_MAX = 40;
 const SPLIT_PX = 45;        // ゆびが これだけ ひろがったら はんぶんこ
 // はんぶんの ブロック：0.5 の「5」から、5 の なかま（5 の シアンを すこし こく した いろ）。2.5 などに のる ブロックも おなじ いろ
@@ -114,23 +123,51 @@ function dims(v){
   const h = halfAt(k);
   return h.side ? { cols: s.cols + 1, rows: s.rows } : { cols: s.cols, rows: s.rows + 0.5 };
 }
-const floorY = () => H - PAD_BOT*bs - 8;
+// ── ならべかた ──
+// chars の じゅんばんに、ぶんしょうの ように ひだりから ならべ、はいらなく なったら つぎの だん（たて・よこ に ならぶ）。
+// キューブの 大きさ bs は みんな おなじ（Numberblocks の きまり）で、ぜんぶ はいる いちばん 大きい もの。
+// わけすぎても よこ 1れつ より ずっと 大きい まま。だんは うえから、ぶたいの たての まんなか。
+const SLOT_X = 2.4, SLOT_Y = PAD_TOP + PAD_BOT + 0.6;   // て・すきま／あたまの かず・あし の ぶん（キューブ なんこぶん）
+function wrap(b){
+  const rows = []; let cur = null, w = 0;
+  for(const c of chars){ const d = dims(c.v), cw = (d.cols + SLOT_X)*b;
+    if(!cur || w + cw > W - 8){ cur = { items: [], h: 0, w: 0 }; rows.push(cur); w = 0; }
+    cur.items.push(c); w += cw; cur.w = w; cur.h = Math.max(cur.h, (d.rows + SLOT_Y)*b); }
+  return rows;
+}
+const fits = b => { const rs = wrap(b); return rs.every(r => r.w <= W - 8 || r.items.length === 1) && rs.reduce((a, r) => a + r.h, 0) <= H - 12; };
 function targetBs(){
-  // みんな よこに ならんで はいる（て の ぶん 1.6 と すきま 0.8）。いちばん せの たかい キャラも はいる
-  let r = 1, c = 1, sum = 0; for(const ch of chars){ const d = dims(ch.v); r = Math.max(r, d.rows); c = Math.max(c, d.cols); sum += d.cols + 2.4; }
-  return Math.max(4, Math.min(BS_MAX, W/(c + 6), (W - 12)/Math.max(1, sum), (H - 16)/(r + PAD_TOP + PAD_BOT + 0.6)));
+  if(!chars.length) return BS_MAX;
+  let lo = 3, hi = BS_MAX;
+  if(fits(hi)) return hi;
+  for(let i = 0; i < 18; i++){ const m = (lo + hi)/2; if(fits(m)) lo = m; else hi = m; }
+  return lo;
 }
-function mk(v, x, t){ return { v, x, y: null, vy: 0, drag: null, born: t, hop: t, shake: -1e9 }; }
-function freeX(){
-  // あいて いる ところ（いちばん ひろい すきまの まんなか）
-  const xs = chars.map(c => c.x).sort((a, b) => a - b), pts = [0].concat(xs, [W]);
-  let best = W/2, gap = -1;
-  for(let i = 0; i < pts.length - 1; i++){ const g = pts[i + 1] - pts[i]; if(g > gap){ gap = g; best = (pts[i] + pts[i + 1])/2; } }
-  return best;
+let rowsNow = [];          // さいごに ならべた だん（はなした ところで いれる ばしょを きめる）
+function place(){
+  const rows = wrap(bs), tot = rows.reduce((a, r) => a + r.h, 0);
+  let y = Math.max(6, (H - tot)/2);
+  rowsNow = rows.map(r => {
+    const y0 = y, foot = y + r.h - (PAD_BOT + 0.3)*bs; let x = (W - r.w)/2;
+    for(const c of r.items){ const cw = (dims(c.v).cols + SLOT_X)*bs; c.tx = x + cw/2; c.ty = foot; x += cw; }
+    y += r.h; return { y0, y1: y, foot, items: r.items };
+  });
 }
+// はなした ところ（x, y）に いちばん ちかい じゅんばん
+function insertAt(c, x, y){
+  chars.splice(chars.indexOf(c), 1);
+  if(!rowsNow.length){ chars.push(c); return; }
+  let r = rowsNow.find(r => y >= r.y0 && y < r.y1) || (y < rowsNow[0].y0 ? rowsNow[0] : rowsNow[rowsNow.length - 1]);
+  const items = r.items.filter(o => o !== c && chars.includes(o));
+  const nx = items.find(o => o.tx > x);
+  if(nx) chars.splice(chars.indexOf(nx), 0, c);
+  else if(items.length) chars.splice(chars.indexOf(items[items.length - 1]) + 1, 0, c);
+  else chars.push(c);
+}
+function mk(v, x, t){ return { v, x, y: null, tx: x, ty: null, drag: null, born: t, hop: t, shake: -1e9 }; }
 function addChar(v){
   if(chars.length >= MAX_CHARS){ say('いっぱい だよ', 'かたづけるか くっつけてね'); return null; }
-  const c = mk(v, freeX(), now0()); c.y = 30 + dims(v).rows*bs; chars.push(c); save(); return c;
+  const c = mk(v, W/2, now0()); chars.push(c); bs = Math.min(bs, targetBs()); place(); c.x = c.tx; c.y = c.ty - bs*3; save(); return c;
 }
 
 // ── はんぶんこ・くっつく ──
@@ -140,8 +177,10 @@ function split(c, ang){
   if(chars.length >= MAX_CHARS){ c.shake = t; say('いっぱい だよ', 'くっつけてから わけてね'); return false; }
   const h = c.v/2, d = dims(h), off = (d.cols*bs)/2 + bs*0.9;
   const i = chars.indexOf(c);
-  const a = mk(h, c.x - off, t), b = mk(h, c.x + off, t);
-  a.y = b.y = c.y; a.from = b.from = c.x;
+  // ふたりとも もとの ばしょから うまれて、ねばねばの いとで つながった まま わかれて いく（ぷるん と ゆれる）
+  const a = mk(h, c.x - off*0.3, t), b = mk(h, c.x + off*0.3, t);
+  a.y = b.y = c.y; a.born = b.born = t - 260; a.jelly = b.jelly = t;
+  goos.push({ a, b, t, rgb: colorOf(h) });
   chars.splice(i, 1, a, b);
   burst(c.x, c.y - dims(c.v).rows*bs/2, 18);
   say(fmt(c.v) + ' を はんぶんこ → ' + fmt(h) + ' と ' + fmt(h), yomi(h) || (fmt(h) + ' ＋ ' + fmt(h) + ' ＝ ' + fmt(c.v)), true);
@@ -151,10 +190,33 @@ function merge(a, b){
   const t = now0(), v = a.v + b.v;
   if(v > V_MAX){ b.shake = t; a.shake = t; say(V_MAX + ' より おおきく なっちゃう', ''); return false; }
   const c = mk(v, b.x, t); c.y = b.y; c.hop = t;
-  chars = chars.filter(x => x !== a && x !== b); chars.push(c);
+  chars.splice(chars.indexOf(b), 1, c); chars = chars.filter(x => x !== a);
   burst(c.x, c.y - dims(v).rows*bs/2, 26);
   say(fmt(a.v) + ' ＋ ' + fmt(b.v) + ' ＝ ' + fmt(v), yomi(v), true);
   save(); return c;
+}
+
+// ── ねばねば ──
+// わかれた 2ひきの あいだに のびる いと（まんなかが ほそく なって、ぷつっと きれる）
+const GOO_MS = 420;
+let goos = [];
+const colorOf = v => v < 1 ? HALF_RGB : mainColorOf(Math.floor(v));
+function drawGoo(g, now){
+  const k = (now - g.t)/GOO_MS; if(k >= 1) return false;
+  const ra = rect(g.a), rb = rect(g.b);
+  const ax = g.a.x, bx = g.b.x, ay = ra.y + Math.min(ra.h, bs)*0.5, by = rb.y + Math.min(rb.h, bs)*0.5;
+  const th = bs*0.42*(1 - k), mid = th*Math.max(0, 0.6 - k*1.2), mx = (ax + bx)/2, my = (ay + by)/2;
+  ctx.save(); ctx.fillStyle = 'rgb(' + g.rgb.join(',') + ')'; ctx.globalAlpha = 0.95;
+  ctx.beginPath(); ctx.moveTo(ax, ay - th); ctx.quadraticCurveTo(mx, my - mid, bx, by - th);
+  ctx.lineTo(bx, by + th); ctx.quadraticCurveTo(mx, my + mid, ax, ay + th); ctx.closePath(); ctx.fill();
+  ctx.restore(); return true;
+}
+// つまんで ひろげて いる あいだ：よこに のびて、たてに ちぢむ（たいせきは そのまま）。ちょっと ぷるぷる
+function stretchOf(c, now){
+  if(!pinch || pinch.c !== c) return 1;
+  const A = ptrs.get(pinch.a), B = ptrs.get(pinch.b); if(!A || !B) return 1;
+  const e = Math.max(0, Math.hypot(A.x - B.x, A.y - B.y) - pinch.d0)/SPLIT_PX;
+  return 1 + Math.min(1, e)*0.55 + Math.sin(now*0.05)*0.02*Math.min(1, e);
 }
 
 // ── ことば ──
@@ -192,11 +254,15 @@ function drawChar(c, now){
   const k = Math.floor(c.v), half = isHalf(c.v), d = dims(c.v);
   let x = c.x, footY = c.y;
   const age = now - c.born, hop = (now - c.hop)/450, sh = now - c.shake;
-  if(c.from != null && age < 300){ const e = 1 - Math.pow(1 - age/300, 3); x = c.from + (c.x - c.from)*e; }
   if(hop < 1 && !c.drag) footY -= Math.sin(Math.PI*hop)*bs*1.4;
   if(sh < 500) x += Math.sin(sh*0.06)*bs*0.18*(1 - sh/500);
   const sc = age < 260 ? 0.7 + 0.3*(age/260) + 0.12*Math.sin(Math.PI*age/260) : 1;
-  ctx.save(); ctx.translate(x, footY); ctx.scale(sc, sc); ctx.translate(-x, -footY);
+  // ぷるん（ゼリーの ように よこ・たてが かわりばんこ に ゆれて しずまる）・のびる
+  let sx = sc, sy = sc;
+  const jk = c.jelly != null ? (now - c.jelly)/700 : 1;
+  if(jk < 1){ const w = Math.sin(jk*Math.PI*5)*(1 - jk)*0.28; sx *= 1 + w; sy *= 1 - w; }
+  const st = stretchOf(c, now); if(st !== 1){ sx *= st; sy /= Math.sqrt(st); }
+  ctx.save(); ctx.translate(x, footY); ctx.scale(sx, sy); ctx.translate(-x, -footY);
   if(c.drag){ ctx.shadowColor = 'rgba(30,50,80,0.25)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 6; }
   if(k === 0){
     // 0.5：5 の なかまの キャラを たてに はんぶんに つぶした かたち（ちいさな ながしかく）
@@ -224,31 +290,30 @@ function drawChar(c, now){
 // ── うごき ──
 function step(now){
   const tb = targetBs(); bs += (tb - bs)*0.2;
-  const fy = floorY();
+  if(Math.abs(tb - bs) < 0.05) bs = tb;
+  place();
+  // じぶんの ばしょへ すうっと うごく（はんぶんこ した 2ひきは まんなかから わかれて いく）
   for(const c of chars){
     if(c.drag) continue;
-    if(c.y == null) c.y = fy;
-    if(c.y < fy){ c.vy += 1.2; c.y = Math.min(fy, c.y + c.vy); } else { c.y = fy; c.vy = 0; }
+    if(c.y == null){ c.x = c.tx; c.y = c.ty; }
+    c.x += (c.tx - c.x)*0.22; c.y += (c.ty - c.y)*0.22;
   }
-  // かさならない ように すこしずつ はなす（あしもとに いる キャラ だけ）
-  const g = chars.filter(c => !c.drag);
-  for(let i = 0; i < g.length; i++) for(let j = i + 1; j < g.length; j++){
-    const a = g[i], b = g[j], need = (dims(a.v).cols + dims(b.v).cols)*bs/2 + bs*2.4, dx = b.x - a.x;
-    if(Math.abs(dx) < need){ const p = Math.min(4, (need - Math.abs(dx))*0.15), s = dx >= 0 ? 1 : -1; a.x -= p*s; b.x += p*s; }
-  }
-  for(const c of g){ const hw = dims(c.v).cols*bs/2 + bs*1.2; c.x = Math.max(hw, Math.min(W - hw, c.x)); }
 }
 function frame(){
   const now = now0();
   step(now);
   ctx.clearRect(0, 0, W, H);
-  // ゆか
-  ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.fillRect(0, floorY() + PAD_BOT*bs*0.6, W, H);
+  // だんごとの ゆか（うすい たな）
+  ctx.fillStyle = 'rgba(255,255,255,0.55)';
+  for(const r of rowsNow){ const y = r.foot + PAD_BOT*bs*0.7; ctx.beginPath(); ctx.roundRect(6, y, W - 12, Math.max(3, bs*0.18), 3); ctx.fill(); }
   const order = chars.filter(c => !c.drag).concat(chars.filter(c => c.drag));
   // くっつく あいて を ひからせる
   for(const c of chars) if(c.drag){ const o = overlapWith(c); if(o){ const r = rect(o);
     ctx.save(); ctx.fillStyle = 'rgba(255,215,80,0.35)'; ctx.beginPath(); ctx.roundRect(r.x - bs*0.5, r.y - bs*0.8, r.w + bs, r.h + bs*1.6, bs*0.5); ctx.fill(); ctx.restore(); } }
+  goos = goos.filter(g => chars.includes(g.a) && chars.includes(g.b) && drawGoo(g, now));
   for(const c of order) drawChar(c, now);
+  homeEl.classList.toggle('on', chars.some(c => c.drag));
+  homeEl.classList.toggle('over', chars.some(c => c.drag && overHome(c)));
   confetti = confetti.filter(p => p.life > 0);
   for(const p of confetti){ p.x += p.vx; p.y += p.vy; p.vy += 0.15; p.r += 0.15; p.life -= 0.015;
     ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, p.life*2)); ctx.translate(p.x, p.y); ctx.rotate(p.r); ctx.fillStyle = p.c; ctx.fillRect(-4, -2.5, 8, 5); ctx.restore(); }
@@ -284,7 +349,7 @@ cv.addEventListener('pointerdown', e => {
     }
   }
   const c = hit(p.x, p.y, 0.4);
-  if(c && !c.drag){ c.drag = e.pointerId; c.vy = 0; chars.splice(chars.indexOf(c), 1); chars.push(c); }
+  if(c && !c.drag) c.drag = e.pointerId;
   ptrs.set(e.pointerId, { x: p.x, y: p.y, c: c && c.drag === e.pointerId ? c : null, ox: c ? c.x - p.x : 0, oy: c ? c.y - p.y : 0 });
 });
 cv.addEventListener('pointermove', e => {
@@ -295,18 +360,38 @@ cv.addEventListener('pointermove', e => {
     if(A && B && Math.hypot(A.x - B.x, A.y - B.y) - pinch.d0 > SPLIT_PX){ split(pinch.c); pinch = null; }
     return;
   }
-  if(q.c){ q.c.x = p.x + q.ox; q.c.y = Math.min(floorY(), p.y + q.oy); }
+  if(q.c){ q.c.x = p.x + q.ox; q.c.y = Math.min(H - 4, p.y + q.oy); }
 });
 function up(e){
   const q = ptrs.get(e.pointerId); if(!q) return;
   ptrs.delete(e.pointerId);
-  if(pinch && (e.pointerId === pinch.a || e.pointerId === pinch.b)){ pinch = null; return; }
+  if(pinch && (e.pointerId === pinch.a || e.pointerId === pinch.b)){ pinch.c.jelly = now0(); pinch = null; return; }   // とちゅうで はなすと ぷるん と もどる
   const c = q.c; if(!c) return;
   c.drag = null;
   if(e.type === 'pointercancel') return;
+  if(overHome(c)){ goHome(c); return; }
   const o = overlapWith(c);
   if(o) merge(c, o);
+  else { insertAt(c, q.x, q.y); save(); }     // はなした ところの じゅんばんに はいる
 }
+// ── おうち：つれて いって はなすと その キャラだけ かえる ──
+const homeEl = document.getElementById('home');
+function overHome(c){
+  const q = [...ptrs.values()].find(p => p.c === c) || null;
+  const r = homeEl.getBoundingClientRect(), cr = cv.getBoundingClientRect();
+  // ゆびの ところ（なければ キャラの まんなか）が おうちの うえ（すこし ひろめ）
+  const px = (q ? q.x : c.x) + cr.left, py = (q ? q.y : c.y) + cr.top;
+  return px >= r.left - 14 && px <= r.right + 14 && py >= r.top - 24 && py <= r.bottom + 14;
+}
+function goHome(c){
+  const r = rect(c);
+  burst(c.x, r.y + r.h/2, 14);
+  chars = chars.filter(x => x !== c);
+  say(fmt(c.v) + ' は おうちに かえったよ', 'またね！', true);
+  homeEl.classList.add('bye'); setTimeout(() => homeEl.classList.remove('bye'), 500);
+  save();
+}
+homeEl.addEventListener('click', () => say('キャラを おうちに つれて きてね', 'ドラッグして おうちの うえで はなすと かえるよ'));
 cv.addEventListener('pointerup', up);
 cv.addEventListener('pointercancel', up);
 
