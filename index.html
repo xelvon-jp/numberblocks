@@ -956,11 +956,11 @@ function startHissanTask(){
   showHissan(true);
   updateTargets();
 }
-// ─── わけっこ（waru.html）・けんばん（kenban.html）────────────────────────
+// ─── わけっこ（waru.html）・はんぶん（hanbun.html）・けんばん（kenban.html）──────────
 // タブの 下に iframe で かさねる（あそぶ じかんは そのまま かぞえる）。1まいずつ つかいまわして、まえの ようすを のこす。
 // せってい・だれが あそぶ？・きろく・ステージを 出している あいだは かくす（キャンバスに かくので）。
 // けんばんは タブに ない（せっていの「けんばん」から）。タブを おすと もどる。
-const FRAME_PAGES = { waru: 'waru.html', kenban: 'kenban.html' };
+const FRAME_PAGES = { waru: 'waru.html', hanbun: 'hanbun.html', kenban: 'kenban.html' };
 function isFrameMode(m){ return !!FRAME_PAGES[m || mode]; }
 const modeFrames = {};
 function waruSync(){
@@ -1205,7 +1205,8 @@ const TAB_DEFS = [
   {label:'おだい', val:'task'},
   {label:'けいさん', val:'calc'}, {label:'因数', val:'factor'},
   {label:'ドリル', val:'quiz'},   {label:'とけい', val:'clock'},
-  {label:'わけっこ', val:'waru'}   // あまりの ある わりざんを あそぶ（waru.html を 下に かさねる）
+  {label:'わけっこ', val:'waru'},  // あまりの ある わりざんを あそぶ（waru.html を 下に かさねる）
+  {label:'はんぶん', val:'hanbun'} // ピンチアウトで はんぶんこ・かさねて くっつく（0.5。hanbun.html を 下に かさねる）
 ];
 let tabBtns = [], opBarBtns = [];
 
