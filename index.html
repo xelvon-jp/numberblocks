@@ -3099,7 +3099,7 @@ function followTaskMode(){
   if(isClockTask(t)){
     if(mode !== 'clock') setMode('clock');
     clockT = ((t.c.start % 720) + 720) % 720; clockMerged = false;
-  } else if(mode === 'clock') setMode('calc');
+  } else if(!isCalcMode()) setMode('calc');   // とけい・はんぶん（iframe）など から くる ことも ある
   drumReset(t);
 }
 

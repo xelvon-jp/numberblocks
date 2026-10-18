@@ -161,6 +161,15 @@ module.exports = {
     await p.waitForFunction(() => S.done, null, { timeout: 10000 });
   },
 
+  '「おぼえる」は ゲームの なか では ださない（こどもが まよう）。じかに ひらいた ときは ある': async t => {
+    const p = await openH(t, 'write', 'add');
+    const n = () => p.evaluate(() => { btns = []; draw(); return btns.filter(b => b.act === openTrain).length; });
+    const solo = await n();
+    await p.goto(p.url().split('?')[0] + '?embed=1&kind=add');
+    await p.waitForFunction(() => typeof newProblem === 'function' && P);
+    t.eq([solo, await n()], [1, 0], '「おぼえる」の ボタンが ちがう');
+  },
+
   'よみとり：小さな まるに ながい しっぽの 9 を 7 と まちがえない（96−57 で あった 字）': async t => {
     const p = await openH(t, 'write', 'sub');
     const r = await p.evaluate(() => {

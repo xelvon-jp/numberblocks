@@ -72,6 +72,22 @@ module.exports = {
     t.eq(await p.evaluate(() => quizOn), false, 'クイズ OFF にならない');
   },
 
+  'はんぶん（や わけっこ）から おだい タブ：おなじ 子 を えらんでも けいさん の がめん に かわる': async t => {
+    const p = await t.open({ who:'papa' });
+    const r = await p.evaluate(() => {
+      const out = [];
+      for(const m of ['hanbun', 'waru']){
+        taskOn = false; whoOpen = false; setMode(m);
+        drawTabsAndUI(ctx); const b = tabBtns.find(x => x.val === 'task');
+        handleStart(b.x+b.w/2, b.y+b.h/2, 's'); handleEnd(b.x+b.w/2, b.y+b.h/2, 's');
+        drawWhoPicker(ctx, 0); const w = whoBtns.find(x => x.i === profileIdx) || whoBtns[0]; handleStart(w.x+w.w/2, w.y+w.h/2, 's');
+        out.push([m, whoOpen, isCalcMode() || mode === 'clock']);
+      }
+      return out;
+    });
+    t.eq(r, [['hanbun', false, true], ['waru', false, true]], 'おだい に はいっても はんぶん の まま');
+  },
+
   'おだい は タブ。入るたびに だれが遊ぶか聞かれ、ほかのタブへ行くと おだいは おわる。せっていには もう無い': async t => {
     const p = await t.open({ who:'papa' });
     const tap = v => p.evaluate(v => { drawTabsAndUI(ctx); const b = tabBtns.find(x => x.val === v);
