@@ -51,7 +51,7 @@ module.exports = {
     t.ok((await f.evaluate(() => hanbun.say())).includes('2.5 は「2 と はんぶん」'), 'ことば ' + await f.evaluate(() => hanbun.say()));
     await pinchOut(f, 0);
     t.eq(await vals(f), [2.5, 2.5], '2.5 が わかれた');
-    t.ok((await f.evaluate(() => hanbun.say())).includes('できないよ'), 'わけられない ことば');
+    t.ok((await f.evaluate(() => hanbun.say())).includes('できないよ'), 'わけられない ことば ' + await f.evaluate(() => hanbun.say()));
     await f.evaluate(() => { hanbun.clear(); hanbun.add(4); hanbun.add(1); });
     await f.waitForTimeout(400);
     await pinchOut(f, 0); await f.waitForTimeout(300); await pinchOut(f, (await vals(f)).indexOf(1));

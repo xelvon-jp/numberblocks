@@ -413,9 +413,9 @@ function frame(){
 const ptrs = new Map();      // id → { x, y, c, ox, oy }
 let pinch = null;            // { c, a, b, d0 }
 function pos(e){ const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+function near(c, x, y, pad){ const r = rect(c), p = pad*bs; return x >= r.x - p && x <= r.x + r.w + p && y >= r.y - p - bs*0.6 && y <= r.y + r.h + p + bs*0.6; }
 function hit(x, y, pad){
-  for(let i = chars.length - 1; i >= 0; i--){ const c = chars[i], r = rect(c), p = pad*bs;
-    if(x >= r.x - p && x <= r.x + r.w + p && y >= r.y - p - bs*0.6 && y <= r.y + r.h + p + bs*0.6) return c; }
+  for(let i = chars.length - 1; i >= 0; i--) if(near(chars[i], x, y, pad)) return chars[i];
   return null;
 }
 function overlapWith(c){
@@ -430,7 +430,8 @@ cv.addEventListener('pointerdown', e => {
   const p = pos(e);
   // 2ほんめ の ゆびが つかんで いる キャラ（の ちかく）に きたら つまむ
   for(const [id, q] of ptrs){
-    if(q.c && !pinch && hit(p.x, p.y, 1.5) === q.c){
+    // となりの キャラが ちかくても、1ぽんめで もって いる キャラの ちかく なら つまむ
+    if(q.c && !pinch && near(q.c, p.x, p.y, 1.5)){
       pinch = { c: q.c, a: id, b: e.pointerId, d0: Math.hypot(p.x - q.x, p.y - q.y) };
       q.c.drag = null; ptrs.set(e.pointerId, { x: p.x, y: p.y, c: null }); q.c = null; return;
     }
