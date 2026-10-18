@@ -13,7 +13,7 @@
 // あたらしい ページを たしたら RULES に 1ぎょう たす。
 const path = require('path'), fs = require('fs'), { execSync } = require('child_process');
 
-const ALL = ['index.html', 'engine.js', 'overrides.js', 'tests/run.js', 'tests/package.json', 'tests/related.js'];
+const ALL = ['index.html', 'engine.js', 'overrides.js', 'num.js', 'tests/run.js', 'tests/package.json', 'tests/related.js'];
 const RULES = {
   'waru.html': ['waru'],
   'hanbun.html': ['hanbun'],
@@ -21,7 +21,6 @@ const RULES = {
   'lab.html': ['lab'],
   'kenban.html': ['kenban'], 'oto.html': ['kenban'], 'tools/replay.js': ['kenban'], 'tools/rec.js': ['kenban'],
   'hissan.html': ['hissan', 'kake', 'speed'], 'ink.js': ['hissan', 'kake', 'speed'],
-  'num.js': ['num'],          // けいさん で つかう ように なったら ALL へ うつす
   'merge.js': ['sync'],
   'tools/solver.js': ['task'],
   'zukan.html': [],          // ずかん（キャラメイク）は テスト なし

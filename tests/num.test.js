@@ -26,4 +26,11 @@ module.exports = {
     let bad = 0; for(const x of ['abc', '1/0', NaN]) try{ N(x); }catch(e){ bad++; }
     t.eq(bad, 3, 'へんな かずを うけた');
   },
+
+  'けいさん の キャラ は かず を ぶんすう で もつ（num は いままで どおり ふつうの かず）': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => { const b = new NumberBlock(7, 100, 100), c = new NumberBlock(1500, 0, 0), d = new NumberBlock(0, 0, 0);
+      b.num = 12; return [b.q, b.num, c.num, d.num, typeof Num]; });
+    t.eq(r, [{ n: 12, d: 1 }, 12, 1000, 1, 'object'], 'ぶんすう で ない');
+  },
 };

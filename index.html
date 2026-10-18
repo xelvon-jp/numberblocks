@@ -209,6 +209,7 @@
   document.write('<script src="overrides.js?v=' + v + '"><\/script>');
   document.write('<script src="engine.js?v=' + v + '"><\/script>');
   document.write('<script src="merge.js?v=' + v + '"><\/script>');
+  document.write('<script src="num.js?v=' + v + '"><\/script>');      // かず を ぶんすう で もつ（Num）
 })();
 </script>
 <script>
@@ -1843,8 +1844,14 @@ function drawGear(ctx, cx, cy, r, color, hole){
 // 箱（x/y/width/height）と速度だけを持ち、描画はエンジンへ丸投げする。
 let blockIdCounter = 0;
 class NumberBlock {
+  // かずは ぶんすう（Num。this.q）で もつ。this.num は いままでの コード よう の ふつうの かず（q から つくる）。
+  // いまは せいすう だけ だが、あとで 2.5（5/2）なども おなじ ばしょで もてる（けいさん と はんぶん の とうごう）。
+  get num(){ return Num.toNumber(this.q); }
+  set num(v){ this.q = Num.from(v); }
   constructor(num,x,y){
-    this.id=blockIdCounter++; this.num=Math.max(1,Math.min(MAX_NUM,num));
+    this.id=blockIdCounter++;
+    const q = Num.from(num);
+    this.q = Num.cmp(q, Num.ONE) < 0 ? Num.ONE : Num.cmp(q, Num.make(MAX_NUM)) > 0 ? Num.make(MAX_NUM) : q;
     this.x=x; this.y=y; this.vx=0; this.vy=0; this.onGround=false; this.targetX=x;
     this.birth=1;   // 1 なら通常。0 から始めるとミラーから生まれる演出が付く
     this.launch=0;  // >0 のあいだは整列を無視して飛ぶ（ミラーからの射出）
