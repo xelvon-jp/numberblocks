@@ -210,6 +210,7 @@
   document.write('<script src="engine.js?v=' + v + '"><\/script>');
   document.write('<script src="merge.js?v=' + v + '"><\/script>');
   document.write('<script src="num.js?v=' + v + '"><\/script>');      // かず を ぶんすう で もつ（Num）
+  document.write('<script src="mizu.js?v=' + v + '"><\/script>');     // ガラスの みず（スマホの かたむき）
 })();
 </script>
 <script>
@@ -301,7 +302,9 @@ const TASK_LEVELS = [
   { name:'10をつくる',   color:'#c08a20' },
   { name:'100のかべ',    color:'#c0558a' },
   { name:'1000へ',       color:'#7a5ad0' },
-  { name:'なぞとき',     color:'#d0553f' }
+  { name:'なぞとき',     color:'#d0553f' },
+  { name:'はんぶんこ',   color:'#2a9db0' },   // ここから しょうすう（はんぶん と とうごう。まぜまぜ には まだ いれない）
+  { name:'しょうすう',   color:'#3a7fc0' }
 ];
 const TASKS = [
   // レベル1：つみかさねる
@@ -369,7 +372,25 @@ const TASKS = [
   { lv:5, n:23,   use:[5], best:7, ref:7, way:[25,10,2],      hint:'25から2をひく' },
   { lv:5, n:49,   use:[7], best:2, ref:2, way:[],      hint:'7×7' },
   { lv:5, n:99,   use:[10], best:6, ref:6, way:[100,1],     hint:'100から1をひく' },
-  { lv:5, n:101,  use:[10], best:6, ref:6, way:[1,100],     hint:'100のつぎ' }
+  { lv:5, n:101,  use:[10], best:6, ref:6, way:[1,100],     hint:'100のつぎ' },
+  // レベル7：はんぶんこ（ピンチアウト＝はんぶんこ も ÷2 と おなじ 1て。ダブルタップ の パラパラ は つかえない）
+  { lv:6, n:0.5,  use:[1], best:2, ref:2, way:[],      hint:'1を はんぶんこ' },
+  { lv:6, n:2.5,  use:[5], best:2, ref:2, way:[],      hint:'5を はんぶんこ' },
+  { lv:6, n:3.5,  use:[7], best:2, ref:2, way:[],      hint:'7を はんぶんこ' },
+  { lv:6, n:4.5,  use:[9], best:2, ref:2, way:[],      hint:'9を はんぶんこ' },
+  { lv:6, n:2.5,  use:[10], best:3, ref:3, way:[5],      hint:'10の はんぶんの はんぶん' },
+  { lv:6, n:5.5,  use:[10,1], best:4, ref:4, way:[11],   hint:'11の はんぶん' },
+  { lv:6, n:7.5,  use:[10,5], best:4, ref:4, way:[15],   hint:'15の はんぶん' },
+  { lv:6, n:12.5, use:[5], best:3, ref:3, way:[25],      hint:'25の はんぶん' },
+  // レベル8：しょうすう（0.1・0.5 を あつめる）
+  { lv:7, n:1,    use:[0.5], best:2, ref:2, way:[],      hint:'0.5を 2こ' },
+  { lv:7, n:1.5,  use:[0.5], best:4, ref:4, way:[1],      hint:'0.5を 3こ' },
+  { lv:7, n:2,    use:[0.5], best:3, ref:3, way:[1],      hint:'0.5を ×2、×2' },
+  { lv:7, n:0.3,  use:[0.1], best:4, ref:4, way:[0.2],      hint:'0.1を 3こ' },
+  { lv:7, n:0.8,  use:[0.1], best:4, ref:4, way:[0.2,0.4],      hint:'×2を 3かい' },
+  { lv:7, n:0.7,  use:[0.5,0.1], best:4, ref:4, way:[0.2],   hint:'0.5と 0.1と 0.1' },
+  { lv:7, n:1,    use:[0.1], best:3, ref:6, way:[0.2,0.4,0.5],      hint:'0.5を つくって ×2' },
+  { lv:7, n:0.9,  use:[1,0.1], best:3, ref:6, way:[],   hint:'1から 0.1を ひく' }
 ];
 const TASK_KEY = 'nbg.task.v1';
 // おだいの ならびの版。60番より うしろを 入れかえたら 1つ上げる（読みこむときに 古い記録を けす）
@@ -889,15 +910,22 @@ function endParadeBreak(){
   cast = cast.filter(a => a.kind !== 'parade');
   advanceTask();
 }
+// しょうすう の おだい（レベル7）は まぜまぜ には まだ いれない（パパと きめた）：まぜまぜ では とばして はじめ へ
+const DEC_LV = 6;
+const isDecTask = t => t && t.lv >= DEC_LV;          // レベル7・8
+function nextCalcIdx(){
+  const i = (taskIdx + 1) % TASKS.length;
+  return mixMode() && isDecTask(TASKS[i]) ? 0 : i;
+}
 function advanceTask(){
-  if(genTask || hissanTask){ closeHissan(); startTask((taskIdx + 1) % TASKS.length); return; }
+  if(genTask || hissanTask){ closeHissan(); startTask(nextCalcIdx()); return; }
   if(mixMode() && ++sinceClock >= MIX_CALC){
     sinceClock = 0;
     const sp = MIX_SPECIALS[nextSpecial % MIX_SPECIALS.length]; nextSpecial = (nextSpecial + 1) % MIX_SPECIALS.length;
     if(sp === 'hissan') startHissanTask(); else if(sp === 'kake') startKakeTask(); else startClockTask();
     return;
   }
-  startTask((taskIdx + 1) % TASKS.length);
+  startTask(nextCalcIdx());
 }
 // まぜまぜを 入れる／切る（いちらんの「けいさん／まぜまぜ」）
 function setMix(v){
@@ -1187,6 +1215,7 @@ function stepText(st){
   if(st.k==='new')    return st.a + ' をだした';
   if(st.k==='double') return st.a + ' を ×2 → ' + st.r;
   if(st.k==='half')   return st.a + ' を ÷2 → ' + st.r;
+  if(st.k==='split')  return st.a + ' を はんぶんこ → ' + st.r + ' と ' + st.r;
   if(st.k==='square') return st.a + ' を しかく（' + st.a + '×' + st.a + '）→ ' + st.r;
   if(st.k==='copy')   return st.a + ' をコピー';
   if(st.k==='home')   return st.a + ' をおうちへ';
@@ -1911,6 +1940,7 @@ class NumberBlock {
   // しょうすう：0.3 は ガラスの キャラ、2.3 は 2 ＋ あたま（か あしもと）の ガラス（engine.js。はんぶん と おなじ）。かえす のは かずを かく たかさ
   _drawDec(ctx,t,x,y,isMoving){
     const bs=this.bs, k=Num.floor(this.q), fr=Num.fracPart(this.q), f=Num.toNumber(fr), d=Math.round(f*10);
+    if(!this.w && typeof Mizu !== 'undefined') this.w = Mizu.mk();      // みず の うごき（かたむけると すいへい）
     if(k===0){ drawGlassFigure(ctx, d, x+bs/2, y+bs, bs, this.w); return y - glassHatLift(d)*bs - 3; }
     const g=glassPlace(k), oy=g.side?0:bs;              // あたまに のる ときは キャラを 1だん さげる
     drawNumberblock(ctx, k, x, y+oy, bs, { t:t, animate:isMoving, numberling:false });
@@ -2261,10 +2291,12 @@ let clrHold = null;   // {pid, t0}
 
 function applyPhysics(){
   for(const b of blocks){
-    if(b===dragBlock) continue;
+    if(b===dragBlock || b.hidden) continue;
     if(b.launch>0){
       // ミラーから射出された直後。整列に引き戻さず、そのまま飛ばす
       b.launch--; b.vx*=0.97;
+    } else if(b.holdUntil && performance.now() < b.holdUntil){
+      b.vx=0;      // わけた・パラパラ した すぐ あと：どこが どう なったか 見える ように しばらく その ばしょ
     } else {
       const dx=b.targetX-b.x;
       if(Math.abs(dx)>1){ b.vx=dx>0?2:-2; } else { b.vx=0; b.x=b.targetX; }
@@ -2356,7 +2388,7 @@ function drawFormula(ctx){
   // おだい中は出さない。「1+1+1+1+1 = 5」と合体する前から答えが見えてしまい、
   // 自分で組み立てる楽しみを先に奪ってしまうため。
   if(taskActive()) return;
-  const sorted=[...blocks].sort((a,b)=>Num.cmp(a.q,b.q));
+  const sorted=blocks.filter(b=>!b.hidden).sort((a,b)=>Num.cmp(a.q,b.q));   // つまんで いる あいだ の もとの キャラ は いれない
   const qs=sorted.map(b=>b.q), F=Num.fmt, nums=qs.map(F);       // 0.1＋0.2 も ぴったり 0.3（ぶんすう で けいさん）
   let formula='';
   if(mode==='+') formula=nums.join(' + ')+' = '+F(qs.reduce((a,v)=>Num.add(a,v),Num.ZERO));
@@ -2403,6 +2435,7 @@ function getNumpadLayout(){
   // 「この数字でやってみて」とそっと示す。ひかえめなキーも ふつうに押せる。
   if(taskActive() && begMode()){
     const use = currentTask().use, items = [];
+    for(const d of [0.1, 0.5]) if(use.indexOf(d) >= 0) items.push({label:String(d), val:d, dim:false});   // しょうすう の おだい だけ
     for(let d=1; d<=10; d++) items.push({label:String(d), val:d, dim: use.indexOf(d) < 0});
     items.push({label:'CLR', val:'CLR', color:'#c55'});
     if(isLandscape()){
@@ -4993,12 +5026,22 @@ function handleStart(x,y,pid){
       return;
     }
   }
+  // 2ほんめ の ゆび が、1ぽんめ で もって いる キャラ の ちかく に きたら つまむ（ピンチアウト で はんぶんこ）
+  if(isCalcMode() && !calcPinch){
+    for(const k in dragPointers){ const o = dragPointers[k];
+      if(o.block && pinchNear(o.block, x, y)){
+        calcPinch = { block:o.block, a:String(k), b:String(pid), d0:Math.hypot(x-o.x, y-o.y), pts:{ [String(k)]:{x:o.x, y:o.y}, [String(pid)]:{x, y} } };
+        delete dragPointers[k]; dragBlock=null; dragPtr=null; return;
+      }
+    }
+  }
   for(let i=blocks.length-1;i>=0;i--){
     const b=blocks[i];
-    if(blockHit(b,x,y)){
+    if(!b.hidden && blockHit(b,x,y)){
       // ダブルタップでの削除は誤爆が多いので廃止した。
       // 消したいときは「おうち」へドラッグする（ミラーと対の操作）。
-      dragPointers[pid]={x,y,offX:x-b.x,offY:y-b.y,block:b};
+      // いまの ダブルタップ は「1（と 0.いくつ）を 0.1 に パラパラ」（きえない・もどす で もどる）。
+      dragPointers[pid]={x,y,offX:x-b.x,offY:y-b.y,block:b,sx:x,sy:y,t0:Date.now()};
       dragBlock=b; dragPtr={x:x,y:y}; blocks.splice(i,1); blocks.push(b); return;
     }
   }
@@ -5053,6 +5096,74 @@ function duplicateAtMirror(b){
   updateTargets();
 }
 
+// ── ピンチアウト（はんぶんこ）と ダブルタップ（0.1 に パラパラ）：はんぶん から もちこんだ ──
+// ひろげて いる あいだ は 2ひき が ゆびさき に くっついて くる（ねばねば の いと）。ゆびを はなした ところ で わかれる（1て）。
+const SPLIT_PX = 45, CALC_HOLD_MS = 1400;
+let calcPinch = null, lastTapCalc = null, calcGoos = [];
+function pinchNear(b, x, y){ const p = Math.max(12, b.bs*1.2); return x >= b.x-p && x <= b.x+b.width+p && y >= b.y-p && y <= b.y+b.height+p; }
+function canSplitQ(q){ return qOk(Num.div(q, Num.make(2))) && blocks.length < MAX_BLOCKS; }
+function pinchMove(pid, x, y){
+  const cp = calcPinch; cp.pts[pid] = {x, y};
+  const A = cp.pts[cp.a], B = cp.pts[cp.b], ext = Math.hypot(A.x-B.x, A.y-B.y) - cp.d0;
+  if(!cp.pv && ext > SPLIT_PX){
+    if(!canSplitQ(cp.block.q)){ cp.block.hidden = false; calcPinch = null; return; }   // わけられない（0.5 や 2.5）：なにも しない
+    const h = Num.div(cp.block.q, Num.make(2));
+    cp.pv = { a: new NumberBlock(h, 0, 0), b: new NumberBlock(h, 0, 0) }; cp.block.hidden = true;
+  } else if(cp.pv && ext < SPLIT_PX*0.5){ cp.pv = null; cp.block.hidden = false; }      // ゆびを もどすと もとに もどる
+  if(cp.pv) for(const [c, F] of [[cp.pv.a, A], [cp.pv.b, B]]){ c.x = F.x - c.width/2; c.y = F.y - c.height/2; c.targetX = c.x; }
+}
+function pinchEnd(){
+  const cp = calcPinch; calcPinch = null;
+  if(!cp.pv){ cp.block.hidden = false; return; }
+  pushUndo();
+  const h = cp.pv.a.q, t = performance.now();
+  logStep('split', cp.block.num, null, Num.toNumber(h));
+  blocks = blocks.filter(b => b !== cp.block);
+  for(const c of [cp.pv.a, cp.pv.b]){
+    c.x = Math.min(Math.max(playLeft(), c.x), sw-EDGE_MARGIN-c.width);
+    c.y = Math.min(c.y, calcFloor()-c.height); c.targetX = c.x; c.holdUntil = t + CALC_HOLD_MS; c.vy = 0;
+    blocks.push(c);
+  }
+  calcGoos.push({ a: cp.pv.a, b: cp.pv.b, t });
+  for(let i=0;i<18;i++) fxParticles.push(new Particle((cp.pv.a.cx+cp.pv.b.cx)/2, (cp.pv.a.cy+cp.pv.b.cy)/2));
+  updateTargets();
+}
+// 1（と 0.いくつ）を 0.1 に パラパラ。おだい では つかわない（パパと きめた）
+function scatterTenths(b){
+  if(taskActive()) return false;
+  const t10 = Num.mul(b.q, Num.make(10));
+  if(Num.cmp(b.q, Num.ONE) > 0 || !Num.isInt(t10)) return false;
+  const n = Num.toNumber(t10);
+  if(n < 2 || blocks.length - 1 + n > MAX_BLOCKS) return false;
+  pushUndo();
+  blocks = blocks.filter(x => x !== b);
+  const t = performance.now(), tenth = Num.make(1, 10);
+  for(let i = 0; i < n; i++){
+    const c = new NumberBlock(tenth, 0, 0), sp = c.width*1.5;
+    c.x = Math.min(Math.max(playLeft(), b.cx + (i-(n-1)/2)*sp - c.width/2), sw-EDGE_MARGIN-c.width);
+    c.y = b.y - (i%2 ? c.height*0.8 : c.height*0.2); c.vy = -3; c.targetX = c.x; c.birth = 0; c.holdUntil = t + CALC_HOLD_MS;
+    blocks.push(c);
+  }
+  for(let i=0;i<22;i++) fxParticles.push(new Particle(b.cx, b.cy));
+  updateTargets();
+  return true;
+}
+// ねばねば の いと（ひろげて いる あいだ は のびて ほそく、わかれた あと は ぷつっと きれる）
+function drawCalcGoo(ctx, a, b, th){
+  const ax=a.cx, ay=a.cy, bx=b.cx, by=b.cy, len=Math.hypot(bx-ax, by-ay)||1, nx=-(by-ay)/len, ny=(bx-ax)/len, mid=th*0.3, mx=(ax+bx)/2, my=(ay+by)/2;
+  const col = Num.floor(a.q) === 0 ? glassLiqColor(Math.round(Num.toNumber(Num.fracPart(a.q))*10)) : mainColorOf(Num.floor(a.q));
+  ctx.save(); ctx.fillStyle = rgb(col); ctx.globalAlpha = 0.95; ctx.beginPath();
+  ctx.moveTo(ax+nx*th, ay+ny*th); ctx.quadraticCurveTo(mx+nx*mid, my+ny*mid, bx+nx*th, by+ny*th);
+  ctx.lineTo(bx-nx*th, by-ny*th); ctx.quadraticCurveTo(mx-nx*mid, my-ny*mid, ax-nx*th, ay-ny*th); ctx.closePath(); ctx.fill(); ctx.restore();
+}
+function drawCalcPinch(ctx, t){
+  const now = performance.now();
+  calcGoos = calcGoos.filter(g => now - g.t < 520 && blocks.includes(g.a) && blocks.includes(g.b));
+  for(const g of calcGoos) drawCalcGoo(ctx, g.a, g.b, g.a.bs*0.42*(1-(now-g.t)/520));
+  if(calcPinch && calcPinch.pv){ const { a, b } = calcPinch.pv, len = Math.hypot(a.cx-b.cx, a.cy-b.cy);
+    drawCalcGoo(ctx, a, b, a.bs*0.42*Math.max(0.18, 1-len/(a.bs*9))); a.draw(ctx, t, 0); b.draw(ctx, t, 0); }
+}
+
 function handleMove(x,y,pid){
   if(paradeHold && paradeHold.pid===pid){
     if(Math.hypot(x-paradeHold.x, y-paradeHold.y) > 24) paradeHold = null;   // 指が うごいたら やめ
@@ -5068,6 +5179,7 @@ function handleMove(x,y,pid){
     if(!btn || !ptInRect(x,y,btn.x-10,btn.y-10,btn.w+20,btn.h+20)) clrHold=null;
     return;
   }
+  if(calcPinch && calcPinch.pts[String(pid)]){ pinchMove(String(pid), x, y); return; }
   const ptr=dragPointers[pid]; if(!ptr) return;
   const b=ptr.block; b.vx=x-ptr.x; b.vy=y-ptr.y; b.x=x-ptr.offX; b.y=y-ptr.offY; ptr.x=x; ptr.y=y;
   if(b===dragBlock) dragPtr={x:x,y:y};
@@ -5078,8 +5190,15 @@ function handleEnd(x,y,pid){
   if(stageHold && stageHold.pid===pid){ stageHold = null; return; }   // 途中で離した＝中止
   if(mode==='clock'){ if(drum && drum.drag) drumEnd(x, y); clockDrag=null; return; }
   if(clrHold && clrHold.pid===pid){ clrHold=null; return; }   // 途中で離した＝中止
+  if(calcPinch && calcPinch.pts[String(pid)]){ pinchEnd(); return; }
   const ptr=dragPointers[pid]; if(!ptr){ dragBlock=null; dragPtr=null; return; }
   const b=ptr.block; delete dragPointers[pid]; dragBlock=null; dragPtr=null;
+  // うごかさずに ポンと おした：2かい つづけて（ダブルタップ）で 0.1 に パラパラ
+  if(ptr.t0 && Math.hypot(x-ptr.sx, y-ptr.sy) < 12 && Date.now()-ptr.t0 < 400){
+    const tn = Date.now();
+    if(lastTapCalc && lastTapCalc.block===b && tn-lastTapCalc.t < 420){ lastTapCalc=null; if(scatterTenths(b)) return; }
+    else lastTapCalc = { block:b, t:tn };
+  }
   // マジックミラーの上で離した → そのキャラを複製する（合体はしない）
   if(isOverMirror(x,y)){ duplicateAtMirror(b); return; }
   // おうちの上で離した → そのキャラは帰る（画面から消える）
@@ -5302,10 +5421,14 @@ function drawFrame(ts){
       }
     } else {
       applyPhysics();
+      // ガラス の みず：スマホの かたむき を みて うごかす（mizu.js）
+      if(typeof Mizu !== 'undefined'){ Mizu.tick(dt/1000); for(const b of blocks) if(b.w) Mizu.step(b.w, dt/1000, 0.5);
+        if(calcPinch && calcPinch.pv) for(const c of [calcPinch.pv.a, calcPinch.pv.b]) if(c.w) Mizu.step(c.w, dt/1000, 0.5); }
       updateWinFx(dt);
       drawWinLines(ctx);
       drawWinStamp(ctx);
-      for(const b of blocks){ if(b===dragBlock) continue; b.draw(ctx,walkTime,0); }
+      for(const b of blocks){ if(b===dragBlock || b.hidden) continue; b.draw(ctx,walkTime,0); }
+      drawCalcPinch(ctx, walkTime);
       drawCast(ctx);                                  // パレードは キャラより てまえ
       if(dragBlock){
         let bestMerge=null,bestMergeD=Infinity;
@@ -5440,6 +5563,7 @@ quizMaxEl.value = String(quizMax); quizMaxVal.textContent = String(quizMax);
 quizLimitEl.textContent = quizLimitLabel();
 setMode('+');
 followTaskMode();          // 前回とけいの おだいの とちゅうなら、とけいの画面から始める
+if(typeof Mizu !== 'undefined') Mizu.autoStart();   // ガラス の みず の センサー は はじめ から オン（iPhone は さいしょに さわった とき に きく）
 requestAnimationFrame(loop);
 </script>
 <script>

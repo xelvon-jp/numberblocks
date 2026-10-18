@@ -61,4 +61,51 @@ module.exports = {
     t.eq(r.d7, true, '7 ÷ 2 ＝ 3.5 が できない');
     t.eq(r.rej, [false, true, false, false, true], '0.1 きざみ に ならない もの（0.5×0.5・0.5÷2・1.5 の しかく）を うけた');
   },
+
+  'けいさん で ピンチアウト（はなす まで ゆびさき に 2ひき、はなすと わかれる・1て）と ダブルタップ（1 → 0.1 が 10こ。おだい では しない）': async t => {
+    const p = await t.open();
+    await p.evaluate(() => { setQuizOn(false); if(typeof setTaskOn === 'function') setTaskOn(false); setMode('+'); blocks = []; clearUndo(); spawnBlock(4); });
+    await p.waitForTimeout(800);
+    const r = await p.evaluate(() => {
+      const b = blocks[0], cx = b.cx, cy = b.cy;
+      handleStart(cx - 4, cy, 1); handleStart(cx + 4, cy, 2);
+      for(let k = 1; k <= 6; k++){ handleMove(cx - 4 - k*12, cy, 1); handleMove(cx + 4 + k*12, cy, 2); }
+      const during = [blocks.length, !!(calcPinch && calcPinch.pv), calcPinch && calcPinch.pv ? Num.fmt(calcPinch.pv.a.q) : null];
+      handleEnd(cx - 76, cy, 1); handleEnd(cx + 76, cy, 2);
+      const after = blocks.map(x => Num.fmt(x.q)).sort();
+      doUndo();
+      const undone = blocks.map(x => Num.fmt(x.q));
+      blocks = []; spawnBlock(1);
+      return { during, after, undone };
+    });
+    t.eq(r.during, [1, true, '2'], 'ひろげて いる あいだ に わかれた／ゆびに ついて こない');
+    t.eq(r.after, ['2', '2'], 'はなしても わかれない');
+    t.eq(r.undone, ['4'], 'もどす で もどらない');
+    await p.waitForTimeout(800);
+    const d = await p.evaluate(() => { const b = blocks[0], x = b.cx, y = b.cy;
+      for(let k = 0; k < 2; k++){ handleStart(x, y, 3); handleEnd(x, y, 3); }
+      return blocks.map(c => Num.fmt(c.q)); });
+    t.eq(d, Array(10).fill('0.1'), 'ダブルタップ で パラパラ しない');
+  },
+
+  'しょうすう の おだい（レベル7・8）：5 を はんぶんこ で 2.5 が できる・まぜまぜ では とばす': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      setQuizOn(false); setTaskOn(true); whoOpen = false;
+      const i = TASKS.findIndex(x => x.lv === 6 && x.n === 2.5 && x.use.join() === '5');
+      startTask(i); whoOpen = false;
+      const keys = getNumpadLayout().map(b => b.label);
+      spawnBlock(5); scaleBlock(blocks.find(b => b.num === 5), 'half');
+      checkTask();
+      const done = taskDone, steps = taskLog.length;
+      const last = TASKS.length - 1;
+      const lastIsDec = isDecTask(TASKS[last]), firstDec = TASKS.findIndex(isDecTask);
+      // まぜまぜ：しょうすう の ひとつ まえ から つぎへ → はじめ（0）に もどる
+      taskIdx = firstDec - 1; const nMix = (setMix(true), nextCalcIdx()); setMix(false); const nPlain = nextCalcIdx();
+      return { keys, done: !!done, steps, lastIsDec, nMix, nPlain, firstDec };
+    });
+    t.eq(r.keys, ['5', 'CLR'], 'つかえる キーが ちがう');
+    t.eq([r.done, r.steps], [true, 2], '5 を ÷2 で 2.5 が クリア に ならない（2て）');
+    t.eq([r.lastIsDec, r.nMix, r.nPlain === r.firstDec], [true, 0, true], 'まぜまぜ で しょうすう を とばさない');
+  },
 };
