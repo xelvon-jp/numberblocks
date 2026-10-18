@@ -62,7 +62,7 @@ module.exports = {
     t.eq(r.rej, [false, true, false, false, true], '0.1 きざみ に ならない もの（0.5×0.5・0.5÷2・1.5 の しかく）を うけた');
   },
 
-  'けいさん で ピンチアウト（はなす まで ゆびさき に 2ひき、はなすと わかれる・1て）と ダブルタップ（1 → 0.1 が 10こ。おだい では しない）': async t => {
+  'けいさん で ピンチアウト（はなす まで ゆびさき に 2ひき、はなすと わかれる・1て）。ちいさい キャラ は ゆびが そと でも つまめる。ダブルタップ では なにも しない': async t => {
     const p = await t.open();
     await p.evaluate(() => { setQuizOn(false); if(typeof setTaskOn === 'function') setTaskOn(false); setMode('+'); blocks = []; clearUndo(); spawnBlock(4); });
     await p.waitForTimeout(800);
@@ -84,8 +84,15 @@ module.exports = {
     await p.waitForTimeout(800);
     const d = await p.evaluate(() => { const b = blocks[0], x = b.cx, y = b.cy;
       for(let k = 0; k < 2; k++){ handleStart(x, y, 3); handleEnd(x, y, 3); }
-      return blocks.map(c => Num.fmt(c.q)); });
-    t.eq(d, Array(10).fill('0.1'), 'ダブルタップ で パラパラ しない');
+      const tap = blocks.map(c => Num.fmt(c.q));
+      // 1 の そと（ひだり と みぎ）に ゆびを おいて ひろげる
+      const L = b.x - 30, R = b.x + b.width + 30;
+      handleStart(L, y, 4); handleStart(R, y, 5);
+      for(let k = 1; k <= 6; k++){ handleMove(L - k*12, y, 4); handleMove(R + k*12, y, 5); }
+      handleEnd(L - 72, y, 4); handleEnd(R + 72, y, 5);
+      return { tap, small: blocks.map(c => Num.fmt(c.q)).sort() }; });
+    t.eq(d.tap, ['1'], 'ダブルタップ で かわった');
+    t.eq(d.small, ['0.5', '0.5'], 'ちいさい キャラ を そと から つまめない');
   },
 
   'しょうすう の おだい（レベル7・8）：5 を はんぶんこ で 2.5 が できる・まぜまぜ では とばす': async t => {

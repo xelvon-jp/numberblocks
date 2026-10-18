@@ -5026,13 +5026,23 @@ function handleStart(x,y,pid){
       return;
     }
   }
-  // 2ほんめ の ゆび が、1ぽんめ で もって いる キャラ の ちかく に きたら つまむ（ピンチアウト で はんぶんこ）
+  // 2ほんめ の ゆび で つまむ（ピンチアウト で はんぶんこ）：
+  //   1ぽんめ で もって いる キャラ の ちかく に きた とき、または
+  //   1ぽんめ が キャラの そと（ちいさい キャラ は 2ほん のらない）でも 2ほん の まんなか が キャラ の ちかく の とき
   if(isCalcMode() && !calcPinch){
+    const start = (blk, k, o) => {
+      calcPinch = { block:blk, a:String(k), b:String(pid), d0:Math.hypot(x-o.x, y-o.y), pts:{ [String(k)]:{x:o.x, y:o.y}, [String(pid)]:{x, y} } };
+      if(dragPointers[k]){ delete dragPointers[k]; dragBlock=null; dragPtr=null; }
+      freeTouch = null;
+    };
     for(const k in dragPointers){ const o = dragPointers[k];
-      if(o.block && pinchNear(o.block, x, y)){
-        calcPinch = { block:o.block, a:String(k), b:String(pid), d0:Math.hypot(x-o.x, y-o.y), pts:{ [String(k)]:{x:o.x, y:o.y}, [String(pid)]:{x, y} } };
-        delete dragPointers[k]; dragBlock=null; dragPtr=null; return;
-      }
+      if(o.block && pinchNear(o.block, x, y)){ start(o.block, k, o); return; }
+    }
+    if(freeTouch && freeTouch.pid !== pid){
+      const o = freeTouch, mx = (o.x+x)/2, my = (o.y+y)/2;
+      let best = null, bd = Infinity;
+      for(const b of blocks){ if(b.hidden || !pinchNear(b, mx, my)) continue; const d = Math.hypot(b.cx-mx, b.cy-my); if(d < bd){ bd = d; best = b; } }
+      if(best){ start(best, o.pid, o); return; }
     }
   }
   for(let i=blocks.length-1;i>=0;i--){
@@ -5040,11 +5050,12 @@ function handleStart(x,y,pid){
     if(!b.hidden && blockHit(b,x,y)){
       // ダブルタップでの削除は誤爆が多いので廃止した。
       // 消したいときは「おうち」へドラッグする（ミラーと対の操作）。
-      // いまの ダブルタップ は「1（と 0.いくつ）を 0.1 に パラパラ」（きえない・もどす で もどる）。
-      dragPointers[pid]={x,y,offX:x-b.x,offY:y-b.y,block:b,sx:x,sy:y,t0:Date.now()};
+      // 0.1 に パラパラ（ダブルタップ）も となりと くっつく ごばく が おおく やめた。
+      dragPointers[pid]={x,y,offX:x-b.x,offY:y-b.y,block:b};
       dragBlock=b; dragPtr={x:x,y:y}; blocks.splice(i,1); blocks.push(b); return;
     }
   }
+  if(isCalcMode()) freeTouch = { pid, x, y };   // キャラの そと：2ほんめ が きたら ピンチ に なるかも
 }
 
 // クイズOFFのときの合体。本物のナンバーブロックスのように、枠も選択肢も出さず
@@ -5096,11 +5107,11 @@ function duplicateAtMirror(b){
   updateTargets();
 }
 
-// ── ピンチアウト（はんぶんこ）と ダブルタップ（0.1 に パラパラ）：はんぶん から もちこんだ ──
+// ── ピンチアウト（はんぶんこ）：はんぶん から もちこんだ ──
 // ひろげて いる あいだ は 2ひき が ゆびさき に くっついて くる（ねばねば の いと）。ゆびを はなした ところ で わかれる（1て）。
 const SPLIT_PX = 45, CALC_HOLD_MS = 1400;
-let calcPinch = null, lastTapCalc = null, calcGoos = [];
-function pinchNear(b, x, y){ const p = Math.max(12, b.bs*1.2); return x >= b.x-p && x <= b.x+b.width+p && y >= b.y-p && y <= b.y+b.height+p; }
+let calcPinch = null, freeTouch = null, calcGoos = [];
+function pinchNear(b, x, y){ const p = Math.max(60, b.bs*1.2); return x >= b.x-p && x <= b.x+b.width+p && y >= b.y-p && y <= b.y+b.height+p; }
 function canSplitQ(q){ return qOk(Num.div(q, Num.make(2))) && blocks.length < MAX_BLOCKS; }
 function pinchMove(pid, x, y){
   const cp = calcPinch; cp.pts[pid] = {x, y};
@@ -5127,26 +5138,6 @@ function pinchEnd(){
   calcGoos.push({ a: cp.pv.a, b: cp.pv.b, t });
   for(let i=0;i<18;i++) fxParticles.push(new Particle((cp.pv.a.cx+cp.pv.b.cx)/2, (cp.pv.a.cy+cp.pv.b.cy)/2));
   updateTargets();
-}
-// 1（と 0.いくつ）を 0.1 に パラパラ。おだい では つかわない（パパと きめた）
-function scatterTenths(b){
-  if(taskActive()) return false;
-  const t10 = Num.mul(b.q, Num.make(10));
-  if(Num.cmp(b.q, Num.ONE) > 0 || !Num.isInt(t10)) return false;
-  const n = Num.toNumber(t10);
-  if(n < 2 || blocks.length - 1 + n > MAX_BLOCKS) return false;
-  pushUndo();
-  blocks = blocks.filter(x => x !== b);
-  const t = performance.now(), tenth = Num.make(1, 10);
-  for(let i = 0; i < n; i++){
-    const c = new NumberBlock(tenth, 0, 0), sp = c.width*1.5;
-    c.x = Math.min(Math.max(playLeft(), b.cx + (i-(n-1)/2)*sp - c.width/2), sw-EDGE_MARGIN-c.width);
-    c.y = b.y - (i%2 ? c.height*0.8 : c.height*0.2); c.vy = -3; c.targetX = c.x; c.birth = 0; c.holdUntil = t + CALC_HOLD_MS;
-    blocks.push(c);
-  }
-  for(let i=0;i<22;i++) fxParticles.push(new Particle(b.cx, b.cy));
-  updateTargets();
-  return true;
 }
 // ねばねば の いと（ひろげて いる あいだ は のびて ほそく、わかれた あと は ぷつっと きれる）
 function drawCalcGoo(ctx, a, b, th){
@@ -5179,6 +5170,7 @@ function handleMove(x,y,pid){
     if(!btn || !ptInRect(x,y,btn.x-10,btn.y-10,btn.w+20,btn.h+20)) clrHold=null;
     return;
   }
+  if(freeTouch && freeTouch.pid===pid){ freeTouch.x = x; freeTouch.y = y; }
   if(calcPinch && calcPinch.pts[String(pid)]){ pinchMove(String(pid), x, y); return; }
   const ptr=dragPointers[pid]; if(!ptr) return;
   const b=ptr.block; b.vx=x-ptr.x; b.vy=y-ptr.y; b.x=x-ptr.offX; b.y=y-ptr.offY; ptr.x=x; ptr.y=y;
@@ -5190,15 +5182,10 @@ function handleEnd(x,y,pid){
   if(stageHold && stageHold.pid===pid){ stageHold = null; return; }   // 途中で離した＝中止
   if(mode==='clock'){ if(drum && drum.drag) drumEnd(x, y); clockDrag=null; return; }
   if(clrHold && clrHold.pid===pid){ clrHold=null; return; }   // 途中で離した＝中止
+  if(freeTouch && freeTouch.pid===pid) freeTouch = null;
   if(calcPinch && calcPinch.pts[String(pid)]){ pinchEnd(); return; }
   const ptr=dragPointers[pid]; if(!ptr){ dragBlock=null; dragPtr=null; return; }
   const b=ptr.block; delete dragPointers[pid]; dragBlock=null; dragPtr=null;
-  // うごかさずに ポンと おした：2かい つづけて（ダブルタップ）で 0.1 に パラパラ
-  if(ptr.t0 && Math.hypot(x-ptr.sx, y-ptr.sy) < 12 && Date.now()-ptr.t0 < 400){
-    const tn = Date.now();
-    if(lastTapCalc && lastTapCalc.block===b && tn-lastTapCalc.t < 420){ lastTapCalc=null; if(scatterTenths(b)) return; }
-    else lastTapCalc = { block:b, t:tn };
-  }
   // マジックミラーの上で離した → そのキャラを複製する（合体はしない）
   if(isOverMirror(x,y)){ duplicateAtMirror(b); return; }
   // おうちの上で離した → そのキャラは帰る（画面から消える）
