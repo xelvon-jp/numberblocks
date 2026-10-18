@@ -1218,7 +1218,7 @@ const UNDO_MAX = 3;
 let undoStack = [];
 function pushUndo(){
   undoStack.push({
-    items: blocks.map(b=>({ n:b.num, x:b.x, y:b.y })),
+    items: blocks.map(b=>({ n:b.q, x:b.x, y:b.y })),
     logLen: taskLog.length,
     done: taskDone,
     usedOther: usedOther
@@ -1389,11 +1389,14 @@ function isOverMirror(x,y){ return isOverTarget('mirror',x,y); }
 function isOverHome(x,y){   return isOverTarget('home',x,y); }
 
 // ×2 と ÷2 と しかく（2じょう）が使えるか（上限を超える／割り切れないときは受け付けない）
+// ×2・÷2・しかく。ふつうの かず でも Num でも うける。÷2 は きすう でも 0.1 きざみ なら うける（5 → 2.5）
+function scaledQ(id,n){ const q = Num.from(n); return id==='square' ? Num.mul(q,q) : id==='double' ? Num.mul(q, Num.make(2)) : Num.div(q, Num.make(2)); }
 function canScale(id,n){
-  if(id==='square') return n>=2 && n*n<=MAX_NUM;
-  return id==='double' ? (n*2<=MAX_NUM) : (n%2===0 && n/2>=1);
+  const q = Num.from(n);
+  if(id==='square' && Num.eq(q, Num.ONE)) return false;          // 1 の しかく は 1 の まま
+  return qOk(scaledQ(id,q));
 }
-function scaledNum(id,n){ return id==='square' ? n*n : id==='double' ? n*2 : n/2; }
+function scaledNum(id,n){ return Num.toNumber(scaledQ(id,n)); }
 
 // 上がアーチ型の鏡のかたち
 function mirrorPath(ctx,x,y,w,h){
@@ -1492,6 +1495,7 @@ function drawHome(ctx, t){
 
 // 扉の中に見える、帰っていくキャラの影
 function drawHomeSilhouette(ctx, dX, dY, dW, dH, num, ease, t){
+  num = Math.max(1, Math.floor(num));      // しょうすう は せいすう の ところ の かげ
   const spec = blockSpec(num);
   const cell = Math.max(1.2, Math.min((dW-6)/spec.cols, (dH-6)/spec.rows));
   const w=spec.cols*cell, h=spec.rows*cell;
@@ -1522,7 +1526,7 @@ const SCALE_STYLE = {
 // 近づけているキャラを変えたらいくつになるか。NaN は「できない」。
 function scalePreview(id){
   if(!(dragBlock && dragPtr && isOverTarget(id, dragPtr.x, dragPtr.y))) return null;
-  return canScale(id, dragBlock.num) ? scaledNum(id, dragBlock.num) : NaN;
+  return canScale(id, dragBlock.q) ? scaledNum(id, dragBlock.q) : NaN;
 }
 
 function drawScaleTarget(ctx, t, id){
@@ -1597,10 +1601,10 @@ function drawScaleTarget(ctx, t, id){
 function scaleBlock(b, id){
   const m=getTargetRect(id); if(!m) return;
   pushUndo();
-  const n = scaledNum(id, b.num);
+  const nq = scaledQ(id, b.q), n = Num.toNumber(nq);
   logStep(id, b.num, null, n);
   blocks = blocks.filter(x=>x!==b);
-  const res = new NumberBlock(n, 0, 0);
+  const res = new NumberBlock(nq, 0, 0);
   res.x = Math.min(Math.max(playLeft(), m.x+m.w/2-res.width/2), sw-EDGE_MARGIN-res.width);
   res.y = m.y + m.h + 4;
   res.targetX = res.x; res.birth = 0; res.vx = 0; res.vy = 1;
@@ -1627,6 +1631,7 @@ function drawDropTargets(ctx, t){
 // 鏡の中に映るキャラ。実物と同じ描画エンジンを縮めて使い、左右を反転させる。
 // prog は 0→1 で、小さく暗いところから、すっと浮かび上がってくる。
 function drawMirrorReflection(ctx, m, num, prog, t){
+  num = Math.max(1, Math.floor(num));      // しょうすう は せいすう の ところ を うつす（ガラスは まだ うつさない）
   const spec = blockSpec(num);
   // アーチの内側に収まるように描く箱。上はアーチで狭いので少し下げる。
   const boxY = m.y + Math.round(m.w*0.40);      // 上のバッジを避けて下寄りに
@@ -1843,6 +1848,16 @@ function drawGear(ctx, cx, cy, r, color, hole){
 // このクラスは、ゲームの物理演算・ドラッグ・レイアウトに必要な当たり判定の
 // 箱（x/y/width/height）と速度だけを持ち、描画はエンジンへ丸投げする。
 let blockIdCounter = 0;
+// キャラの おおきさ（キューブ なんこぶん）。しょうすう は ガラス（1 と おなじ 大きさ）の ぶん：
+// 0.3 は ガラス 1こ、2.3 は 2 の あたま（3・7・20 は あしもと の よこ）に ガラス
+function qDims(q){
+  q = Num.from(q);
+  if(Num.isInt(q)){ const s = blockSpec(Num.toNumber(q)); return { cols: s.cols, rows: s.rows }; }
+  const k = Num.floor(q);
+  if(k === 0) return { cols: 1, rows: 1 };
+  const s = blockSpec(k), g = glassPlace(k);
+  return g.side ? { cols: s.cols + 1, rows: s.rows } : { cols: s.cols, rows: s.rows + 1 };
+}
 class NumberBlock {
   // かずは ぶんすう（Num。this.q）で もつ。this.num は いままでの コード よう の ふつうの かず（q から つくる）。
   // いまは せいすう だけ だが、あとで 2.5（5/2）なども おなじ ばしょで もてる（けいさん と はんぶん の とうごう）。
@@ -1851,15 +1866,15 @@ class NumberBlock {
   constructor(num,x,y){
     this.id=blockIdCounter++;
     const q = Num.from(num);
-    this.q = Num.cmp(q, Num.ONE) < 0 ? Num.ONE : Num.cmp(q, Num.make(MAX_NUM)) > 0 ? Num.make(MAX_NUM) : q;
+    this.q = Num.cmp(q, Num.ZERO) <= 0 ? Num.ONE : Num.cmp(q, Num.make(MAX_NUM)) > 0 ? Num.make(MAX_NUM) : q;   // 0 いか は 1（まえ と おなじ）、0.1 など は そのまま
     this.x=x; this.y=y; this.vx=0; this.vy=0; this.onGround=false; this.targetX=x;
     this.birth=1;   // 1 なら通常。0 から始めるとミラーから生まれる演出が付く
     this.launch=0;  // >0 のあいだは整列を無視して飛ぶ（ミラーからの射出）
     this._computeShape();
   }
   _computeShape(){
-    // かたちはエンジンの blockSpec が正。ここはその外形サイズを写すだけ
-    const spec = blockSpec(this.num);
+    // かたちはエンジンの blockSpec が正。ここはその外形サイズを写すだけ（しょうすう は qDims：ガラスの ぶん ひろい）
+    const spec = qDims(this.q);
     this.cols = spec.cols; this.rows = spec.rows;
     // 1〜100は全員同じマスの大きさ（100の面積は1の100倍、という原則）。
     // ただし101以上を同じマスで描くと画面から完全にはみ出すので、
@@ -1893,9 +1908,28 @@ class NumberBlock {
     }
     this._drawBody(ctx,t,bounceY);
   }
+  // しょうすう：0.3 は ガラスの キャラ、2.3 は 2 ＋ あたま（か あしもと）の ガラス（engine.js。はんぶん と おなじ）。かえす のは かずを かく たかさ
+  _drawDec(ctx,t,x,y,isMoving){
+    const bs=this.bs, k=Num.floor(this.q), fr=Num.fracPart(this.q), f=Num.toNumber(fr), d=Math.round(f*10);
+    if(k===0){ drawGlassFigure(ctx, d, x+bs/2, y+bs, bs, this.w); return y - glassHatLift(d)*bs - 3; }
+    const g=glassPlace(k), oy=g.side?0:bs;              // あたまに のる ときは キャラを 1だん さげる
+    drawNumberblock(ctx, k, x, y+oy, bs, { t:t, animate:isMoving, numberling:false });
+    drawGlassCube(ctx, x+g.gx*bs, y+oy+g.gy*bs, bs, f, glassLiqColor(d), this.w);
+    const fc=blockSpec(k).face||{};
+    return y - (g.side && (fc.jesterHat||fc.hair) ? bs*0.55 : g.side && fc.tophat ? bs*1.15 : 0) - 3;
+  }
   _drawBody(ctx,t=0,bounceY=0){
     const n=this.num,x=this.x,y=this.y+bounceY;
     const isMoving=Math.abs(this.vx)>0.5||Math.abs(this.vy)>1.0;
+    const label=Num.fmt(this.q);
+    if(isDec(this.q)){
+      const ly=this._drawDec(ctx,t,x,y,isMoving);
+      ctx.save(); ctx.textAlign='center'; ctx.textBaseline='bottom'; ctx.font='bold '+Math.max(9,Math.round(BS*0.6))+'px sans-serif';
+      ctx.strokeStyle='white'; ctx.lineWidth=3; ctx.strokeText(label,x+this.width/2,ly);
+      ctx.fillStyle='#111'; ctx.fillText(label,x+this.width/2,ly);
+      ctx.restore();
+      return;
+    }
     drawNumberblock(ctx, n, x, y, this.bs, { t:t, animate:isMoving, numberling:false });
     // ハロウィン：あたまに まじょの ぼうし（数字は ぼうしの 上へ）
     let ly = y - 3;
@@ -1964,12 +1998,25 @@ function blockGap(a,b){
 const MERGE_REACH = 28;   // ここまで近づけたら合体できる（体の隙間）
 const NEAR_REACH  = 60;   // 通行止めの合図を出しはじめる距離
 
+// ── しょうすう（かずは ぶんすう Num で けいさん）──
+// ゆるす のは ぶんぼ が DEC_DEN の やくすう の かず（10 ＝ 0.1 きざみ）。しょうすう は DEC_MAX まで（101 いじょう は せいすう だけ）。
+// × ÷ しかく も こたえが 0.1 きざみ に おさまる とき だけ（パパと きめた。HANDOFF.md 1.5）。
+const DEC_DEN = 10, DEC_MAX = 100;
+function qOk(q){
+  return Num.cmp(q, Num.ZERO) > 0 && Num.fits(q, DEC_DEN) && Num.cmp(q, Num.make(Num.isInt(q) ? MAX_NUM : DEC_MAX)) <= 0;
+}
+// 2つの かず（Num）と えんざんし から、しき と こたえ（どれも Num）
+function calcQ(a, b, op){
+  if(op==='+') return { n1:a, n2:b, ans:Num.add(a,b) };
+  if(op==='x') return { n1:a, n2:b, ans:Num.mul(a,b) };
+  const big = Num.cmp(a,b) >= 0 ? a : b, sm = big===a ? b : a;
+  if(op==='-') return { n1:big, n2:sm, ans:Num.sub(big,sm) };
+  return { n1:big, n2:sm, ans:Num.div(big,sm) };
+}
+const isDec = q => !Num.isInt(q);
 function canCalc(a,b,m){
-  if(m==='+')   return a.num+b.num<=MAX_NUM;
-  if(m==='-')   return Math.abs(a.num-b.num)>=1;
-  if(m==='x')   return a.num*b.num<=MAX_NUM;
-  if(m==='div'){ const lg=Math.max(a.num,b.num),sm=Math.min(a.num,b.num); return sm>=1&&lg%sm===0; }
-  return false;
+  if(CALC_OPS.indexOf(m) < 0) return false;
+  return qOk(calcQ(a.q, b.q, m).ans);
 }
 
 // ─── Puzzle class（4択クイズ）────────────────────────────────────────────────
@@ -2239,9 +2286,9 @@ function computeAutoBS(){
   if(!blocks.length) return BS_MAP.L;
   let totalCols = 0, maxRows = 1;
   for(const b of blocks){
-    const spec = blockSpec(b.num);
-    totalCols += spec.cols;
-    if(spec.rows > maxRows) maxRows = spec.rows;
+    const d = qDims(b.q);                  // しょうすう は ガラス の ぶん ひろい
+    totalCols += d.cols;
+    if(d.rows > maxRows) maxRows = d.rows;
   }
   const mL = 14 + playLeft(), mR = 14 + EDGE_MARGIN; // updateTargets と同じ余白
   const gaps   = Math.max(0, blocks.length-1) * 4; // キャラ同士の最低すき間
@@ -2309,13 +2356,11 @@ function drawFormula(ctx){
   // おだい中は出さない。「1+1+1+1+1 = 5」と合体する前から答えが見えてしまい、
   // 自分で組み立てる楽しみを先に奪ってしまうため。
   if(taskActive()) return;
-  const sorted=[...blocks].sort((a,b)=>a.num-b.num);
-  const nums=sorted.map(b=>b.num);
+  const sorted=[...blocks].sort((a,b)=>Num.cmp(a.q,b.q));
+  const qs=sorted.map(b=>b.q), F=Num.fmt, nums=qs.map(F);       // 0.1＋0.2 も ぴったり 0.3（ぶんすう で けいさん）
   let formula='';
-  if(mode==='+') formula=nums.join(' + ')+' = '+nums.reduce((a,v)=>a+v,0);
-  else if(mode==='-'&&nums.length===2){ const big=Math.max(...nums),sm=Math.min(...nums); formula=`${big} − ${sm} = ${big-sm}`; }
-  else if(mode==='x'&&nums.length===2) formula=`${nums[0]} × ${nums[1]} = ${nums[0]*nums[1]}`;
-  else if(mode==='div'&&nums.length===2){ const big=Math.max(...nums),sm=Math.min(...nums); if(sm>=1&&big%sm===0) formula=`${big} ÷ ${sm} = ${big/sm}`; }
+  if(mode==='+') formula=nums.join(' + ')+' = '+F(qs.reduce((a,v)=>Num.add(a,v),Num.ZERO));
+  else if(qs.length===2 && mode!=='+'){ const r=calcQ(qs[0],qs[1],mode); if(qOk(r.ans)) formula=`${F(r.n1)} ${{'-':'−','x':'×','div':'÷'}[mode]} ${F(r.n2)} = ${F(r.ans)}`; }
   if(!formula) formula=nums.join(', ');
   ctx.save();
   ctx.font='bold 16px sans-serif'; ctx.textAlign='center'; ctx.textBaseline='middle';
@@ -2380,7 +2425,9 @@ function getNumpadLayout(){
     const x0=(sw-total)/2, y=padY+Math.round((padH-safeBottom()-btnH)/2);
     return items.map((it,i)=>({...it, x:x0+i*(btnW+gap), y:y, w:btnW, h:btnH}));
   }
+  // 0.1・0.5（しょうすう。はんぶん と おなじ ガラスの キャラ）も いつも だす
   const items=[
+    {label:'0.1',val:0.1,color:'#5c7f9a'},{label:'0.5',val:0.5,color:'#5c7f9a'},
     {label:'1',val:1},{label:'2',val:2},{label:'3',val:3},{label:'4',val:4},
     {label:'5',val:5},{label:'6',val:6},{label:'7',val:7},{label:'8',val:8},
     {label:'9',val:9},{label:'10',val:10},
@@ -2390,10 +2437,10 @@ function getNumpadLayout(){
     const btnH=padH-12,btnW=Math.min(Math.floor((sw-10)/items.length)-2,70);
     return items.map((item,i)=>({...item,x:5+i*(btnW+2),y:padY+6,w:btnW,h:btnH}));
   }
-  const btnH=36,col6W=Math.min(Math.floor((sw-10)/6)-2,58);
+  const btnH=36,col7W=Math.min(Math.floor((sw-10)/7)-2,58);
   return [
-    ...items.slice(0,6).map((item,i)=>({...item,x:5+i*(col6W+2),y:padY+8,w:col6W,h:btnH})),
-    ...items.slice(6).map((item,i)=>({...item,x:5+i*(col6W+2),y:padY+52,w:col6W,h:btnH}))
+    ...items.slice(0,7).map((item,i)=>({...item,x:5+i*(col7W+2),y:padY+8,w:col7W,h:btnH})),
+    ...items.slice(7).map((item,i)=>({...item,x:5+i*(col7W+2),y:padY+52,w:col7W,h:btnH}))
   ];
 }
 
@@ -4964,8 +5011,8 @@ function fuseBlocks(a, c){
   pushUndo();
   const na=a.num, nc=c.num;
   const cx=(a.cx + c.cx)/2, cy=(a.cy + c.cy)/2;
-  const { n1, n2, ans } = calcPair(na, nc, mode);
-  logStep(mode, n1, n2, Math.max(1,Math.round(ans)));
+  const { n1, n2, ans } = calcQ(a.q, c.q, mode);
+  logStep(mode, Num.toNumber(n1), Num.toNumber(n2), Num.toNumber(ans));
   blocks = blocks.filter(bl => bl!==a && bl!==c);
   const res = makeFused(na, nc, mode, ans, cx, cy);
   for(let i=0;i<20;i++) fxParticles.push(new Particle(cx, cy));
@@ -4973,7 +5020,7 @@ function fuseBlocks(a, c){
 
 // 合体後のキャラを、2体がいた場所に置く
 function makeFused(na, nc, op, ans, cx, cy){
-  const res = new NumberBlock(Math.max(1,Math.round(ans)), 0, 0);
+  const res = new NumberBlock(ans, 0, 0);        // ans：Num（2.5 なども そのまま）
   res.x = Math.min(Math.max(playLeft(), cx - res.width/2), sw-EDGE_MARGIN-res.width);
   res.y = Math.min(Math.max(targetRowY()+2, cy - res.height/2), calcFloor()-res.height);
   res.targetX = res.x; res.birth = 0;
@@ -4990,7 +5037,7 @@ function duplicateAtMirror(b){
   if(m){ b.vx=0; b.vy=0; b.y=Math.max(b.y, m.y+m.h+4); }
   if(m && blocks.length < MAX_BLOCKS){
     pushUndo();
-    const copy=new NumberBlock(b.num, m.x+m.w/2, m.y+m.h+4);
+    const copy=new NumberBlock(b.q, m.x+m.w/2, m.y+m.h+4);
     copy.x = m.x + m.w/2 - copy.width/2;
     // 元のキャラは真下に落ちるので、複製は左斜め下へ飛ばす。
     // 2体が別々の方向に分かれるので「増えた」ことがはっきり分かる。
@@ -5040,7 +5087,7 @@ function handleEnd(x,y,pid){
   // ×2 / ÷2 の上で離した → そのキャラが2倍・半分になる。
   // できない組み合わせ（奇数の÷2など）は何も起きず、そのまま落ちる。
   for(const id of ['double','half','square']){
-    if(isOverTarget(id,x,y)){ if(canScale(id,b.num)) scaleBlock(b,id); updateTargets(); return; }
+    if(isOverTarget(id,x,y)){ if(canScale(id,b.q)) scaleBlock(b,id); updateTargets(); return; }
   }
   let best=null,bestD=Infinity;
   for(const other of blocks){
@@ -5049,7 +5096,8 @@ function handleEnd(x,y,pid){
     if(d<MERGE_REACH&&canCalc(b,other,mode)&&d<bestD){ bestD=d; best=other; }
   }
   if(best){
-    if(quizOn) { pushUndo(); blocks=blocks.filter(bl=>bl!==b&&bl!==best); puzzle=new Puzzle(b,best,mode); }
+    // 4たく クイズ は せいすう だけ（しょうすう が まじる ときは すぐ がったい）
+    if(quizOn && !isDec(b.q) && !isDec(best.q) && !isDec(calcQ(b.q,best.q,mode).ans)) { pushUndo(); blocks=blocks.filter(bl=>bl!==b&&bl!==best); puzzle=new Puzzle(b,best,mode); }
     else       { fuseBlocks(b,best); }
   }
   updateTargets();

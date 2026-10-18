@@ -33,4 +33,32 @@ module.exports = {
       b.num = 12; return [b.q, b.num, c.num, d.num, typeof Num]; });
     t.eq(r, [{ n: 12, d: 1 }, 12, 1000, 1, 'object'], 'ぶんすう で ない');
   },
+
+  'けいさん で しょうすう：0.1・0.5 の キー、÷2 で 5 → 2.5、0.3 ＋ 0.7 ＝ 1、7 ÷ 2 ＝ 3.5。0.1 きざみ に ならない ものは うけない。もどす で もどる': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      setQuizOn(false); if(typeof setTaskOn === 'function') setTaskOn(false); setMode('+'); blocks = []; clearUndo();
+      const keys = getNumpadLayout().map(b => b.label);
+      const f = () => blocks.map(b => Num.fmt(b.q)).sort();
+      spawnBlock(5); scaleBlock(blocks[0], 'half');
+      const half = f();
+      spawnBlock(0.3); spawnBlock(0.7);
+      const a = blocks.find(b => Num.fmt(b.q) === '0.3'), c = blocks.find(b => Num.fmt(b.q) === '0.7');
+      fuseBlocks(a, c);
+      const sum = f();
+      doUndo();
+      const undone = f();
+      blocks = []; setMode('div'); spawnBlock(7); spawnBlock(2);
+      const d7 = canCalc(blocks[0], blocks[1], 'div');
+      blocks = []; spawnBlock(0.5); spawnBlock(0.5);
+      const rej = [canCalc(blocks[0], blocks[1], 'x'), canCalc(blocks[0], blocks[1], '+'), canScale('half', blocks[0].q), canScale('square', Num.from(1.5)), canScale('square', Num.from(3))];
+      return { keys: keys.slice(0, 2), half, sum, undone, d7, rej };
+    });
+    t.eq(r.keys, ['0.1', '0.5'], '0.1・0.5 の キーが ない');
+    t.eq(r.half, ['2.5'], '5 を ÷2 で 2.5 に ならない');
+    t.eq(r.sum, ['1', '2.5'], '0.3 ＋ 0.7 が 1 に ならない');
+    t.eq(r.undone, ['0.3', '0.7', '2.5'], 'もどす で もどらない');
+    t.eq(r.d7, true, '7 ÷ 2 ＝ 3.5 が できない');
+    t.eq(r.rej, [false, true, false, false, true], '0.1 きざみ に ならない もの（0.5×0.5・0.5÷2・1.5 の しかく）を うけた');
+  },
 };

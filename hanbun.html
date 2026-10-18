@@ -66,66 +66,11 @@ const V_MAX = 100, MAX_CHARS = 24;
 const ADD_NUMS = [0.1, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];   // したの ボタン（おすと その かずの キャラが でる）
 const BS_MAX = 120;        // キューブの いちばん 大きい ばあい（px。まえの 40 の 3ばい。すくない ときに 大きく）
 const SPLIT_PX = 45;        // ゆびが これだけ ひろがったら はんぶんこ
-// ── ガラスの キャラ（0.1〜0.9）──
-// え は ART の 大きさで 1かい かいて とっておき、bs に あわせて ちぢめて つかう（bs は うごくので まいかい かかない）
-const ART = 96, KEY_RGB = [255, 0, 255];
-const liqCol = d => darken(oneCellColor(d, 0), 0.22);          // みずの いろ：d の いろを すこし こく
+// ── ガラスの キャラ（0.1〜0.9）：かきかた は engine.js（drawGlassFigure・drawGlassCube など。けいさん と おなじ もの）──
+const liqCol = glassLiqColor;          // みずの いろ：d の いろを すこし こく
 const HALF_RGB = liqCol(5);
-function keyOut(o, S){
-  const im = o.getImageData(0, 0, S*2, S*2), a = im.data;
-  for(let i = 0; i < a.length; i += 4){ const m = Math.min(a[i], a[i+2]) - a[i+1];
-    if(m > 60 && Math.abs(a[i] - a[i+2]) < 90) a[i+3] = Math.round(a[i+3]*(1 - Math.min(1, (m - 60)/120))); }
-  o.putImageData(im, 0, 0);
-}
-const artCache = {};
-function artCanvas(){ const S = ART*4, oc = document.createElement('canvas'); oc.width = oc.height = S*2; const o = oc.getContext('2d'); o.scale(2, 2); return { oc, o, S, x0: S/2 - ART/2, y0: S/2 - ART/2 }; }
-// d の かお（ぼうし・かみ・めがね こみ）。からだ と てあし は すきとおらせる
-function faceArt(d){
-  if(artCache['f' + d]) return artCache['f' + d];
-  const s = blockSpec(d), A = artCanvas();
-  const face = Object.assign({}, s.face, { buttons: 0, limbRGB: KEY_RGB, limbGrad: null, shoes: null, gloves: null });
-  const fg = { faceScale: 0.74, faceOffsetY: -0.1, mouthOffsetY: -0.04, mouthOffsetX: -0.05, eyeScale: d === 1 ? 1.1 : 0.9, limbRGB: KEY_RGB, limbGrad: null };
-  const sp = Object.assign({}, s, { face, faceGeom: fg, rows: 1, cols: 1,
-    cells: [{ gx: 0, gy: 0, group: 0, colorRGB: KEY_RGB, borderRGB: KEY_RGB, isTen: false, isHundred: false }],
-    groups: [{ kind: 'one', cellIndexes: [0], fillRGB: KEY_RGB, borderRGB: KEY_RGB }] });
-  drawNumberblock(A.o, d, A.x0, A.y0, ART, { t: 0, numberling: false, spec: sp });
-  keyOut(A.o, A.S);
-  return (artCache['f' + d] = A);
-}
-// てあし：みんな 1 と おなじ かたち・ばしょ。いろ だけ d の てあしの いろ（なければ みずの いろを すこし こく）
-function limbArt(d){
-  if(artCache['l' + d]) return artCache['l' + d];
-  const f = blockSpec(d).face, s1 = blockSpec(1), A = artCanvas();
-  const rgbL = f.limbRGB || (f.limbGrad ? null : darken(liqCol(d), 0.15)), grad = f.limbGrad || null;
-  const sp = Object.assign({}, s1, { face: Object.assign({}, s1.face, { limbRGB: rgbL, limbGrad: grad, shoes: null, gloves: null }), faceGeom: { limbRGB: rgbL, limbGrad: grad } });
-  A.o.save(); A.o.beginPath(); A.o.rect(0, 0, A.S, A.S); A.o.rect(A.x0 + ART, A.y0, -ART, ART); A.o.clip('evenodd');   // キューブの そと だけ
-  drawNumberblock(A.o, 1, A.x0, A.y0, ART, { t: 0, numberling: false, spec: sp }); A.o.restore();
-  return (artCache['l' + d] = A);
-}
-function drawArt(A, cx, cy){ const k = bs/ART, S = A.S*k; ctx.drawImage(A.oc, cx - S/2, cy - S/2, S, S); }
-// ガラスの キューブ（x0, y0 が ひだりうえ、1 と おなじ 大きさ）。fill：0〜1 の みずの たかさ
-// w：みずの うごき（mizu.js。スマホを かたむけると みずの おもてが すいへいを たもつ・ゆれる）
-function glassCube(x0, y0, fill, col, w){
-  const r = bs*0.09, inset = bs*0.055;
-  ctx.save();
-  ctx.fillStyle = 'rgba(214,236,248,0.6)'; ctx.beginPath(); ctx.roundRect(x0, y0, bs, bs, r); ctx.fill();
-  Mizu.draw(ctx, x0 + inset, y0 + inset, bs - inset*2, bs - inset*2, r*0.7, fill, col, w, bs);
-  // めもり 10こ（まんなかの 5 は ながい）
-  ctx.strokeStyle = 'rgba(70,100,130,0.35)'; ctx.lineWidth = Math.max(0.8, bs*0.012); ctx.beginPath();
-  for(let i = 1; i < 10; i++){ const yy = y0 + bs - inset - (bs - inset*2)*i/10, w = i === 5 ? bs*0.16 : bs*0.09; ctx.moveTo(x0 + inset, yy); ctx.lineTo(x0 + inset + w, yy); }
-  ctx.stroke();
-  ctx.strokeStyle = 'rgba(110,145,175,0.95)'; ctx.lineWidth = Math.max(1.2, bs*0.04); ctx.beginPath(); ctx.roundRect(x0, y0, bs, bs, r); ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = Math.max(1.2, bs*0.035); ctx.lineCap = 'round';
-  ctx.beginPath(); ctx.moveTo(x0 + bs*0.8, y0 + bs*0.12); ctx.lineTo(x0 + bs*0.88, y0 + bs*0.12); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(x0 + bs*0.88, y0 + bs*0.2); ctx.lineTo(x0 + bs*0.88, y0 + bs*0.42); ctx.stroke();
-  ctx.restore();
-}
-// 0.d の キャラ（cx：まんなか、foot：キューブの した）
-function drawGlassChar(d, cx, foot, w){
-  drawArt(limbArt(d), cx, foot - bs/2);
-  glassCube(cx - bs/2, foot - bs, d/10, liqCol(d), w);
-  drawArt(faceArt(d), cx, foot - bs/2);
-}
+function glassCube(x0, y0, fill, col, w){ drawGlassCube(ctx, x0, y0, bs, fill, col, w); }
+function drawGlassChar(d, cx, foot, w){ drawGlassFigure(ctx, d, cx, foot, bs, w); }
 
 const cv = document.getElementById('c'), ctx = cv.getContext('2d'), stageEl = document.getElementById('stage');
 const sayBig = document.querySelector('#say .big'), saySub = document.querySelector('#say .sub');
@@ -163,13 +108,7 @@ let chars = [];
 let bs = 30;
 const now0 = () => performance.now();
 const isFrac = v => fracOf(v) !== 0;
-// 2.3 の ガラス（0.3）の ばしょ：いちばん うえの だんの みぎはしの うえ（top）か、ぼうし・かみの けが あれば いちばん したの みぎよこ（side）
-function glassAt(k){
-  const s = blockSpec(k), f = s.face || {};
-  if(f.jesterHat || f.hair || f.tophat){ let b = null; for(const c of s.cells) if(!b || c.gy > b.gy || (c.gy === b.gy && c.gx > b.gx)) b = c; return { side: true, gx: b.gx + 1, gy: b.gy }; }
-  let t = null; for(const c of s.cells) if(!t || c.gy < t.gy || (c.gy === t.gy && c.gx > t.gx)) t = c;
-  return { side: false, gx: t.gx, gy: t.gy - 1 };
-}
+const glassAt = glassPlace;            // 2.3 の ガラス（0.3）の ばしょ（engine.js）
 // キャラの おおきさ（キューブ なんこぶん）
 function dims(v){
   const k = intOf(v);
@@ -339,21 +278,9 @@ function burst(x, y, n, gold){ for(let i = 0; i < n; i++){ const a = Math.random
 
 // ── かく ──
 function rect(c){ const d = dims(c.v), w = d.cols*bs, h = d.rows*bs; return { x: c.x - w/2, y: c.y - h, w, h }; }
-// あたまの かず（ナンバーリングと おなじ 字。0.5 の「.」は まる）
-function drawLabel(v, cx, by){
-  const s = fmt(v), h = bs*0.55, gw = h*0.56, sp = h*0.2, dotW = h*0.3;
-  const ws = [...s].map(ch => ch === '.' ? dotW : gw), tot = ws.reduce((a, b) => a + b, 0) + sp*(s.length - 1);
-  const cy = by - bs*0.15 - h/2;
-  ctx.save(); ctx.lineWidth = h*0.22; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#000'; ctx.fillStyle = '#000';
-  let x = cx - tot/2;
-  [...s].forEach((ch, i) => {
-    if(ch === '.'){ ctx.beginPath(); ctx.arc(x + dotW/2, cy + h/2 - h*0.11, h*0.13, 0, Math.PI*2); ctx.fill(); }
-    else { digitPath(ctx, ch, x + gw/2, cy, h); ctx.stroke(); }
-    x += ws[i] + sp;
-  });
-  ctx.restore();
-}
-const hatLift = d => d === 3 ? 0.42 : d === 7 ? 0.3 : 0;     // 3 の ぼうし・7 の かみ の ぶん かずを うえに
+// あたまの かず（engine.js の drawNumLabel。0.5 の「.」は まる）
+function drawLabel(v, cx, by){ drawNumLabel(ctx, fmt(v), cx, by, bs); }
+const hatLift = glassHatLift;
 function drawChar(c, now){
   const k = intOf(c.v), f = fracOf(c.v), d = dims(c.v);
   let x = c.x, footY = c.y;

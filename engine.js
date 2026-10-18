@@ -2410,3 +2410,91 @@ function speedTarget(hist, def){
   const med = h.length % 2 ? h[h.length >> 1] : (h[h.length/2 - 1] + h[h.length/2])/2;
   return Math.round(Math.min(def*1.5, Math.max(def*0.6, med)));
 }
+
+/* ── ガラスの キャラ（0.1〜0.9）と かずの 字（はんぶん・けいさん で つかう）─────────────
+   1 と おなじ 大きさの ガラスの キューブに、d の いろを すこし こく した みずが d/10 ぶん（めもり 10こ）。
+   かお・ぼうし・かみ は d の もの（つぶさず すこし ちいさく）、てあし は みんな 1 と おなじ かたち・ばしょ で いろ だけ d の もの。
+   え は GLASS_ART の 大きさで 1かい かいて とっておき、ちぢめて つかう（マゼンタで からだを かいて すきとおらせる）。
+   みずの うごき（かたむけると すいへい）は mizu.js が あれば つかう（w：Mizu.mk() の じょうたい）。 */
+const GLASS_ART = 96, GLASS_KEY = [255, 0, 255];
+function glassLiqColor(d){ return darken(oneCellColor(d, 0), 0.22); }
+function _glassKeyOut(o, S){
+  const im = o.getImageData(0, 0, S*2, S*2), a = im.data;
+  for(let i = 0; i < a.length; i += 4){ const m = Math.min(a[i], a[i+2]) - a[i+1];
+    if(m > 60 && Math.abs(a[i] - a[i+2]) < 90) a[i+3] = Math.round(a[i+3]*(1 - Math.min(1, (m - 60)/120))); }
+  o.putImageData(im, 0, 0);
+}
+const _glassArtCache = {};
+function _glassCanvas(){ const S = GLASS_ART*4, oc = document.createElement('canvas'); oc.width = oc.height = S*2; const o = oc.getContext('2d'); o.scale(2, 2);
+  return { oc, o, S, x0: S/2 - GLASS_ART/2, y0: S/2 - GLASS_ART/2 }; }
+// d の かお（ぼうし・かみ・めがね こみ）。からだ と てあし は すきとおらせる
+function glassFaceArt(d){
+  if(_glassArtCache['f' + d]) return _glassArtCache['f' + d];
+  const s = blockSpec(d), A = _glassCanvas(), K = GLASS_KEY;
+  const face = Object.assign({}, s.face, { buttons: 0, limbRGB: K, limbGrad: null, shoes: null, gloves: null });
+  const fg = { faceScale: 0.74, faceOffsetY: -0.1, mouthOffsetY: -0.04, mouthOffsetX: -0.05, eyeScale: d === 1 ? 1.1 : 0.9, limbRGB: K, limbGrad: null };
+  const sp = Object.assign({}, s, { face, faceGeom: fg, rows: 1, cols: 1,
+    cells: [{ gx: 0, gy: 0, group: 0, colorRGB: K, borderRGB: K, isTen: false, isHundred: false }], groups: [{ kind: 'one', cellIndexes: [0], fillRGB: K, borderRGB: K }] });
+  drawNumberblock(A.o, d, A.x0, A.y0, GLASS_ART, { t: 0, numberling: false, spec: sp });
+  _glassKeyOut(A.o, A.S);
+  return (_glassArtCache['f' + d] = A);
+}
+// てあし：みんな 1 と おなじ かたち・ばしょ。いろ だけ d の てあしの いろ（なければ みずの いろを すこし こく）
+function glassLimbArt(d){
+  if(_glassArtCache['l' + d]) return _glassArtCache['l' + d];
+  const f = blockSpec(d).face, s1 = blockSpec(1), A = _glassCanvas();
+  const rgbL = f.limbRGB || (f.limbGrad ? null : darken(glassLiqColor(d), 0.15)), grad = f.limbGrad || null;
+  const sp = Object.assign({}, s1, { face: Object.assign({}, s1.face, { limbRGB: rgbL, limbGrad: grad, shoes: null, gloves: null }), faceGeom: { limbRGB: rgbL, limbGrad: grad } });
+  A.o.save(); A.o.beginPath(); A.o.rect(0, 0, A.S, A.S); A.o.rect(A.x0 + GLASS_ART, A.y0, -GLASS_ART, GLASS_ART); A.o.clip('evenodd');   // キューブの そと だけ
+  drawNumberblock(A.o, 1, A.x0, A.y0, GLASS_ART, { t: 0, numberling: false, spec: sp }); A.o.restore();
+  return (_glassArtCache['l' + d] = A);
+}
+function drawGlassArt(ctx, A, cx, cy, bs){ const S = A.S*bs/GLASS_ART; ctx.drawImage(A.oc, cx - S/2, cy - S/2, S, S); }
+// ガラスの キューブ（x0, y0 が ひだりうえ、1 と おなじ 大きさ bs）。fill：0〜1 の みずの たかさ。w：みずの うごき（なければ たいら）
+function drawGlassCube(ctx, x0, y0, bs, fill, col, w){
+  const r = bs*0.09, inset = bs*0.055, ix = x0 + inset, iy = y0 + inset, iw = bs - inset*2, ih = bs - inset*2;
+  ctx.save();
+  ctx.fillStyle = 'rgba(214,236,248,0.6)'; ctx.beginPath(); ctx.roundRect(x0, y0, bs, bs, r); ctx.fill();
+  if(w && typeof Mizu !== 'undefined') Mizu.draw(ctx, ix, iy, iw, ih, r*0.7, fill, col, w, bs);
+  else if(fill > 0){ ctx.save(); ctx.beginPath(); ctx.roundRect(ix, iy, iw, ih, r*0.7); ctx.clip(); ctx.fillStyle = rgb(col); ctx.fillRect(ix, iy + ih*(1 - fill), iw, ih*fill); ctx.restore(); }
+  // めもり 10こ（まんなかの 5 は ながい）
+  ctx.strokeStyle = 'rgba(70,100,130,0.35)'; ctx.lineWidth = Math.max(0.8, bs*0.012); ctx.beginPath();
+  for(let i = 1; i < 10; i++){ const yy = iy + ih - ih*i/10, mw = i === 5 ? bs*0.16 : bs*0.09; ctx.moveTo(ix, yy); ctx.lineTo(ix + mw, yy); }
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(110,145,175,0.95)'; ctx.lineWidth = Math.max(1.2, bs*0.04); ctx.beginPath(); ctx.roundRect(x0, y0, bs, bs, r); ctx.stroke();
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = Math.max(1.2, bs*0.035); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x0 + bs*0.8, y0 + bs*0.12); ctx.lineTo(x0 + bs*0.88, y0 + bs*0.12); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x0 + bs*0.88, y0 + bs*0.2); ctx.lineTo(x0 + bs*0.88, y0 + bs*0.42); ctx.stroke();
+  ctx.restore();
+}
+// 0.d の キャラ（cx：まんなか、foot：キューブの した）
+function drawGlassFigure(ctx, d, cx, foot, bs, w){
+  drawGlassArt(ctx, glassLimbArt(d), cx, foot - bs/2, bs);
+  drawGlassCube(ctx, cx - bs/2, foot - bs, bs, d/10, glassLiqColor(d), w);
+  drawGlassArt(ctx, glassFaceArt(d), cx, foot - bs/2, bs);
+}
+// 2.3 の ガラス（0.3）の ばしょ（k の キャラの マスめ で）：いちばん うえの だんの みぎはしの うえ（top）、
+// ぼうし・かみの けが ある（3・7・20）と いちばん したの みぎよこ（side）
+function glassPlace(k){
+  const s = blockSpec(k), f = s.face || {};
+  if(f.jesterHat || f.hair || f.tophat){ let b = null; for(const c of s.cells) if(!b || c.gy > b.gy || (c.gy === b.gy && c.gx > b.gx)) b = c; return { side: true, gx: b.gx + 1, gy: b.gy }; }
+  let t = null; for(const c of s.cells) if(!t || c.gy < t.gy || (c.gy === t.gy && c.gx > t.gx)) t = c;
+  return { side: false, gx: t.gx, gy: t.gy - 1 };
+}
+const glassHatLift = d => d === 3 ? 0.42 : d === 7 ? 0.3 : 0;     // 3 の ぼうし・7 の かみ の ぶん、かずを うえに（キューブ なんこぶん）
+// あたまの かず（ナンバーリングと おなじ 字）。s：'2.5'・'1/3' など。「.」は まる、「/」は ななめ せん。by：かずの した
+function drawNumLabel(ctx, s, cx, by, bs){
+  s = String(s);
+  const h = bs*0.55, gw = h*0.56, sp = h*0.2, dotW = h*0.3, slW = h*0.42;
+  const ws = [...s].map(ch => ch === '.' ? dotW : ch === '/' ? slW : gw), tot = ws.reduce((a, b) => a + b, 0) + sp*(s.length - 1);
+  const cy = by - bs*0.15 - h/2;
+  ctx.save(); ctx.lineWidth = h*0.22; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#000'; ctx.fillStyle = '#000';
+  let x = cx - tot/2;
+  [...s].forEach((ch, i) => {
+    if(ch === '.'){ ctx.beginPath(); ctx.arc(x + dotW/2, cy + h/2 - h*0.11, h*0.13, 0, Math.PI*2); ctx.fill(); }
+    else if(ch === '/'){ ctx.beginPath(); ctx.moveTo(x + slW*0.85, cy - h/2); ctx.lineTo(x + slW*0.15, cy + h/2); ctx.stroke(); }
+    else { digitPath(ctx, ch, x + gw/2, cy, h); ctx.stroke(); }
+    x += ws[i] + sp;
+  });
+  ctx.restore();
+}
