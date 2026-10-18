@@ -5,7 +5,7 @@
 
 - 公開：GitHub Pages（`main` へ push すると そのまま 公開）。main へ 直接 コミット・push する。
 - スマホでは キャッシュが のこるので、更新後は ゲーム画面 右下の 時刻を ながおし（「よみこみ」）してもらう。
-- テスト：`cd tests && node run.js [名前の一部]`（Playwright、いま 155件 すべて 成功）。
+- テスト：`cd tests && node run.js [名前の一部]`（Playwright）。**ちいさい かわり は `node run.js --changed`**（かえた ファイルに かんけいする テストだけ。`tests/related.js`。ほんたいを かえたら じどうで ぜんぶ）。push の まえに かならず ながし、0 失敗 を たしかめる。
 
 ## 1. 経緯（このブランチで やったこと）
 

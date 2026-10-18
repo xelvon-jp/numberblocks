@@ -3,6 +3,7 @@
 //   cd tests && npm install      （はじめの1回だけ）
 //   node run.js                  ぜんぶ流す
 //   node run.js おだい            名前に「おだい」を含むものだけ流す
+//   node run.js --changed        かえた ファイルに かんけいする テストだけ（related.js。--changed=origin/main・--list も）
 //
 // 1つでも失敗したら終了コード1で終わる。
 // Chromium は CHROME_PATH → /opt/pw-browsers の中 → Playwright まかせ、の順にさがす。
@@ -99,8 +100,20 @@ function makeT(browser, baseUrl){
 }
 
 (async () => {
-  const filter = process.argv[2] || '';
-  const files = fs.readdirSync(__dirname).filter(f => f.endsWith('.test.js')).sort();
+  const args = process.argv.slice(2), ch = args.find(a => a.startsWith('--changed'));
+  const filter = args.find(a => !a.startsWith('--')) || '';
+  let files = fs.readdirSync(__dirname).filter(f => f.endsWith('.test.js')).sort();
+  if(ch){
+    // かえた ファイルに かんけいする テスト だけ
+    const rel = require('./related');
+    const changed = rel.changedFiles(ROOT, ch.includes('=') ? ch.split('=')[1] : null), r = rel.pick(changed, __dirname);
+    console.log('■ かえた ファイル');
+    for(const [f, w] of r.why) console.log('  ' + f + '  → ' + w);
+    if(!changed.length) console.log('  （なし）');
+    files = files.filter(f => r.tests.includes(f.replace('.test.js', '')));
+    console.log('■ ながす テスト：' + (r.all ? 'ぜんぶ' : files.join(' ') || 'なし'));
+    if(args.includes('--list') || !files.length) return;
+  }
   const srv = await serve();
   const baseUrl = `http://127.0.0.1:${srv.address().port}`;
   const browser = await chromium.launch({ executablePath: findChrome() });

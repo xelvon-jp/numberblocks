@@ -8,7 +8,13 @@ cd tests
 npm install        # はじめの1回だけ
 node run.js        # ぜんぶ流す（30秒ほど）
 node run.js undo   # ファイル名かケース名に「undo」を含むものだけ
+node run.js --changed            # かえた ファイルに かんけいする テストだけ（まだ コミット して いない かわり）
+node run.js --changed=origin/main  # origin/main から の かわり に かんけいする テストだけ
+node run.js --changed --list     # どの テストを ながすか 見せる だけ
 ```
+
+`--changed` の えらびかたは `related.js`（ほんたい＝index.html・engine.js など を かえたら ぜんぶ、
+waru.html なら waru.test.js、わからない ファイルは ぜんぶ）。あたらしい ページを たしたら `RULES` に 1ぎょう たす。
 
 Chromium は `CHROME_PATH` → `/opt/pw-browsers` の中 → Playwright まかせ、の順にさがします。
 Claude Code on the web の環境なら、そのまま動きます。
