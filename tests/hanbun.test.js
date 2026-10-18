@@ -100,6 +100,26 @@ module.exports = {
     t.ok(Math.abs(await f.evaluate(() => hanbun.water(0).th)) < 0.1, 'すいへい を けしても かたむいた まま');
   },
 
+  'ひろげて いる あいだは まだ わかれず、2ひきが ゆびさきに くっついて くる。ゆびを はなすと そこで わかれる。もどすと もとどおり': async t => {
+    const { f } = await openHanbun(t, [4]);
+    const a = await f.evaluate(() => hanbun.at(0));
+    await ptr(f, 'pointerdown', 1, a.x - 4, a.y); await ptr(f, 'pointerdown', 2, a.x + 4, a.y);
+    for(let k = 1; k <= 8; k++){ await ptr(f, 'pointermove', 1, a.x - 4 - k*9, a.y + k*3); await ptr(f, 'pointermove', 2, a.x + 4 + k*9, a.y - k*3); }
+    t.eq(await vals(f), [4], 'はなす まえに わかれた');
+    const pv = await f.evaluate(() => hanbun.preview());
+    t.ok(pv && pv.length === 2 && pv.every(c => c.v === 2), 'ゆびに 2ひきが ついて こない ' + JSON.stringify(pv));
+    t.ok(Math.hypot(pv[0].x - (a.x - 76), pv[0].y - (a.y + 24)) < 3 && Math.hypot(pv[1].x - (a.x + 76), pv[1].y - (a.y - 24)) < 3, 'ゆびさきに いない ' + JSON.stringify(pv));
+    // ゆびを ちかづけると もとに もどる、また ひろげると つく
+    await ptr(f, 'pointermove', 1, a.x - 6, a.y); await ptr(f, 'pointermove', 2, a.x + 6, a.y);
+    t.eq(await f.evaluate(() => hanbun.preview()), null, 'もどしても わかれた まま');
+    await ptr(f, 'pointermove', 1, a.x - 80, a.y); await ptr(f, 'pointermove', 2, a.x + 80, a.y);
+    await ptr(f, 'pointerup', 1, a.x - 80, a.y); await ptr(f, 'pointerup', 2, a.x + 80, a.y);
+    t.eq(await vals(f), [2, 2], 'はなしても わかれない');
+    await f.waitForTimeout(600);
+    const m = await f.evaluate(() => [hanbun.at(0), hanbun.at(1)]);
+    t.ok(Math.abs(m[0].x - (a.x - 80)) < 12 && Math.abs(m[1].x - (a.x + 80)) < 12, 'はなした ところに いない ' + JSON.stringify(m));
+  },
+
   'うえ・したに ひろげると うえ・したに わかれる。わけた あと しばらく その ばしょで まってから ならびなおす': async t => {
     const { f } = await openHanbun(t, [4]);
     const a = await f.evaluate(() => hanbun.at(0));

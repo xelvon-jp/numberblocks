@@ -57,13 +57,14 @@
 //   かおは 1〜9 の もの（つぶさない）、てあしは みんな 1 と おなじ かたち・ばしょ で いろ だけ ちがう。2.3 は 2 の あたまに みずが 0.3 の ガラス。
 //   1（と 0.いくつ）を ダブルタップ すると 0.1 に パラパラ（1 → 0.1 が 10こ）。かさねると みずを そそぐ（0.9 ＋ 0.1 ＝ いっぱい ＝ 1）。
 //   はんぶんこ は 0.1 の かずが ぐうすう の とき だけ（0.4 → 0.2 と 0.2）。0.05（0.01 の くらい）は まだ ださない（0.5 や 2.5 は わけられない）。
-//   つまんで ひろげると ねばねば のびて（よこに のび たてに ちぢむ）、わかれると ねばねばの いとで つながった まま はなれ、ぷつっと きれて ぷるん と ゆれる。
+//   つまんで ひろげると ねばねば のびて、さらに ひろげると 2ひきに わかれて ゆびさきに くっついて くる（ねばねばの いとで つながった まま）。
+//   ゆびを はなした とき に わかれる（いとが ぷつっと きれて ぷるん）。ゆびを もどすと もとに もどる。
 //   ひだりしたの おうち 🏠 に つれて いって はなすと その キャラだけ かえる（きえる）。
 //   たくさん わけても ちいさく なりすぎない ように、ぶんしょうの ように たて・よこに ならべる（だん）。
 // この たんまつの localStorage（nb_hanbun）に いる キャラと「だす」かずを おぼえる。
 const V_MAX = 100, MAX_CHARS = 24;
 const ADD_NUMS = [0.1, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];   // したの ボタン（おすと その かずの キャラが でる）
-const BS_MAX = 40;
+const BS_MAX = 120;        // キューブの いちばん 大きい ばあい（px。まえの 40 の 3ばい。すくない ときに 大きく）
 const SPLIT_PX = 45;        // ゆびが これだけ ひろがったら はんぶんこ
 // ── ガラスの キャラ（0.1〜0.9）──
 // え は ART の 大きさで 1かい かいて とっておき、bs に あわせて ちぢめて つかう（bs は うごくので まいかい かかない）
@@ -183,14 +184,16 @@ function dims(v){
 // キューブの 大きさ bs は みんな おなじ（Numberblocks の きまり）で、ぜんぶ はいる いちばん 大きい もの。
 // わけすぎても よこ 1れつ より ずっと 大きい まま。だんは うえから、ぶたいの たての まんなか。
 const SLOT_X = 2.4, SLOT_Y = PAD_TOP + PAD_BOT + 0.6;   // て・すきま／あたまの かず・あし の ぶん（キューブ なんこぶん）
-function wrap(b){
+function wrap(b, list){
   const rows = []; let cur = null, w = 0;
-  for(const c of chars){ const d = dims(c.v), cw = (d.cols + SLOT_X)*b;
+  for(const c of list || chars){ const d = dims(c.v), cw = (d.cols + SLOT_X)*b;
     if(!cur || w + cw > W - 8){ cur = { items: [], h: 0, w: 0 }; rows.push(cur); w = 0; }
     cur.items.push(c); w += cw; cur.w = w; cur.h = Math.max(cur.h, (d.rows + SLOT_Y)*b); }
   return rows;
 }
-const fits = b => { const rs = wrap(b); return rs.every(r => r.w <= W - 8 || r.items.length === 1) && rs.reduce((a, r) => a + r.h, 0) <= H - 12; };
+// ひろげて いる とちゅう は、わかれた 2ひき で 大きさを きめる（ゆびに ついて くる 2ひきが がめんから はみださない ように）
+const sizeList = () => pinch && pinch.pv ? chars.flatMap(c => c === pinch.c ? [pinch.pv.a, pinch.pv.b] : [c]) : chars;
+const fits = b => { const rs = wrap(b, sizeList()); return rs.every(r => r.w <= W - 8 || r.items.length === 1) && rs.reduce((a, r) => a + r.h, 0) <= H - 12; };
 function targetBs(){
   if(!chars.length) return BS_MAX;
   let lo = 3, hi = BS_MAX;
@@ -226,10 +229,35 @@ function addChar(v){
 }
 
 // ── はんぶんこ・くっつく ──
-function split(c, ang){
+// はんぶんこ できるか（できなければ ぷるぷる して わけを いう）
+function canSplit(c){
   const t = now0();
   if(tenths(c.v) % 2){ c.shake = t; say(fmt(c.v) + ' は はんぶんこ できないよ', 'はんぶんに すると 0.1 より こまかく なっちゃう'); return false; }
   if(chars.length >= MAX_CHARS){ c.shake = t; say('いっぱい だよ', 'くっつけてから わけてね'); return false; }
+  return true;
+}
+// ゆびで ひろげて はなした とき：ゆびに ついて きた 2ひき（pa・pb）が そのまま わかれた キャラに なる
+function splitAt(c, pa, pb){
+  const t = now0(), h = pa.v, i = chars.indexOf(c), d = dims(h);
+  // 2ひき に なっても はいる 大きさに すぐ する（大きい キャラを たてに わけても かさならない ように）
+  { const keep = chars.slice(); chars.splice(i, 1, pa, pb); const nb = Math.min(bs, targetBs()); chars = keep;
+    bs = nb; }
+  // ゆびが ちかくて かさなる ときは、ひろげた むきに かさならない ところまで はなす
+  const cx0 = (pa.x + pb.x)/2, cy0 = (pa.y + pb.y)/2, dx = pb.x - pa.x, dy = pb.y - pa.y, len = Math.hypot(dx, dy) || 1, ux = dx/len, uy = dy/len;
+  const need = Math.abs(ux)*(d.cols + 1.6)*bs + Math.abs(uy)*(d.rows + PAD_TOP + PAD_BOT)*bs;
+  if(len < need){ pa.x = cx0 - ux*need/2; pa.y = cy0 - uy*need/2; pb.x = cx0 + ux*need/2; pb.y = cy0 + uy*need/2; }
+  for(const p of [pa, pb]){
+    p.hx = Math.max((d.cols + 1.6)*bs/2, Math.min(W - (d.cols + 1.6)*bs/2, p.x)); p.hy = Math.max((d.rows + PAD_TOP)*bs, Math.min(H - PAD_BOT*bs, p.y)); p.jelly = t; }
+  holdUntil = t + HOLD_MS;
+  goos.push({ a: pa, b: pb, t, rgb: colorOf(h) });           // ねばねばの いとが ぷつっと きれる
+  chars.splice(i, 1, pa, pb);
+  burst((pa.x + pb.x)/2, (pa.y + pb.y)/2 - dims(h).rows*bs/2, 18);
+  say(fmt(c.v) + ' を はんぶんこ → ' + fmt(h) + ' と ' + fmt(h), yomi(h) || (fmt(h) + ' ＋ ' + fmt(h) + ' ＝ ' + fmt(c.v)), true);
+  save(); return true;
+}
+function split(c, ang){
+  const t = now0();
+  if(!canSplit(c)) return false;
   const h = tenths(c.v)/20, d = dims(h), dc = dims(c.v), i = chars.indexOf(c);
   // ひろげた むきに わかれる（うえ・したに ひろげたら うえ・した、ななめなら ななめ）。ang：ゆびの むき（ラジアン）
   ang = ang == null ? 0 : ang;
@@ -280,6 +308,15 @@ function drawGoo(g, now){
   ctx.beginPath(); ctx.moveTo(ax + nx*th, ay + ny*th); ctx.quadraticCurveTo(mx + nx*mid, my + ny*mid, bx + nx*th, by + ny*th);
   ctx.lineTo(bx - nx*th, by - ny*th); ctx.quadraticCurveTo(mx - nx*mid, my - ny*mid, ax - nx*th, ay - ny*th); ctx.closePath(); ctx.fill();
   ctx.restore(); return true;
+}
+// ひろげて いる あいだの ねばねば（ゆびが はなれる ほど ほそく なる）
+function drawGooLive(a, b){
+  const ra = rect(a), rb = rect(b), ax = a.x, bx = b.x, ay = ra.y + ra.h/2, by = rb.y + rb.h/2, len = Math.hypot(bx - ax, by - ay) || 1;
+  const nx = -(by - ay)/len, ny = (bx - ax)/len, th = bs*0.42*Math.max(0.18, 1 - len/(bs*9)), mid = th*Math.max(0.12, 0.6 - len/(bs*14)), mx = (ax + bx)/2, my = (ay + by)/2;
+  ctx.save(); ctx.fillStyle = 'rgb(' + colorOf(a.v).join(',') + ')'; ctx.globalAlpha = 0.95;
+  ctx.beginPath(); ctx.moveTo(ax + nx*th, ay + ny*th); ctx.quadraticCurveTo(mx + nx*mid, my + ny*mid, bx + nx*th, by + ny*th);
+  ctx.lineTo(bx - nx*th, by - ny*th); ctx.quadraticCurveTo(mx - nx*mid, my - ny*mid, ax - nx*th, ay - ny*th); ctx.closePath(); ctx.fill();
+  ctx.restore();
 }
 // つまんで ひろげて いる あいだ：ゆびの むきに のびて、よこむきに ちぢむ（たいせきは そのまま）。ちょっと ぷるぷる
 function stretchOf(c, now){
@@ -382,17 +419,21 @@ function frame(){
   // みず：かたむき を みて、ガラスの ある キャラ ぜんぶ を うごかす
   Mizu.tick(dt);
   for(const c of chars) if(isFrac(c.v)) Mizu.step(c.w || (c.w = Mizu.mk()), dt, 0.5);
+  if(pinch && pinch.pv) for(const c of [pinch.pv.a, pinch.pv.b]) if(isFrac(c.v)) Mizu.step(c.w || (c.w = Mizu.mk()), dt, 0.5);
   step(now);
   ctx.clearRect(0, 0, W, H);
   // だんごとの ゆか（うすい たな）
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
   for(const r of rowsNow){ const y = r.foot + PAD_BOT*bs*0.7; ctx.beginPath(); ctx.roundRect(6, y, W - 12, Math.max(3, bs*0.18), 3); ctx.fill(); }
-  const order = chars.filter(c => !c.drag).concat(chars.filter(c => c.drag));
+  const order = chars.filter(c => !c.drag && !c.hidden).concat(chars.filter(c => c.drag && !c.hidden));
   // くっつく あいて を ひからせる
   for(const c of chars) if(c.drag){ const o = overlapWith(c); if(o){ const r = rect(o);
     ctx.save(); ctx.fillStyle = 'rgba(255,215,80,0.35)'; ctx.beginPath(); ctx.roundRect(r.x - bs*0.5, r.y - bs*0.8, r.w + bs, r.h + bs*1.6, bs*0.5); ctx.fill(); ctx.restore(); } }
   goos = goos.filter(g => chars.includes(g.a) && chars.includes(g.b) && drawGoo(g, now));
   for(const c of order) drawChar(c, now);
+  // ひろげて いる とちゅう：わかれた 2ひきが ゆびさきに くっついて くる（はなすと わかれる）
+  stickPreview();
+  if(pinch && pinch.pv){ const { a, b } = pinch.pv; drawGooLive(a, b); drawChar(a, now); drawChar(b, now); }
   homeEl.classList.toggle('on', chars.some(c => c.drag));
   homeEl.classList.toggle('over', chars.some(c => c.drag && overHome(c)));
   confetti = confetti.filter(p => p.life > 0);
@@ -401,6 +442,13 @@ function frame(){
   requestAnimationFrame(frame);
 }
 
+// ひろげて いる とちゅう の 2ひき を ゆびさきに つける（キャラの まんなかが ゆびさき。大きさが かわっても ずれない ように まいフレーム）
+function stickPreview(){
+  if(!pinch || !pinch.pv) return;
+  const A = ptrs.get(pinch.a), B = ptrs.get(pinch.b); if(!A || !B) return;
+  const rows = dims(pinch.pv.a.v).rows;
+  for(const [ch, F] of [[pinch.pv.a, A], [pinch.pv.b, B]]){ ch.x = F.x; ch.y = F.y + rows*bs/2; }
+}
 // ── ゆび ──
 // 1ぽん：つかんで うごかす。はなした ところで ほかの キャラに かさなって いたら くっつく。
 // 2ほん：おなじ キャラを 2ほんの ゆびで つまんで ひろげると はんぶんこ。ちがう キャラを 1ぽんずつ もって よせても くっつく。
@@ -409,12 +457,12 @@ let pinch = null;            // { c, a, b, d0 }
 function pos(e){ const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
 function near(c, x, y, pad){ const r = rect(c), p = pad*bs; return x >= r.x - p && x <= r.x + r.w + p && y >= r.y - p - bs*0.6 && y <= r.y + r.h + p + bs*0.6; }
 function hit(x, y, pad){
-  for(let i = chars.length - 1; i >= 0; i--) if(near(chars[i], x, y, pad)) return chars[i];
+  for(let i = chars.length - 1; i >= 0; i--) if(!chars[i].hidden && near(chars[i], x, y, pad)) return chars[i];
   return null;
 }
 function overlapWith(c){
   const r = rect(c); let best = null, bd = Infinity;
-  for(const o of chars){ if(o === c || o.drag) continue; const q = rect(o);
+  for(const o of chars){ if(o === c || o.drag || o.hidden) continue; const q = rect(o);
     const ox = Math.min(r.x + r.w, q.x + q.w) - Math.max(r.x, q.x), oy = Math.min(r.y + r.h, q.y + q.h) - Math.max(r.y, q.y);
     if(ox > -bs*0.3 && oy > -bs*0.3){ const d = Math.abs(o.x - c.x); if(d < bd){ bd = d; best = o; } } }
   return best;
@@ -438,8 +486,15 @@ cv.addEventListener('pointermove', e => {
   const q = ptrs.get(e.pointerId); if(!q) return;
   const p = pos(e); q.x = p.x; q.y = p.y;
   if(pinch && (e.pointerId === pinch.a || e.pointerId === pinch.b)){
-    const A = ptrs.get(pinch.a), B = ptrs.get(pinch.b);
-    if(A && B && Math.hypot(A.x - B.x, A.y - B.y) - pinch.d0 > SPLIT_PX){ split(pinch.c, Math.atan2(B.y - A.y, B.x - A.x)); pinch = null; }
+    const A = ptrs.get(pinch.a), B = ptrs.get(pinch.b); if(!A || !B) return;
+    const ext = Math.hypot(A.x - B.x, A.y - B.y) - pinch.d0, c = pinch.c;
+    if(!pinch.pv && ext > SPLIT_PX){
+      // ここで わかれる…けど まだ きめない。ゆびを はなすまで 2ひきが ゆびさきに くっついて くる
+      if(!canSplit(c)){ pinch = null; return; }
+      const h = tenths(c.v)/20, t = now0(), a = mk(h, c.x, t - 260), b = mk(h, c.x, t - 260);
+      a.jelly = b.jelly = t; c.hidden = true; pinch.pv = { a, b };
+    } else if(pinch.pv && ext < SPLIT_PX*0.5){ pinch.pv = null; c.hidden = false; c.jelly = now0(); }   // ゆびを もどすと もとに もどる
+    stickPreview();
     return;
   }
   if(q.c){ q.c.x = p.x + q.ox; q.c.y = Math.min(H - 4, p.y + q.oy); }
@@ -447,7 +502,12 @@ cv.addEventListener('pointermove', e => {
 function up(e){
   const q = ptrs.get(e.pointerId); if(!q) return;
   ptrs.delete(e.pointerId);
-  if(pinch && (e.pointerId === pinch.a || e.pointerId === pinch.b)){ pinch.c.jelly = now0(); pinch = null; return; }   // とちゅうで はなすと ぷるん と もどる
+  if(pinch && (e.pointerId === pinch.a || e.pointerId === pinch.b)){
+    const pc = pinch; pinch = null;
+    if(pc.pv && e.type !== 'pointercancel') splitAt(pc.c, pc.pv.a, pc.pv.b);      // ゆびを はなした ところで わかれる
+    else { pc.c.hidden = false; pc.c.jelly = now0(); }                             // とちゅうで はなすと ぷるん と もどる
+    return;
+  }
   const c = q.c; if(!c) return;
   c.drag = null;
   if(e.type === 'pointercancel') return;
@@ -537,7 +597,7 @@ requestAnimationFrame(frame);
 // テスト よう
 window.hanbun = { chars: () => chars.map(c => c.v), add: v => addChar(v), split: i => split(chars[i]), merge: (i, j) => merge(chars[i], chars[j]),
   at: i => { const c = chars[i], r = rect(c); return { x: c.x, y: r.y + r.h/2, w: r.w, h: r.h }; }, bs: () => bs, say: () => sayBig.textContent + '｜' + saySub.textContent,
-  water: i => chars[i].w, clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]) };
+  water: i => chars[i].w, preview: () => pinch && pinch.pv ? [pinch.pv.a, pinch.pv.b].map(c => { const r = rect(c); return { v: c.v, x: c.x, y: r.y + r.h/2 }; }) : null, clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]) };
 </script>
 </body>
 </html>
