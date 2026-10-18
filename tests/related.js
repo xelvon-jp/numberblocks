@@ -21,6 +21,7 @@ const RULES = {
   'lab.html': ['lab'],
   'kenban.html': ['kenban'], 'oto.html': ['kenban'], 'tools/replay.js': ['kenban'], 'tools/rec.js': ['kenban'],
   'hissan.html': ['hissan', 'kake', 'speed'], 'ink.js': ['hissan', 'kake', 'speed'],
+  'num.js': ['num'],          // けいさん で つかう ように なったら ALL へ うつす
   'merge.js': ['sync'],
   'tools/solver.js': ['task'],
   'zukan.html': [],          // ずかん（キャラメイク）は テスト なし
