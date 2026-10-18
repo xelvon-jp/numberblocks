@@ -43,7 +43,7 @@
 // ページと いっしょに 新しい スクリプトを 読む（古い キャッシュと まざらないように。index.html と おなじ しくみ）
 (function(){
   var v = encodeURIComponent(document.lastModified);
-  ['overrides.js', 'engine.js'].forEach(function(f){ document.write('<script src="' + f + '?v=' + v + '"><\/script>'); });
+  ['overrides.js', 'engine.js', 'mizu.js'].forEach(function(f){ document.write('<script src="' + f + '?v=' + v + '"><\/script>'); });
 })();
 </script>
 <script>
@@ -103,22 +103,12 @@ function limbArt(d){
 }
 function drawArt(A, cx, cy){ const k = bs/ART, S = A.S*k; ctx.drawImage(A.oc, cx - S/2, cy - S/2, S, S); }
 // ガラスの キューブ（x0, y0 が ひだりうえ、1 と おなじ 大きさ）。fill：0〜1 の みずの たかさ
-function glassCube(x0, y0, fill, col, ph){
+// w：みずの うごき（mizu.js。スマホを かたむけると みずの おもてが すいへいを たもつ・ゆれる）
+function glassCube(x0, y0, fill, col, w){
   const r = bs*0.09, inset = bs*0.055;
   ctx.save();
   ctx.fillStyle = 'rgba(214,236,248,0.6)'; ctx.beginPath(); ctx.roundRect(x0, y0, bs, bs, r); ctx.fill();
-  if(fill > 0){
-    ctx.save(); ctx.beginPath(); ctx.roundRect(x0 + inset, y0 + inset, bs - inset*2, bs - inset*2, r*0.7); ctx.clip();
-    const top = y0 + bs - inset - (bs - inset*2)*fill, amp = fill < 1 ? bs*0.018 : 0;
-    const g = ctx.createLinearGradient(0, top, 0, y0 + bs); g.addColorStop(0, rgb(mixWhite(col, 0.12))); g.addColorStop(1, rgb(darken(col, 0.12)));
-    const wv = i => top + Math.sin(i/16*Math.PI*2 + ph)*amp;
-    ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(x0, y0 + bs);
-    for(let i = 0; i <= 16; i++) ctx.lineTo(x0 + bs*i/16, wv(i));
-    ctx.lineTo(x0 + bs, y0 + bs); ctx.closePath(); ctx.fill();
-    if(fill < 1){ ctx.strokeStyle = rgba(mixWhite(col, 0.55), 0.9); ctx.lineWidth = Math.max(1, bs*0.022); ctx.beginPath();
-      for(let i = 0; i <= 16; i++){ const xx = x0 + bs*i/16; i ? ctx.lineTo(xx, wv(i)) : ctx.moveTo(xx, wv(i)); } ctx.stroke(); }
-    ctx.restore();
-  }
+  Mizu.draw(ctx, x0 + inset, y0 + inset, bs - inset*2, bs - inset*2, r*0.7, fill, col, w, bs);
   // めもり 10こ（まんなかの 5 は ながい）
   ctx.strokeStyle = 'rgba(70,100,130,0.35)'; ctx.lineWidth = Math.max(0.8, bs*0.012); ctx.beginPath();
   for(let i = 1; i < 10; i++){ const yy = y0 + bs - inset - (bs - inset*2)*i/10, w = i === 5 ? bs*0.16 : bs*0.09; ctx.moveTo(x0 + inset, yy); ctx.lineTo(x0 + inset + w, yy); }
@@ -130,9 +120,9 @@ function glassCube(x0, y0, fill, col, ph){
   ctx.restore();
 }
 // 0.d の キャラ（cx：まんなか、foot：キューブの した）
-function drawGlassChar(d, cx, foot, ph){
+function drawGlassChar(d, cx, foot, w){
   drawArt(limbArt(d), cx, foot - bs/2);
-  glassCube(cx - bs/2, foot - bs, d/10, liqCol(d), ph);
+  glassCube(cx - bs/2, foot - bs, d/10, liqCol(d), w);
   drawArt(faceArt(d), cx, foot - bs/2);
 }
 
@@ -328,7 +318,7 @@ function drawLabel(v, cx, by){
 }
 const hatLift = d => d === 3 ? 0.42 : d === 7 ? 0.3 : 0;     // 3 の ぼうし・7 の かみ の ぶん かずを うえに
 function drawChar(c, now){
-  const k = intOf(c.v), f = fracOf(c.v), d = dims(c.v), ph = now*0.004 + c.born*0.001;
+  const k = intOf(c.v), f = fracOf(c.v), d = dims(c.v);
   let x = c.x, footY = c.y;
   const age = now - c.born, hop = (now - c.hop)/450, sh = now - c.shake;
   if(hop < 1 && !c.drag) footY -= Math.sin(Math.PI*hop)*bs*1.4;
@@ -349,7 +339,7 @@ function drawChar(c, now){
   if(c.drag){ ctx.shadowColor = 'rgba(30,50,80,0.25)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 6; }
   if(k === 0){
     // 0.1〜0.9：ガラスの キューブに みずが 0.いくつ
-    drawGlassChar(f, x, footY, ph);
+    drawGlassChar(f, x, footY, c.w || (c.w = Mizu.mk()));
     drawLabel(c.v, x, footY - bs - hatLift(f)*bs);
   } else {
     const s = blockSpec(k), y0 = footY - s.rows*bs;
@@ -357,7 +347,7 @@ function drawChar(c, now){
       const h = glassAt(k), x0 = x - d.cols*bs/2;
       drawNumberblock(ctx, k, x0, y0, bs, { t: now, animate: !c.drag, numberling: false });
       ctx.shadowColor = 'transparent';
-      glassCube(x0 + h.gx*bs, y0 + h.gy*bs, f/10, liqCol(f), ph);
+      glassCube(x0 + h.gx*bs, y0 + h.gy*bs, f/10, liqCol(f), c.w || (c.w = Mizu.mk()));
       // かずは キャラの まんなかの うえ（ぼうし・かみの けの ぶん あける）
       const lift = s.face && (s.face.jesterHat || s.face.hair) ? bs*0.55 : s.face && s.face.tophat ? bs*1.15 : 0;
       drawLabel(c.v, x0 + s.cols*bs/2, y0 + Math.min(0, h.side ? 0 : h.gy)*bs - (h.side ? lift : 0));
@@ -386,8 +376,12 @@ function step(now){
     c.x += (gx - c.x)*k; c.y += (gy - c.y)*k;
   }
 }
+let lastFrame = 0;
 function frame(){
-  const now = now0();
+  const now = now0(), dt = lastFrame ? Math.min(0.05, (now - lastFrame)/1000) : 0; lastFrame = now;
+  // みず：かたむき を みて、ガラスの ある キャラ ぜんぶ を うごかす
+  Mizu.tick(dt);
+  for(const c of chars) if(isFrac(c.v)) Mizu.step(c.w || (c.w = Mizu.mk()), dt, 0.5);
   step(now);
   ctx.clearRect(0, 0, W, H);
   // だんごとの ゆか（うすい たな）
@@ -537,12 +531,13 @@ const t0 = now0();
 chars = (Array.isArray(st.chars) ? st.chars.filter(okV).slice(0, MAX_CHARS) : []).map((v, i, a) => mk(v, W*(i + 1)/(a.length + 1), t0));
 bs = targetBs();
 sayIdle();
+Mizu.autoStart();       // センサーは はじめから オン（iPhone は さいしょに さわった とき に ゆるしを きく）
 requestAnimationFrame(frame);
 
 // テスト よう
 window.hanbun = { chars: () => chars.map(c => c.v), add: v => addChar(v), split: i => split(chars[i]), merge: (i, j) => merge(chars[i], chars[j]),
   at: i => { const c = chars[i], r = rect(c); return { x: c.x, y: r.y + r.h/2, w: r.w, h: r.h }; }, bs: () => bs, say: () => sayBig.textContent + '｜' + saySub.textContent,
-  clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]) };
+  water: i => chars[i].w, clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]) };
 </script>
 </body>
 </html>

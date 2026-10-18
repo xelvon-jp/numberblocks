@@ -30,6 +30,9 @@
   #fills button.on { background:#3f8fd0; color:#fff; }
   .chk { display:flex; gap:12px; }
   .chk label { width:auto; display:flex; align-items:center; gap:4px; }
+  #save { border:0; border-radius:10px; padding:8px 12px; font-size:14px; font-weight:900; background:#f0a020; color:#fff; }
+  #reset { border:0; border-radius:10px; padding:8px 10px; font-size:13px; font-weight:800; background:#dfe6ef; color:#2b3a52; }
+  #saved { font-size:12px; color:#256b2f; }
 </style>
 </head>
 <body>
@@ -43,78 +46,55 @@
   <div class="row"><label>なみ</label><input id="wave" type="range" min="0" max="30" value="4"><span class="v" id="wv"></span></div>
   <div class="row"><label>ふると なみ</label><input id="shk" type="range" min="0" max="30" value="4"><span class="v" id="sv"></span></div>
   <div class="row"><label>なめらか</label><input id="smooth" type="range" min="0" max="20" value="6"><span class="v" id="mv"></span></div>
-  <div class="row chk"><label><input id="faces" type="checkbox" checked>かお</label><label><input id="small" type="checkbox" checked>ちいさい ガラス 9こ</label><label><input id="level" type="checkbox" checked>すいへいを たもつ</label></div>
+  <div class="row chk"><label><input id="faces" type="checkbox" checked>かお</label><label><input id="small" type="checkbox" checked>ちいさい ガラス</label><label><input id="level" type="checkbox" checked>すいへい</label><label><input id="sensor" type="checkbox" checked>センサー</label></div>
+  <div class="row"><button id="save">💾 はんぶんに つかう</button><button id="reset">もとに もどす</button><span id="saved"></span></div>
 </div>
 <script>
 (function(){
   var v = encodeURIComponent(document.lastModified);
-  ['overrides.js', 'engine.js'].forEach(function(f){ document.write('<script src="' + f + '?v=' + v + '"><\/script>'); });
+  ['overrides.js', 'engine.js', 'mizu.js'].forEach(function(f){ document.write('<script src="' + f + '?v=' + v + '"><\/script>'); });
 })();
 </script>
 <script>
 // ─── ためし：スマホの かたむきで ガラスの なかの みずを うごかす ─────────────────
-// 「はんぶん」の 0.1〜0.9（ガラスの キャラ）に いれるか ためす ページ。
-//   ・おもさの むき（DeviceMotion の accelerationIncludingGravity。なければ DeviceOrientation の beta・gamma から）で、
-//     みずの おもてが いつも すいへいに なる。かたむきの せいげんは なし（さかさまに すると みずは うえへ。がめんの かいてんロック を つかう）
-//   ・みずの りょうは どんな かたむきでも おなじ（おもての たかさを めんせきで きめる）
-//   ・ばね と ねばり で すこし おくれて ついてきて ゆれる（ちいさい ガラス ほど はやく ゆれる）
-//   ・DeviceMotion の acceleration（ふった いきおい）で なみが たつ
-//   ・iPhone は ゆびで ボタンを おして から でないと センサーを つかえない（DeviceOrientationEvent.requestPermission）
-//   ・センサーが ない（パソコンなど）ときは、ぶたいを ゆびで よこに なぞると かたむく
-// ばね・ねばり・ゆれ の つまみで うごきかたを ためして、よい あたいを ほんたいに つかう。
+// うごきは mizu.js（はんぶん と おなじ もの）。ここでは つまみで うごきを ためして「💾 はんぶんに つかう」で しまう。
+//   しまうと はんぶん に すぐ きく。つまみを うごかした だけ では はんぶん は かわらない。
+//   センサーが ない（パソコンなど）ときは、ぶたいを ゆびで よこに なぞると かたむく。
 const cv = document.getElementById('c'), ctx = cv.getContext('2d'), stageEl = document.getElementById('stage'), infoEl = document.getElementById('info');
 let W = 0, H = 0;
 function resize(){ const dpr = Math.min(3, window.devicePixelRatio || 1); W = stageEl.clientWidth; H = stageEl.clientHeight;
   cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); }
 window.addEventListener('resize', resize);
 
-// ── せってい（つまみ）──
-const $ = id => document.getElementById(id);
-const opt = { k: 90, damp: 6, shk: 4, wave: 4, smooth: 6, faces: true, small: true, level: true, fill: 5 };
-function bindRange(id, vid, key, f){ const el = $(id), show = () => { opt[key] = +el.value; $(vid).textContent = f ? f(opt[key]) : opt[key]; }; el.addEventListener('input', show); show(); }
-bindRange('k', 'kv', 'k'); bindRange('damp', 'dv', 'damp'); bindRange('shk', 'sv', 'shk'); bindRange('wave', 'wv', 'wave'); bindRange('smooth', 'mv', 'smooth');
-['faces', 'small', 'level'].forEach(id => { const el = $(id); el.addEventListener('change', () => { opt[id] = el.checked; }); });
+// ── つまみ（うごきの せってい は Mizu.opt。かお・ちいさい ガラス・みずの かず は この ページ だけ）──
+const $ = id => document.getElementById(id), M = Mizu.opt;
+const view = { faces: true, small: true, fill: 5 };
+const RANGES = [['k', 'kv'], ['damp', 'dv'], ['wave', 'wv'], ['shk', 'sv'], ['smooth', 'mv']];
+function uiFromOpt(){ for(const [id, vid] of RANGES){ $(id).value = M[id]; $(vid).textContent = M[id]; } $('level').checked = M.level; $('sensor').checked = M.sensor; }
+for(const [id, vid] of RANGES) $(id).addEventListener('input', () => { M[id] = +$(id).value; $(vid).textContent = M[id]; $('saved').textContent = ''; });
+$('level').addEventListener('change', () => { M.level = $('level').checked; $('saved').textContent = ''; });
+$('sensor').addEventListener('change', () => { M.sensor = $('sensor').checked; $('saved').textContent = ''; if(M.sensor) Mizu.autoStart(); });
+['faces', 'small'].forEach(id => $(id).addEventListener('change', () => { view[id] = $(id).checked; }));
+$('save').addEventListener('click', () => { Mizu.save(M); $('saved').textContent = 'しまいました（はんぶんに すぐ きく）'; });
+$('reset').addEventListener('click', () => { Object.assign(M, Mizu.DEF); uiFromOpt(); $('saved').textContent = 'もとに もどした（まだ しまって いない）'; });
+uiFromOpt();
 const fillsEl = $('fills');
-for(let d = 1; d <= 9; d++){ const b = document.createElement('button'); b.textContent = '0.' + d; b.addEventListener('click', () => { opt.fill = d; fillUi(); }); fillsEl.appendChild(b); }
-function fillUi(){ [...fillsEl.children].forEach((b, i) => b.classList.toggle('on', i + 1 === opt.fill)); }
+for(let d = 1; d <= 9; d++){ const b = document.createElement('button'); b.textContent = '0.' + d; b.addEventListener('click', () => { view.fill = d; fillUi(); }); fillsEl.appendChild(b); }
+function fillUi(){ [...fillsEl.children].forEach((b, i) => b.classList.toggle('on', i + 1 === view.fill)); }
 fillUi();
 
-// ── センサー ──
-const sens = { on: false, gamma: 0, beta: 0, ax: 0, ay: 0, n: 0, rate: 0, t0: performance.now(), msg: 'まだ（「センサーを つかう」を おしてね）', fake: 0 };
-function onOrient(e){ if(e.gamma == null) return; sens.gamma = e.gamma; sens.beta = e.beta || 0; sens.n++; sens.got = true; }
-function onMotion(e){ const a = e.acceleration || {}, g = e.accelerationIncludingGravity || {}; sens.ax = a.x || 0; sens.ay = a.y || 0;
-  if(g.x != null && g.y != null){ sens.gx = g.x; sens.gy = g.y; sens.gotG = true; } }
-// がめんの なかで「うえ」の むき（x：みぎ、y：うえ）。かいてん の せいげん なし
-// accelerationIncludingGravity は たんまつに よって +/− が ぎゃく（iPhone と Android）なので、beta・gamma から だした むきと くらべて あわせる
-sens.sgn = 1; sens.ux = 0; sens.uy = 1;
-function upRaw(){
-  const b = sens.beta*Math.PI/180, g = sens.gamma*Math.PI/180, ox = -Math.sin(g)*Math.cos(b), oy = Math.sin(b);
-  if(sens.gotG){ const d = sens.gx*ox + sens.gy*oy; if(sens.got && Math.hypot(ox, oy) > 0.5 && Math.abs(d) > 3) sens.sgn = d > 0 ? 1 : -1;
-    const L = Math.hypot(sens.gx, sens.gy); if(L > 1.5) return [sens.sgn*sens.gx/L, sens.sgn*sens.gy/L]; }
-  if(sens.got){ const L = Math.hypot(ox, oy); if(L > 0.15) return [ox/L, oy/L]; }
-  return [0, 1];
-}
-async function start(){
-  try{
-    // iPhone（iOS 13〜）：ゆびで おした とき だけ きける
-    if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
-      const r = await DeviceOrientationEvent.requestPermission();
-      if(r !== 'granted'){ sens.msg = 'ゆるされなかった（' + r + '）。せっていの Safari → モーションと かたむき も みてね'; return; }
-      if(typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){ try{ await DeviceMotionEvent.requestPermission(); }catch(e){} }
-    }
-    window.addEventListener('deviceorientation', onOrient);
-    window.addEventListener('devicemotion', onMotion);
-    sens.on = true; sens.msg = 'オン（0かい/びょう なら センサーが ない）';
-    $('go').classList.add('on'); $('go').textContent = 'センサー オン';
-  }catch(e){ sens.msg = 'だめ でした：' + (e && e.message || e); }
-}
+// ── センサー：はじめから オン（iPhone は さいしょに さわった とき に きく）。うえの ボタンでも きける ──
+const S = Mizu.sens;
+async function start(){ await Mizu.start(); goUi(); }
+function goUi(){ $('go').classList.toggle('on', S.on); $('go').textContent = S.on ? 'センサー オン' : 'センサーを つかう'; }
 $('go').addEventListener('click', start);
+Mizu.autoStart();
 
 // センサーが ないとき：ゆびで よこに なぞると かたむく（はなすと もどる）
 let drag = null;
 cv.addEventListener('pointerdown', e => { drag = { x: e.clientX }; try{ cv.setPointerCapture(e.pointerId); }catch(_){} });
-cv.addEventListener('pointermove', e => { if(drag) sens.fake = Math.max(-180, Math.min(180, (e.clientX - drag.x)/W*240)); });   // がめんの はば で 240°
-const endDrag = () => { drag = null; sens.fake = 0; };
+cv.addEventListener('pointermove', e => { if(drag) S.fake = Math.max(-180, Math.min(180, (e.clientX - drag.x)/W*240)); });   // がめんの はば で 240°
+const endDrag = () => { drag = null; S.fake = 0; };
 cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
 
 // ── ガラスの え（hanbun.html と おなじ かきかた）──
@@ -140,63 +120,16 @@ function limbArt(d){ if(artCache['l' + d]) return artCache['l' + d];
   drawNumberblock(A.o, 1, A.x0, A.y0, ART, { t: 0, numberling: false, spec: sp }); A.o.restore(); return (artCache['l' + d] = A); }
 function drawArt(A, cx, cy, bs){ const S = A.S*bs/ART; ctx.drawImage(A.oc, cx - S/2, cy - S/2, S, S); }
 
-// ── みずの うごき ──
-// g：ガラス 1こ ぶんの じょうたい。th：みずの おもての かたむき（がめんの なかで。ラジアン）、om：その はやさ、amp：なみの 大きさ
-function mkGlass(d, size){ return { d, size, th: 0, om: 0, amp: 0, ph: Math.random()*6 }; }
+// ── ガラス ──
+// g：ガラス 1こ ぶん（d：0.d、size：ゆれの はやさ。ちいさい ほど はやい）
+function mkGlass(d, size){ return Object.assign(Mizu.mk(), { d, size }); }
 let big = mkGlass(5, 1), smalls = [];
 for(let d = 1; d <= 9; d++) smalls.push(mkGlass(d, 0.4));
-// なめらかに した「うえ」の むき ＋ ゆびの かたむき。かえす のは みずの おもての かたむき（がめんの なかで。ラジアン）
-function targetAngle(){
-  let [ux, uy] = sens.on ? upRaw() : [0, 1];
-  const kf = 1/(1 + opt.smooth); sens.ux += (ux - sens.ux)*kf; sens.uy += (uy - sens.uy)*kf;
-  const a = Math.atan2(sens.ux, sens.uy), f = sens.fake*Math.PI/180;      // ゆびで みぎに なぞる ＝ みぎに かたむけた
-  return a - f;
-}
-let tgNow = 0;
-const wrapA = a => Math.atan2(Math.sin(a), Math.cos(a));
-function stepGlass(g, dt, jolt){
-  // めざす かたむき：スマホを みぎに かたむけたら、がめんの なかでは ひだりに かたむく（そとから みて すいへい）
-  const tg = opt.level ? tgNow : 0;
-  const k = opt.k/Math.sqrt(g.size), c = opt.damp/Math.sqrt(g.size);   // ちいさい ほど はやく ゆれる
-  g.om += (k*wrapA(tg - g.th) - c*g.om)*dt; g.th = wrapA(g.th + g.om*dt);      // ぐるっと まわしても ちかい ほうへ
-  // なみ：かたむきが かわる はやさ（なみ）と、ふった いきおい（ふると なみ）で たつ
-  g.amp += (Math.abs(g.om)*opt.wave*0.002 + jolt*opt.shk*0.004)*dt*60; g.amp *= Math.pow(0.12, dt); g.amp = Math.min(0.12, g.amp);
-  g.ph += dt*(6 + 4/Math.sqrt(g.size));
-}
-// ── みずの おもての ばしょ：どの かたむきでも みずの めんせき が fill に なる ように きめる ──
-// n：おもさの ほう（みずが ある がわ）。ガラスの なかの しかくを はんめんで きりとって めんせきを はかり、にぶんたんさく
-function clipArea(rx, ry, rw, rh, nx, ny, cx, cy, s){
-  let P = [[rx, ry], [rx + rw, ry], [rx + rw, ry + rh], [rx, ry + rh]], out = [];
-  const f = p => (p[0] - cx)*nx + (p[1] - cy)*ny - s;
-  for(let i = 0; i < 4; i++){ const a = P[i], b = P[(i + 1) % 4], fa = f(a), fb = f(b);
-    if(fa >= 0) out.push(a);
-    if((fa >= 0) !== (fb >= 0)){ const t = fa/(fa - fb); out.push([a[0] + (b[0] - a[0])*t, a[1] + (b[1] - a[1])*t]); } }
-  let A = 0; for(let i = 0; i < out.length; i++){ const p = out[i], q = out[(i + 1) % out.length]; A += p[0]*q[1] - q[0]*p[1]; }
-  return Math.abs(A)/2;
-}
-function levelOffset(rx, ry, rw, rh, nx, ny, fill){
-  const cx = rx + rw/2, cy = ry + rh/2, want = fill*rw*rh; let lo = -(rw + rh), hi = rw + rh;
-  for(let i = 0; i < 22; i++){ const m = (lo + hi)/2; if(clipArea(rx, ry, rw, rh, nx, ny, cx, cy, m) > want) lo = m; else hi = m; }
-  return (lo + hi)/2;
-}
-
-// ── かく ──
 function glass(x0, y0, bs, g){
-  const r = bs*0.09, inset = bs*0.055, ix = x0 + inset, iy = y0 + inset, iw = bs - inset*2, ih = bs - inset*2, col = liqCol(g.d), fill = g.d/10;
+  const r = bs*0.09, inset = bs*0.055, ix = x0 + inset, iy = y0 + inset, iw = bs - inset*2, ih = bs - inset*2;
   ctx.save();
   ctx.fillStyle = 'rgba(214,236,248,0.6)'; ctx.beginPath(); ctx.roundRect(x0, y0, bs, bs, r); ctx.fill();
-  // みず：おもては (cx, ly) を とおる かたむいた せん（＋なみ）。その した がわを ぬる
-  ctx.save(); ctx.beginPath(); ctx.roundRect(ix, iy, iw, ih, r*0.7); ctx.clip();
-  const ux = Math.cos(g.th), uy = Math.sin(g.th), nx = -uy, ny = ux, L = iw*1.6;
-  const so = levelOffset(ix, iy, iw, ih, nx, ny, fill), cx = ix + iw/2 + nx*so, ly = iy + ih/2 + ny*so;   // おもての まんなか
-  const idle = bs*0.012*opt.wave/10;     // じっと して いる ときの さざなみ（なみ が 0 なら なし）
-  const pts = []; for(let i = 0; i <= 24; i++){ const t = -L + 2*L*i/24, w = Math.sin(t/iw*Math.PI*2.2 + g.ph)*g.amp*bs + Math.sin(t/iw*Math.PI*1.1 - g.ph*0.7)*idle;
-    pts.push([cx + ux*t - nx*w, ly + uy*t - ny*w]); }
-  const gr = ctx.createLinearGradient(cx - nx*bs*0.3, ly - ny*bs*0.3, cx + nx*bs, ly + ny*bs); gr.addColorStop(0, rgb(mixWhite(col, 0.12))); gr.addColorStop(1, rgb(darken(col, 0.12)));
-  ctx.fillStyle = gr; ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]));
-  const e = pts[pts.length - 1], s = pts[0]; ctx.lineTo(e[0] + nx*L*2, e[1] + ny*L*2); ctx.lineTo(s[0] + nx*L*2, s[1] + ny*L*2); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = rgba(mixWhite(col, 0.55), 0.9); ctx.lineWidth = Math.max(1, bs*0.022); ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1])); ctx.stroke();
-  ctx.restore();
+  Mizu.draw(ctx, ix, iy, iw, ih, r*0.7, g.d/10, liqCol(g.d), g, bs);
   ctx.strokeStyle = 'rgba(70,100,130,0.35)'; ctx.lineWidth = Math.max(0.8, bs*0.012); ctx.beginPath();
   for(let i = 1; i < 10; i++){ const yy = iy + ih - ih*i/10, w = i === 5 ? bs*0.16 : bs*0.09; ctx.moveTo(ix, yy); ctx.lineTo(ix + w, yy); } ctx.stroke();
   ctx.strokeStyle = 'rgba(110,145,175,0.95)'; ctx.lineWidth = Math.max(1.2, bs*0.04); ctx.beginPath(); ctx.roundRect(x0, y0, bs, bs, r); ctx.stroke();
@@ -210,9 +143,9 @@ function label(s, cx, cy, h){ const gw = h*0.56, sp = h*0.2, dotW = h*0.3, ws = 
   let x = cx - tot/2; [...s].forEach((ch, i) => { if(ch === '.'){ ctx.beginPath(); ctx.arc(x + dotW/2, cy + h/2 - h*0.11, h*0.13, 0, Math.PI*2); ctx.fill(); } else { digitPath(ctx, ch, x + gw/2, cy, h); ctx.stroke(); } x += ws[i] + sp; });
   ctx.restore(); }
 function charAt(g, cx, foot, bs){
-  if(opt.faces) drawArt(limbArt(g.d), cx, foot - bs/2, bs);
+  if(view.faces) drawArt(limbArt(g.d), cx, foot - bs/2, bs);
   glass(cx - bs/2, foot - bs, bs, g);
-  if(opt.faces) drawArt(faceArt(g.d), cx, foot - bs/2, bs);
+  if(view.faces) drawArt(faceArt(g.d), cx, foot - bs/2, bs);
   label('0.' + g.d, cx, foot - bs - bs*(0.3 + (g.d === 3 ? 0.42 : g.d === 7 ? 0.3 : 0)), bs*0.3);
 }
 
@@ -220,28 +153,26 @@ function charAt(g, cx, foot, bs){
 let last = performance.now();
 function frame(now){
   const dt = Math.min(0.05, (now - last)/1000); last = now;
-  if(now - sens.t0 > 1000){ sens.rate = sens.n; sens.n = 0; sens.t0 = now; }
-  const jolt = Math.min(20, Math.max(0, Math.hypot(sens.ax, sens.ay) - 0.6));   // こまかい ふるえ（0.6 まで）は なみに しない
-  tgNow = targetAngle();
-  big.d = opt.fill;
-  stepGlass(big, dt, jolt); for(const g of smalls) stepGlass(g, dt, jolt);
+  Mizu.tick(dt);
+  big.d = view.fill;
+  Mizu.step(big, dt, big.size); for(const g of smalls) Mizu.step(g, dt, g.size);
   ctx.clearRect(0, 0, W, H);
-  const showSmall = opt.small, bigBs = Math.min(W*0.42, (showSmall ? H*0.45 : H*0.6) - 40), bigFoot = (showSmall ? H*0.62 : H*0.8);
+  const showSmall = view.small, bigBs = Math.min(W*0.42, (showSmall ? H*0.45 : H*0.6) - 40), bigFoot = (showSmall ? H*0.62 : H*0.8);
   charAt(big, W/2, bigFoot, bigBs);
   if(showSmall){ const bs = Math.min(W/9/1.9, H*0.16), foot = H - bs*0.75;
     smalls.forEach((g, i) => charAt(g, W*(i + 0.5)/9, foot, bs)); }
   // かたむきの めじるし（そとから みた すいへい せん）
-  const a = tgNow; ctx.save(); ctx.strokeStyle = 'rgba(63,143,208,0.35)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2;
+  const a = Mizu.now.tg; ctx.save(); ctx.strokeStyle = 'rgba(63,143,208,0.35)'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2;
   ctx.beginPath(); ctx.moveTo(W/2 - Math.cos(a)*W, 24 - Math.sin(a)*W); ctx.lineTo(W/2 + Math.cos(a)*W, 24 + Math.sin(a)*W); ctx.stroke(); ctx.restore();
-  infoEl.textContent = 'センサー：' + sens.msg + '\n' + 'γ ' + sens.gamma.toFixed(0) + '° β ' + sens.beta.toFixed(0) + '°  みず ' + (tgNow*180/Math.PI).toFixed(0) + '°  ゆび ' + sens.fake.toFixed(0) + '°  ふり ' + jolt.toFixed(1) + (sens.gotG ? '  じゅうりょく' + (sens.sgn > 0 ? '+' : '−') : '') + '  ' + sens.rate + 'かい/びょう';
+  goUi();
+  infoEl.textContent = 'センサー：' + (M.sensor ? S.msg : 'つかわない') + '\n' + 'γ ' + S.gamma.toFixed(0) + '° β ' + S.beta.toFixed(0) + '°  みず ' + (a*180/Math.PI).toFixed(0) + '°  ゆび ' + S.fake.toFixed(0) + '°  ふり ' + Mizu.now.jolt.toFixed(1) + (S.gotG ? '  じゅうりょく' + (S.sgn > 0 ? '+' : '−') : '') + '  ' + S.rate + 'かい/びょう';
   requestAnimationFrame(frame);
 }
 resize(); requestAnimationFrame(frame);
 
 // テスト よう
-window.mizu = { area: (th, fill) => { const nx = -Math.sin(th), ny = Math.cos(th), so = levelOffset(0, 0, 1, 1, nx, ny, fill); return clipArea(0, 0, 1, 1, nx, ny, 0.5, 0.5, so); }, big: () => big, sens: () => sens, opt: () => opt, start,
-  feed: (g, b) => onOrient({ gamma: g, beta: b == null ? 60 : b }),
-  grav: (x, y) => onMotion({ acceleration: { x: 0, y: 0 }, accelerationIncludingGravity: { x, y, z: 0 } }) };
+window.mizu = { area: (th, fill) => { const nx = -Math.sin(th), ny = Math.cos(th), so = Mizu.levelOffset(0, 0, 1, 1, nx, ny, fill); return Mizu.clipArea(0, 0, 1, 1, nx, ny, 0.5, 0.5, so); },
+  big: () => big, sens: () => S, opt: () => M, start, feed: Mizu.feed, grav: Mizu.grav };
 </script>
 </body>
 </html>

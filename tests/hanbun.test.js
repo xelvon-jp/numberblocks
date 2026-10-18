@@ -85,6 +85,21 @@ module.exports = {
     t.ok((await f.evaluate(() => hanbun.say())).includes('2.3 は「2 と 0.3」'), 'よみかた');
   },
 
+  'みず：スマホを かたむけると ガラスの みずが すいへいを たもつ（センサーは はじめから オン）。ためし で しまった せってい が すぐ きく': async t => {
+    const { p, f } = await openHanbun(t, [0.5, 2.3]);
+    t.ok(await f.evaluate(() => Mizu.sens.on && Mizu.opt.sensor), 'センサーが オンに ならない');
+    t.ok((await p.evaluate(() => document.querySelector('iframe[src^="hanbun.html"]').allow)).includes('accelerometer'), 'iframe で センサーが つかえない');
+    await f.evaluate(() => { const a = 25*Math.PI/180; Mizu.grav(-Math.sin(a)*9.8, Math.cos(a)*9.8); });
+    await f.waitForTimeout(2000);
+    const th = await f.evaluate(() => [hanbun.water(0).th, hanbun.water(1).th]);
+    t.ok(th.every(x => Math.abs(x + 25*Math.PI/180) < 0.1), 'かたむかない ' + th);
+    // ためし の「はんぶんに つかう」＝ ほかの ページで nb_mizu を しまう → すぐ きく
+    await p.evaluate(() => localStorage.setItem('nb_mizu', JSON.stringify({ k: 40, damp: 12, wave: 0, shk: 0, smooth: 10, level: false, sensor: true })));
+    await f.waitForFunction(() => Mizu.opt.k === 40 && Mizu.opt.level === false, null, { timeout: 3000 });
+    await f.waitForTimeout(2500);
+    t.ok(Math.abs(await f.evaluate(() => hanbun.water(0).th)) < 0.1, 'すいへい を けしても かたむいた まま');
+  },
+
   'うえ・したに ひろげると うえ・したに わかれる。わけた あと しばらく その ばしょで まってから ならびなおす': async t => {
     const { f } = await openHanbun(t, [4]);
     const a = await f.evaluate(() => hanbun.at(0));

@@ -116,6 +116,9 @@
   したの「🏠」と ボタン 0.1・0.5・1〜10（その かずの いろ。おすと でる）「かたづける」。24にん まで（8 を ぜんぶ わけると 0.5 が 16にん）。キャラと かずは この たんまつの `nb_hanbun`（どうき しない）。テスト `tests/hanbun.test.js`。
 - **ためし**（`lab.html`。せっていの「ためし」）：ほんたいに いれる まえに ためす ページの いちらん（パパの ねがい：ここで ためして から いれるか きめる）。
   あたらしい ためしは `lab-<なまえ>.html` を つくり、`lab.html` の `EXPERIMENTS` に 1ぎょう たす（st：try＝ためし中 / done＝ほんたいに いれた）。ゲームの きろくには さわらない。テスト `tests/lab.test.js`。
+  - **みず は「はんぶん」に いれた**（パパ が さいよう）：うごきは `mizu.js`（はんぶん と ためし の りょうほうで つかう）。センサーは はじめから オン（iPhone は さいしょに さわった とき に ゆるしを きく）。
+    ためしの「💾 はんぶんに つかう」で この たんまつの `nb_mizu` に しまうと、ひらいて いる はんぶん にも すぐ きく（storage の しらせ）。「センサー」の チェックを はずして しまうと つかわない。
+    ゲームの iframe の allow に accelerometer・gyroscope を たした。
   - `lab-mizu.html`（🌊 かたむけて みず）：スマホの かたむき（DeviceOrientation の gamma）で ガラスの みずの おもてが すいへいを たもつ・ばね と ねばり で ゆれる・ふると なみ（DeviceMotion）。
     iPhone は ボタンを おして `DeviceOrientationEvent.requestPermission()`。センサーが ない ときは ゆびで よこに なぞると かたむく。つまみ（ばね・ねばり・ゆれ）で うごきを ためして、よければ「はんぶん」に いれる
     （そのときは index.html の iframe の allow に accelerometer・gyroscope を たす）。
