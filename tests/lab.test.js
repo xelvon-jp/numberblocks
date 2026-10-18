@@ -11,20 +11,28 @@ module.exports = {
     for(const f of links){ const r = await p.request.get(new URL(f, p.url()).href); t.eq(r.status(), 200, f + ' が ない'); }
   },
 
-  'みず：かたむけると みずの おもてが ぎゃくに かたむいて すいへいを たもつ。センサーが なくても ゆびで ためせる': async t => {
+  'みず：かたむけると みずの おもてが ぎゃくに かたむいて すいへいを たもつ。さかさまでも。センサーが なくても ゆびで ためせる': async t => {
     const p = await openLab(t, 'lab-mizu.html');
-    await p.evaluate(() => { mizu.start(); mizu.feed(25); });
-    await p.waitForTimeout(1500);
-    const th = await p.evaluate(() => mizu.big().th);
-    t.ok(Math.abs(th + 25*Math.PI/180) < 0.08, 'みぎに かたむけても すいへいに ならない ' + th);
-    await p.evaluate(() => mizu.feed(0));
+    const th = async () => p.evaluate(() => mizu.big().th);
+    // みぎに 25° かたむけた（がめんの なかで「うえ」が ひだりへ 25°）
+    await p.evaluate(() => { mizu.start(); const a = 25*Math.PI/180; mizu.grav(-Math.sin(a)*9.8, Math.cos(a)*9.8); });
+    await p.waitForTimeout(1800);
+    t.ok(Math.abs(await th() + 25*Math.PI/180) < 0.08, 'みぎに かたむけても すいへいに ならない ' + await th());
+    // さかさま：みずは がめんの うえへ
+    await p.evaluate(() => mizu.grav(0.3, -9.8));
+    await p.waitForTimeout(2500);
+    t.ok(Math.abs(Math.abs(await th()) - Math.PI) < 0.15, 'さかさまで うえに いかない ' + await th());
+    // どんな かたむきでも みずの りょうは おなじ
+    const areas = await p.evaluate(() => [0, 0.5, 1, 2, 3].flatMap(a => [0.1, 0.5, 0.9].map(f => Math.abs(mizu.area(a, f) - f))));
+    t.ok(Math.max(...areas) < 1e-3, 'みずの りょうが かわる ' + Math.max(...areas));
     // ゆびで よこに なぞる（センサー なし の かわり）
-    const box = await p.locator('#c').boundingBox();
-    await p.mouse.move(box.x + 100, box.y + 100); await p.mouse.down(); await p.mouse.move(box.x + 100 - box.width*0.25, box.y + 100);
+    await p.evaluate(() => { mizu.grav(0, 9.8); const s = mizu.sens(); s.ux = 0; s.uy = 1; });
     await p.waitForTimeout(1500);
-    const th2 = await p.evaluate(() => mizu.big().th);
-    t.ok(th2 > 0.3, 'ゆびで かたむかない ' + th2);
+    const box = await p.locator('#c').boundingBox();
+    await p.mouse.move(box.x + 100, box.y + 100); await p.mouse.down(); await p.mouse.move(box.x + 100 + box.width*0.125, box.y + 100);
+    await p.waitForTimeout(1800);
+    t.ok(Math.abs(await th() + 30*Math.PI/180) < 0.1, 'ゆびで かたむかない ' + await th());
     await p.mouse.up(); await p.waitForTimeout(2000);
-    t.ok(Math.abs(await p.evaluate(() => mizu.big().th)) < 0.08, 'はなしても もどらない');
+    t.ok(Math.abs(await th()) < 0.08, 'はなしても もどらない');
   },
 };
