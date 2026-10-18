@@ -209,7 +209,7 @@ module.exports = {
       return { n: btns.length, label: got.includes('まぜまぜ（とけい4・ひっさん1）'), on, off: mixMode(),
                back: !genTask && taskIdx === 3 && isCalcMode(), cells: stageBtns.filter(b => b.val === 'go').length };
     });
-    t.eq(r, { n:2, label:true, on:true, off:false, back:true, cells:60 }, 'けいさん／まぜまぜ の切りかえが おかしい');
+    t.eq(r, { n:2, label:true, on:true, off:false, back:true, cells:76 }, 'けいさん／まぜまぜ の切りかえが おかしい');
   },
 
   'まぜまぜ と とけいの レベルは 人ごとに のこり、開きなおしても きえない。きろくで 1に もどせる': async t => {
