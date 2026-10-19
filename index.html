@@ -211,6 +211,7 @@
   document.write('<script src="merge.js?v=' + v + '"><\/script>');
   document.write('<script src="num.js?v=' + v + '"><\/script>');      // かず を ぶんすう で もつ（Num）
   document.write('<script src="mizu.js?v=' + v + '"><\/script>');     // ガラスの みず（スマホの かたむき）
+  document.write('<script src="katachi.js?v=' + v + '"><\/script>');  // かたち に ぴったり（めんせき・ためし）
 })();
 </script>
 <script>
@@ -5026,6 +5027,7 @@ function handleStart(x,y,pid){
   }
   for(const tb of tabBtns){
     if(!ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)) continue;
+    if(katachiOn) katachiStop();                     // かたち（ためし）は タブ で おわる
     if(tb.val==='settings'){ setOpen = true; stageOpen = false; }
     // おだいに入るときは、かならず「だれが あそぶ？」を聞く（setTaskOn）
     else if(tb.val==='task'){ if(!taskOn) setTaskOn(true); }
@@ -5058,6 +5060,7 @@ function handleStart(x,y,pid){
     }
     return;
   }
+  if(katachiTap(x,y)) return;                      // かたち：🛠️ こうさくしつ・つぎへ
   for(const b of getNumpadLayout()){
     if(ptInRect(x,y,b.x,b.y,b.w,b.h)){
       if(b.val==='R') spawnBlock(Math.floor(Math.random()*100)+1);
@@ -5226,6 +5229,8 @@ function handleEnd(x,y,pid){
   if(calcPinch && calcPinch.pts[String(pid)]){ pinchEnd(); return; }
   const ptr=dragPointers[pid]; if(!ptr){ dragBlock=null; dragPtr=null; return; }
   const b=ptr.block; delete dragPointers[pid]; dragBlock=null; dragPtr=null;
+  // かたち の うえ で はなした → ひろさ と くらべる（katachi.js）
+  if(katachiDrop(b,x,y)) return;
   // マジックミラーの上で離した → そのキャラを複製する（合体はしない）
   if(isOverMirror(x,y)){ duplicateAtMirror(b); return; }
   // おうちの上で離した → そのキャラは帰る（画面から消える）
@@ -5454,6 +5459,7 @@ function drawFrame(ts){
       updateWinFx(dt);
       drawWinLines(ctx);
       drawWinStamp(ctx);
+      drawKatachi(ctx, walkTime);                     // かたち（ためし）は キャラ の うしろ
       for(const b of blocks){ if(b===dragBlock || b.hidden) continue; b.draw(ctx,walkTime,0); }
       drawCalcPinch(ctx, walkTime);
       drawCast(ctx);                                  // パレードは キャラより てまえ
@@ -5487,6 +5493,7 @@ function drawFrame(ts){
       // ミラーとおうちは最後に描く。持っているキャラで隠れると、
       // 鏡の中の映り込みや扉のあかりが見えなくなってしまうため。
       drawDropTargets(ctx, walkTime);
+      drawKatachiFront(ctx, walkTime);              // かたち の もじ・ボタン は てまえ
       // マジックミラーの紙吹雪
       for(const fp of fxParticles) fp.update();
       fxParticles = fxParticles.filter(fp=>fp.life>0);
@@ -5590,6 +5597,8 @@ quizMaxEl.value = String(quizMax); quizMaxVal.textContent = String(quizMax);
 quizLimitEl.textContent = quizLimitLabel();
 setMode('+');
 followTaskMode();          // 前回とけいの おだいの とちゅうなら、とけいの画面から始める
+// ためし（lab.html）の「かたち に ぴったり」から：index.html?katachi=1
+if(/[?&]katachi=1/.test(location.search)){ if(taskOn) setTaskOn(false); whoOpen = false; setMode('x'); katachiStart(0); }
 if(typeof Mizu !== 'undefined') Mizu.autoStart();   // ガラス の みず の センサー は はじめ から オン（iPhone は さいしょに さわった とき に きく）
 requestAnimationFrame(loop);
 </script>

@@ -31,6 +31,8 @@
 // ── ためしの いちらん ──
 // あたらしい ためしは ここに 1ぎょう たす（file・なまえ・せつめい・st：try＝ためし中 / done＝ほんたいに いれた）
 const EXPERIMENTS = [
+  { file: 'index.html?katachi=1', name: '🔷 かたち に ぴったり', st: 'try',
+    desc: 'けいさん の がめん に かたち が でる。ひろさ と おなじ かず の キャラ を つくって かたち の うえ で はなす。なやんだら 🛠️ こうさくしつ（きって うごかす）で ヒント。タブ を おすと おわる。' },
   { file: 'lab-menseki.html', name: '📐 ひろさ（めんせき）', st: 'try',
     desc: 'かたち を きる・うごかす・かがみ で うつす・まわす して ながしかく に かえると、めんせき の しき が できる。ながしかく・ましかく・へいこうしへんけい・さんかく（5ステージ）。' },
   { file: 'lab-mizu.html', name: '🌊 かたむけて みず', st: 'done',
@@ -39,7 +41,7 @@ const EXPERIMENTS = [
 const list = document.getElementById('list');
 for(const e of EXPERIMENTS){
   const a = document.createElement('a'); a.className = 'exp';
-  a.href = e.file + '?v=' + Date.now();       // キャッシュの 古い版を ひらかない
+  a.href = e.file + (e.file.includes('?') ? '&' : '?') + 'v=' + Date.now();       // キャッシュの 古い版を ひらかない
   a.innerHTML = '<b></b><span class="st"></span><p></p>';
   a.querySelector('b').textContent = e.name;
   const s = a.querySelector('.st'); s.textContent = e.st === 'done' ? 'ほんたいに いれた' : 'ためし中'; s.classList.add(e.st);

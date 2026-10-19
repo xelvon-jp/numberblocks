@@ -57,30 +57,58 @@
 // かたち は ぜんぶ とつ（へこみ なし）の たかっけい。きる のは マス の せん だけ なので、とつ の まま。
 // ぜんぶ を あわせて すきま も かさなり も ない ながしかく に なったら できた。
 const STAGES = [
-  { name:'ながしかく', color:'#4a9a55',
+  { name:'ながしかく', color:'#4a9a55', type:'rect',
     say:'4マス の ぼう が 3ぼん。くっつけて ながしかく に しよう',
     pieces:[ [[0,0],[4,0],[4,1],[0,1]], [[0,0],[4,0],[4,1],[0,1]], [[0,0],[4,0],[4,1],[0,1]] ], at:[[1,1],[6,4],[2,7]],
     hint:'ぼう を たて に つみかさねて みよう' },
-  { name:'ましかく', color:'#c08a20', square:true,
+  { name:'ましかく', color:'#c08a20', square:true, type:'square',
     say:'4マス の ぼう が 4ほん。たて と よこ が おなじ ながさ の ましかく に しよう',
     pieces:[ [[0,0],[4,0],[4,1],[0,1]], [[0,0],[4,0],[4,1],[0,1]], [[0,0],[4,0],[4,1],[0,1]], [[0,0],[4,0],[4,1],[0,1]] ], at:[[0,1],[6,2],[1,6],[6,8]],
     hint:'4ほん とも たて に つみかさねる と…？' },
-  { name:'へいこうしへんけい', color:'#3f8fd0',
+  { name:'へいこうしへんけい', color:'#3f8fd0', type:'para',
     say:'ななめ の かたち。はし を きって うごかすと ながしかく に なるよ',
     pieces:[ [[1,0],[6,0],[5,3],[0,3]] ], at:[[2,3]],
     hint:'てっぺん の かど から まっすぐ した へ なぞって きって みよう。きった さんかく を はんたい がわ へ', cut:[[1,0],[1,3]] },
-  { name:'ちょっかく さんかく', color:'#c0558a', mirror:true, half:true,
+  { name:'ちょっかく さんかく', color:'#c0558a', mirror:true, half:true, type:'tri',
     say:'さんかく。かがみ に いれて 2つ に して、🔄 まわして くっつけよう',
     pieces:[ [[0,0],[0,3],[4,3]] ], at:[[1,4]],
     hint:'さんかく を かがみ まで ドラッグ → でてきた ほう を 🔄 → くっつける' },
-  { name:'さんかく', color:'#7a5ad0', mirror:true, half:true,
+  { name:'さんかく', color:'#7a5ad0', mirror:true, half:true, type:'tri',
     say:'とがった さんかく。2つ に して くっつけて、きって、ながしかく に しよう',
     pieces:[ [[1,0],[4,3],[0,3]] ], at:[[1,4]],
     hint:'2つ くっつけると ななめ の かたち（へいこうしへんけい）。そのあと は ステージ3 と おなじ' },
 ];
 const GW = 11, GH = 11;            // ばん の マス（よこ・たて）
+// ゲーム（katachi.js）の 🛠️ こうさくしつ から：?embed=1&kind=rect|para|rtri|tri&w=&h=&o=
+// その かたち だけ の ステージ に する。できたら ゲーム へ { type:'done', w, h, half }、もどる で { type:'close' }。
+const EMBED = (() => { const q = new URLSearchParams(location.search); if(q.get('embed') !== '1') return null;
+  return { kind: q.get('kind') || 'rect', w: +q.get('w') || 4, h: +q.get('h') || 3, o: +q.get('o') || 0 }; })();
+function tellGame(m){ if(!EMBED) return; try{ parent.postMessage(Object.assign({ from:'menseki' }, m), '*'); }catch(e){} }
+if(EMBED){
+  const { kind, w, h, o } = EMBED;
+  if(kind === 'rect'){
+    const bar = [[0,0],[w,0],[w,1],[0,1]];
+    STAGES.splice(0, STAGES.length, { name:'ながしかく', color:'#4a9a55', type: w === h ? 'square' : 'rect',
+      say: w + 'マス の ぼう が ' + h + 'ほん。くっつけて ながしかく に しよう',
+      pieces: Array.from({ length: h }, () => bar), at: Array.from({ length: h }, (_, k) => [k % 2 ? GW - w : 0, Math.round(k*(GH - 1)/h)]),
+      hint: 'ぼう を たて に つみかさねて みよう' });
+  } else if(kind === 'para'){
+    STAGES.splice(0, STAGES.length, { name:'へいこうしへんけい', color:'#3f8fd0', type:'para',
+      say:'ななめ の かたち。はし を きって うごかすと ながしかく に なるよ',
+      pieces:[ [[o,0],[w+o,0],[w,h],[0,h]] ], at:[[1, 3]], cut:[[o,0],[o,h]],
+      hint:'てっぺん の かど から まっすぐ した へ なぞって きって みよう。きった さんかく を はんたい がわ へ' });
+  } else {
+    const pts = kind === 'rtri' ? [[0,0],[0,h],[w,h]] : [[o,0],[w,h],[0,h]];
+    STAGES.splice(0, STAGES.length, { name:'さんかく', color: kind === 'rtri' ? '#c0558a' : '#7a5ad0', mirror:true, half:true, type:'tri',
+      say:'さんかく。かがみ に いれて 2つ に して、🔄 まわして くっつけよう' + (kind === 'tri' ? '。ななめ の かたち に なったら きって うごかす' : ''),
+      pieces:[ pts ], at:[[0, GH - h]],
+      hint:'さんかく を かがみ まで ドラッグ → でてきた ほう を 🔄 → くっつける' });
+  }
+}
 const $ = id => document.getElementById(id);
 const cv = $('c'), ctx = cv.getContext('2d');
+if(EMBED){ $('stages').style.display = 'none'; const bk = document.querySelector('.back'); bk.textContent = '← キャラ に もどる'; bk.href = '#';
+  bk.onclick = e => { e.preventDefault(); tellGame({ type:'close' }); }; document.querySelector('header h1').textContent = '🛠️ こうさくしつ'; }
 let W = 0, H = 0, C = 30, OX = 0, OY = 0;   // 1マス の ピクセル と ばん の ひだりうえ
 let si = 0, pieces = [], sel = null, drag = null, cut = null, copies = 0, hintOn = false, doneAt = 0, nextId = 1, fx = [];
 let clear = (() => { try{ return JSON.parse(localStorage.getItem('nb_lab_menseki') || '[]'); }catch(e){ return []; } })();
@@ -145,15 +173,19 @@ function check(){
   if(st.mirror && !copies) return;                       // さんかく は 2つ に して から
   if(st.square && r.w !== r.h){ $('say').textContent = 'ながしかく に なった！ たて と よこ を おなじ に できるかな'; return; }
   doneAt = performance.now();
-  if(!clear.includes(si)){ clear.push(si); try{ localStorage.setItem('nb_lab_menseki', JSON.stringify(clear)); }catch(e){} }
+  if(!EMBED && !clear.includes(si)){ clear.push(si); try{ localStorage.setItem('nb_lab_menseki', JSON.stringify(clear)); }catch(e){} }
   const A = r.w*r.h, lines = [];
-  if(si === 0) lines.push(`<span class="big">よこ ${r.w} × たて ${r.h} ＝ ${A}</span>`, `<span class="f">${r.w}マス が ${r.h}れつ。ながしかく の ひろさ ＝ よこ × たて</span>`);
-  if(si === 1) lines.push(`<span class="big">${r.w} × ${r.h} ＝ ${A}</span>`, `<span class="f">${r.w} の しかく（2じょう）。ましかく の ひろさ ＝ いっぺん × いっぺん</span>`);
-  if(si === 2) lines.push(`<span class="big">ていへん ${r.w} × たかさ ${r.h} ＝ ${A}</span>`, `<span class="f">きって うごかしても ひろさ は ${A} の まま。<br>へいこうしへんけい の ひろさ ＝ ていへん × たかさ</span>`);
-  if(si >= 3) lines.push(`ながしかく ${r.w} × ${r.h} ＝ ${A}`, `<span class="big">さんかく は その はんぶん → ${A} ÷ 2 ＝ ${fmt(A/2)}</span>`,
+  const ty = st.type;
+  if(ty === 'rect') lines.push(`<span class="big">よこ ${r.w} × たて ${r.h} ＝ ${A}</span>`, `<span class="f">${r.w}マス が ${r.h}れつ。ながしかく の ひろさ ＝ よこ × たて</span>`);
+  if(ty === 'square') lines.push(`<span class="big">${r.w} × ${r.h} ＝ ${A}</span>`, `<span class="f">${r.w} の しかく（2じょう）。ましかく の ひろさ ＝ いっぺん × いっぺん</span>`);
+  if(ty === 'para') lines.push(`<span class="big">ていへん ${r.w} × たかさ ${r.h} ＝ ${A}</span>`, `<span class="f">きって うごかしても ひろさ は ${A} の まま。<br>へいこうしへんけい の ひろさ ＝ ていへん × たかさ</span>`);
+  if(ty === 'tri') lines.push(`ながしかく ${r.w} × ${r.h} ＝ ${A}`, `<span class="big">さんかく は その はんぶん → ${A} ÷ 2 ＝ ${fmt(A/2)}</span>`,
                          `<span class="f">さんかく の ひろさ ＝ ていへん × たかさ ÷ 2</span>`);
-  const d = $('done'); d.innerHTML = '🎉 できた！<br>' + lines.join('<br>') + (si < STAGES.length-1 ? '<br><button id="nx">つぎ へ ▶</button>' : '');
-  d.style.display = 'block'; $('say').style.display = 'none'; resize();   // ばん は ちいさく なって、かたち に かぶらない const nx = $('nx'); if(nx) nx.onclick = () => load(si + 1);
+  const d = $('done'); d.innerHTML = '🎉 できた！<br>' + lines.join('<br>') + (EMBED ? '<br><button id="bk">キャラ で つくりに もどる ▶</button>' : si < STAGES.length-1 ? '<br><button id="nx">つぎ へ ▶</button>' : '');
+  d.style.display = 'block'; $('say').style.display = 'none'; resize();   // ばん は ちいさく なって、かたち に かぶらない
+  const nx = $('nx'); if(nx) nx.onclick = () => load(si + 1);
+  const bk = $('bk'); if(bk) bk.onclick = () => tellGame({ type:'close' });
+  tellGame({ type:'done', w: r.w, h: r.h, half: !!st.mirror });
   for(let k = 0; k < 40; k++) fx.push({ x: W/2, y: H/2, vx: (Math.random()-0.5)*9, vy: -Math.random()*9 - 2, c: ['#f0a020','#3ebb47','#3f8fd0','#d0553f'][k%4], t: 0 });
   renderStages();
 }
