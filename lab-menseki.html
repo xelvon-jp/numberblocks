@@ -31,6 +31,11 @@
   #done .big { font-size:24px; font-weight:900; color:#d06a00; }
   #done .f { font-size:15px; color:#3a5a8a; }
   #done button { margin-top:8px; border:0; border-radius:12px; padding:10px 16px; font-size:16px; font-weight:900; background:#3ebb47; color:#fff; }
+  #ok { display:none; flex:none; margin:0 10px calc(10px + env(safe-area-inset-bottom, 0px)); border:0; border-radius:18px; padding:16px 0; font-size:22px; font-weight:900;
+        background:#3ebb47; color:#fff; box-shadow:0 3px 0 #2a8a33; }
+  #ok.go { animation: pulse 0.9s ease-in-out infinite alternate; }
+  @keyframes pulse { from { transform:scale(1); } to { transform:scale(1.04); } }
+  body.embed #bar { padding-bottom:6px; }
 </style>
 </head>
 <body>
@@ -45,104 +50,124 @@
   <button id="hint">💡 ヒント</button>
   <button id="reset">↺ はじめから</button>
 </div>
+<button id="ok">めんせき わかった！</button>
 <script src="kata.js"></script>
 <script>
-// ── めんせき の ためし ─────────────────────────────────────────────
-// こうしき を おぼえる ので なく、かたち を「きる・うごかす・うつす（かがみ）・まわす」して
-// しっている かたち（ながしかく）に かえる と、しき が できあがる。
-//   1マス ＝ ブロック 1こ。はんぶん の マス は 0.5（はんぶん の キャラ と おなじ）。
+// ── めんせき の ためし（こうさくしつ）─────────────────────────────────
+// こうしき を おぼえる ので なく、かたち を「きる・うごかす・まわす」して しっている かたち（ながしかく）に
+// かえる と、しき が できあがる。1マス ＝ ブロック 1こ。はんぶん の マス は 0.5。
 //   ・ドラッグ：かたち を うごかす（はなすと マス に ぴったり）
-//   ・かたち の そと から なぞる：その せん（たて か よこ の マス の せん）で きる
-//   ・かがみ に いれる：おなじ かたち が もう ひとつ（2ばい → あとで ÷2）
+//   ・かたち の そと から なぞる：てんせん（ヒント の せん）に そって なぞれば その せん で、
+//     それ いがい は たて か よこ の マス の せん で きる
 //   ・🔄：さいごに さわった かたち を くるっと（180°）
-// かたち は ぜんぶ とつ（へこみ なし）の たかっけい。きる のは マス の せん だけ なので、とつ の まま。
-// ぜんぶ を あわせて すきま も かさなり も ない ながしかく に なったら できた。
-const STAGES = [
-  { name:'ながしかく', color:'#4a9a55', type:'rect',
-    say:'4マス の ぼう が 3ぼん。くっつけて ながしかく に しよう',
-    pieces:[ [[0,0],[4,0],[4,1],[0,1]], [[0,0],[4,0],[4,1],[0,1]], [[0,0],[4,0],[4,1],[0,1]] ], at:[[1,1],[6,4],[2,7]],
-    hint:'ぼう を たて に つみかさねて みよう' },
-  { name:'ましかく', color:'#c08a20', square:true, type:'square',
-    say:'4マス の ぼう が 4ほん。たて と よこ が おなじ ながさ の ましかく に しよう',
-    pieces:[ [[0,0],[4,0],[4,1],[0,1]], [[0,0],[4,0],[4,1],[0,1]], [[0,0],[4,0],[4,1],[0,1]], [[0,0],[4,0],[4,1],[0,1]] ], at:[[0,1],[6,2],[1,6],[6,8]],
-    hint:'4ほん とも たて に つみかさねる と…？' },
-  { name:'へいこうしへんけい', color:'#3f8fd0', type:'para',
-    say:'ななめ の かたち。はし を きって うごかすと ながしかく に なるよ',
-    pieces:[ [[1,0],[6,0],[5,3],[0,3]] ], at:[[2,3]],
-    hint:'てっぺん の かど から まっすぐ した へ なぞって きって みよう。きった さんかく を はんたい がわ へ', cut:[[1,0],[1,3]] },
-  { name:'ちょっかく さんかく', color:'#c0558a', mirror:true, half:true, type:'tri',
-    say:'さんかく。かがみ に いれて 2つ に して、🔄 まわして くっつけよう',
-    pieces:[ [[0,0],[0,3],[4,3]] ], at:[[1,4]],
-    hint:'さんかく を かがみ まで ドラッグ → でてきた ほう を 🔄 → くっつける' },
-  { name:'さんかく', color:'#7a5ad0', mirror:true, half:true, type:'tri',
-    say:'とがった さんかく。2つ に して くっつけて、きって、ながしかく に しよう',
-    pieces:[ [[1,0],[4,3],[0,3]] ], at:[[1,4]],
-    hint:'2つ くっつけると ななめ の かたち（へいこうしへんけい）。そのあと は ステージ3 と おなじ' },
-];
+//   ・●↔：さんかく の てっぺん を よこ に うごかす（ていへん と たかさ は おなじ → ひろさ も おなじ。とうせき へんけい）
+// まんなか に ヒント の かたち を だす：
+//   さんかく・ひしがた は まわり の ながしかく を だして、てんせん に そって きりだす（ながしかく の はんぶん）。
+//   ながしかく・へいこうしへんけい は できあがり の ながしかく を うすく（ゴースト）。
+//   どんかく さんかく は ゴースト の ながしかく へ ● で いれる。だいけい は たいかくせん で さんかく 2つ。
+// かがみ（2ばい に する）は わかりにくい ので やめた（パパ）。
+// かたち は ぜんぶ とつ（へこみ なし）。まっすぐ な せん で きる ので、とつ の まま。
+// ゲーム（katachi.js）の 🛠️ から：?embed=1&s=（kata.js の かたち の JSON）。できたら { type:'done', hint }、「めんせき わかった！」で { type:'close' }。
 const GW = 11, GH = 11;            // ばん の マス（よこ・たて）
-// kata.js の かたち（ゲーム と おなじ）から ステージ を つくる
+const fmt = v => String(Math.round(v*100)/100);
+// kata.js の かたち（ゲーム と おなじ）から ステージ を つくる。ざひょう は ばん の うえ（ワールド）
 function makeStage(sh){
-  const { kind, w, h } = sh, P = Kata.partPts(sh);
+  const { kind, w, h, o = 0, a = 0 } = sh;
+  const cen = bw => Math.floor((GW - bw)/2), oy = Math.floor((GH - (sh.h || 0))/2);
+  const box = (x, y) => [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+  const tr = (P, x, y) => P.map(([u, v]) => [u + x, v + y]);
   if(kind === 'sq' || kind === 'rect'){
-    const bar = [[0,0],[w,0],[w,1],[0,1]];
-    return { name: kind === 'sq' ? 'ましかく' : 'ながしかく', color: kind === 'sq' ? '#c08a20' : '#4a9a55', type: kind === 'sq' ? 'square' : 'rect', square: kind === 'sq',
-      say: w + 'マス の ぼう が ' + h + 'ほん。くっつけて ' + (kind === 'sq' ? 'ましかく' : 'ながしかく') + ' に しよう',
-      pieces: Array.from({ length: h }, () => bar), at: Array.from({ length: h }, (_, k) => [k % 2 ? GW - w : 0, Math.round(k*(GH - 1)/h)]),
-      hint: 'ぼう を たて に つみかさねて みよう' };
+    const ox = cen(w), bar = [[0,0],[w,0],[w,1],[0,1]], sq = kind === 'sq';
+    return { name: sq ? 'ましかく' : 'ながしかく', color: sq ? '#c08a20' : '#4a9a55', square: sq,
+      say: w + 'マス の ぼう が ' + h + 'ほん。うすい ながしかく の なか に つみかさねよう',
+      pieces: Array.from({ length: h }, () => bar), at: Array.from({ length: h }, (_, k) => [k % 2 ? GW - w : 0, Math.round(k*(GH - 1)/Math.max(1, h - 1))]),
+      ghost: [ox, oy, w, h], goal: 'rect', hint: 'ぼう を うすい ながしかく に いれて みよう',
+      done: r => [`<span class="big">${sq ? '' : 'よこ '}${r.w} × ${sq ? '' : 'たて '}${r.h} ＝ ${r.w*r.h}</span>`,
+                  `<span class="f">${r.w}マス が ${r.h}れつ。${sq ? 'ましかく の ひろさ ＝ いっぺん × いっぺん' : 'ながしかく の ひろさ ＝ よこ × たて'}</span>`],
+      tell: r => r.w + ' × ' + r.h };
   }
-  if(kind === 'para') return { name:'へいこうしへんけい', color:'#3f8fd0', type:'para', pieces:[P], at:[[1, 3]], cut:[[[sh.o,0],[sh.o,h]]],
-    say:'ななめ の かたち。はし を きって うごかすと ながしかく に なるよ',
-    hint:'てっぺん の かど から まっすぐ した へ なぞって きって みよう。きった さんかく を はんたい がわ へ' };
-  if(kind === 'rhom') return { name:'ひしがた', color:'#2a9db0', type:'rhom', d:[w, h], pieces:[P], at:[[1, 3]], cut:[[[w/2,0],[w/2,h]], [[0,h/2],[w,h/2]]],
-    say:'ひしがた。たいかくせん（てんせん）で きって ならべかえると ながしかく に なるよ',
-    hint:'たて と よこ の たいかくせん で きる と さんかく が 4つ。2つ ずつ くっつけると ながしかく' };
-  if(kind === 'trap') return { name:'だいけい', color:'#c0558a', type:'trap', mirror:true, half:true, pieces:[P], at:[[0, GH - h]],
-    say:'だいけい。かがみ で 2つ に して 🔄 まわして くっつけると、ななめ の かたち に なるよ',
-    hint:'2つ くっつけた ななめ の かたち の ていへん は じょうてい ＋ かてい。そのあと は きって うごかす' };
-  if(kind === 'comp') return { name:'ふくざつ な かたち', color:'#7a8a3a', type:'comp', shear:true, pieces: sh.parts.map(Kata.partPts), at: sh.parts.map(() => [1, 2]),
-    say:'いくつか の かたち が くっついて いる。うごかしたり きったり して ながしかく に しよう',
-    hint:'ばらばら に して ならべかえて みよう。さんかく は てっぺん の ● を うごかす と ちょっかく に なる' };
-  const ob = kind === 'otri', rt = kind === 'rtri';
-  return { name: rt ? 'ちょっかく さんかく' : ob ? 'どんかく さんかく' : 'えいかく さんかく', color: rt ? '#c0558a' : ob ? '#d0553f' : '#7a5ad0', type:'tri', mirror:true, half:true, shear:true,
-    pieces:[P], at:[[0, GH - h]],
-    say: rt ? 'さんかく。かがみ に いれて 2つ に して、🔄 まわして くっつけよう'
-            : 'てっぺん の ● を よこ に うごかしても ひろさ は かわらない。ちょっかく さんかく に して から かがみ へ',
-    hint: rt ? 'さんかく を かがみ まで ドラッグ → でてきた ほう を 🔄 → くっつける'
-             : '● を ひだり の はし（ていへん の まうえ）まで うごかすと ちょっかく さんかく。あとは かがみ と 🔄' };
+  if(kind === 'para'){ const ox = cen(w + o);
+    return { name:'へいこうしへんけい', color:'#3f8fd0', pieces:[Kata.partPts(sh)], at:[[ox, oy]], ghost:[ox + o, oy, w, h], guides:[[[ox + o, oy], [ox + o, oy + h]]], goal:'rect',
+      say:'ななめ の かたち。てんせん で きって、はし の さんかく を うすい ながしかく の あいて いる ところ へ',
+      hint:'てんせん を うえ から した へ なぞる と きれる。きった さんかく を みぎ へ',
+      done: r => [`<span class="big">ていへん ${r.w} × たかさ ${r.h} ＝ ${r.w*r.h}</span>`, `<span class="f">きって うごかしても ひろさ は おなじ。<br>へいこうしへんけい の ひろさ ＝ ていへん × たかさ</span>`],
+      tell: r => r.w + ' × ' + r.h };
+  }
+  if(kind === 'rtri' || kind === 'tri'){ const ox = cen(w), rt = kind === 'rtri';
+    const T = tr(Kata.partPts(sh), ox, oy), apex = rt ? [ox, oy] : [ox + o, oy];
+    const guides = rt ? [[[ox, oy], [ox + w, oy + h]]] : [[apex, [ox, oy + h]], [apex, [ox + w, oy + h]]];
+    return { name: rt ? 'ちょっかく さんかく' : 'えいかく さんかく', color: rt ? '#c0558a' : '#7a5ad0', pieces:[box(0, 0)], at:[[ox, oy]], guides, goal:{ any:[T] },
+      say:'ながしかく の なか に さんかく が かくれて いる。てんせん に そって きりだそう',
+      hint: rt ? 'ななめ の てんせん を はし から はし まで なぞる' : 'ななめ の てんせん を 1ぽん ずつ なぞる。のこり の 2つ を あわせると…？',
+      done: () => [`ながしかく ${w} × ${h} ＝ ${w*h}`, `<span class="big">さんかく は その はんぶん → ${w*h} ÷ 2 ＝ ${fmt(w*h/2)}</span>`,
+                   `<span class="f">${rt ? '' : 'のこり の 2つ を あわせても おなじ ひろさ。<br>'}さんかく の ひろさ ＝ ていへん × たかさ ÷ 2</span>`],
+      tell: () => w + ' × ' + h + ' の はんぶん' };
+  }
+  if(kind === 'otri'){ const ox = cen(o);
+    return { name:'どんかく さんかく', color:'#d0553f', pieces:[Kata.partPts(sh)], at:[[ox, oy]], ghost:[ox, oy, w, h], guides:[[[ox, oy], [ox + w, oy + h]]], shear:true,
+      goal:{ any:[[[ox, oy], [ox + w, oy + h], [ox, oy + h]], [[ox + w, oy], [ox + w, oy + h], [ox, oy + h]]] },
+      say:'てっぺん の ● を よこ に うごかしても ひろさ は かわらない。うすい ながしかく の なか に いれよう',
+      hint:'● を うすい ながしかく の かど まで ひっぱる',
+      done: () => [`<span class="f">● を うごかしても ていへん ${w}・たかさ ${h} は おなじ → ひろさ も おなじ</span>`, `ながしかく ${w} × ${h} ＝ ${w*h}`,
+                   `<span class="big">さんかく は その はんぶん → ${w*h} ÷ 2 ＝ ${fmt(w*h/2)}</span>`],
+      tell: () => w + ' × ' + h + ' の はんぶん' };
+  }
+  if(kind === 'rhom'){ const ox = cen(w), R = tr(Kata.partPts(sh), ox, oy);
+    return { name:'ひしがた', color:'#2a9db0', pieces:[box(0, 0)], at:[[ox, oy]], guides: R.map((p, i) => [p, R[(i+1)%4]]), goal:{ any:[R] },
+      say:'ながしかく の なか に ひしがた が かくれて いる。てんせん に そって きりだそう',
+      hint:'4ほん の てんせん を 1ぽん ずつ なぞる。きりとった かど の 4つ を あわせると…？',
+      done: () => [`まわり の ながしかく ${w} × ${h} ＝ ${w*h}`, `<span class="big">ひしがた は その はんぶん → ${w*h} ÷ 2 ＝ ${fmt(w*h/2)}</span>`,
+                   `<span class="f">ひしがた の ひろさ ＝ たいかくせん × たいかくせん ÷ 2</span>`],
+      tell: () => w + ' × ' + h + ' の はんぶん' };
+  }
+  if(kind === 'trap'){ const ox = cen(Math.max(w, o + a)), P = tr(Kata.partPts(sh), ox, oy);
+    return { name:'だいけい', color:'#c0558a', pieces:[Kata.partPts(sh)], at:[[ox, oy]], guides:[[P[1], P[3]]], goal:{ all:[[P[0], P[1], P[3]], [P[1], P[2], P[3]]] },
+      say:'だいけい。てんせん で きると さんかく が 2つ に なるよ',
+      hint:'ななめ の てんせん を なぞって きる',
+      done: () => [`うえ の さんかく ${a} × ${h} ÷ 2 ＋ した の さんかく ${w} × ${h} ÷ 2`, `<span class="big">（${a} ＋ ${w}）× ${h} ÷ 2 ＝ ${fmt((a + w)*h/2)}</span>`,
+                   `<span class="f">だいけい の ひろさ ＝（じょうてい ＋ かてい）× たかさ ÷ 2</span>`],
+      tell: () => '（' + a + ' ＋ ' + w + '）× ' + h + ' の はんぶん' };
+  }
+  // comp：ふくざつ な かたち
+  const P = sh.parts.map(Kata.partPts); let bw = 0, bh = 0; for(const Q of P) for(const [x, y] of Q){ bw = Math.max(bw, x); bh = Math.max(bh, y); }
+  const ox = cen(bw), oy2 = Math.floor((GH - bh)/2);
+  return { name:'ふくざつ な かたち', color:'#7a8a3a', pieces:P, at:P.map(() => [ox, oy2]), shear:true, goal:'rect',
+    say:'いくつか の かたち が くっついて いる。きったり うごかしたり して ながしかく に しよう',
+    hint:'ばらばら に して ならべかえる。さんかく は ● で ちょっかく に したり、たて に きって 🔄 したり',
+    done: r => [`<span class="big">ながしかく ${r.w} × ${r.h} ＝ ${r.w*r.h}</span>`, `<span class="f">ばらばら に して ならべかえても ひろさ は おなじ</span>`],
+    tell: r => r.w + ' × ' + r.h };
 }
-// ためし の いちらん に だす ぶん（1〜5 は さいしょ に つくった もの）
-STAGES.push(makeStage({ kind:'otri', w:3, h:4, o:5 }), makeStage({ kind:'rhom', w:4, h:4 }), makeStage({ kind:'trap', w:4, h:3, o:1, a:2 }),
-            makeStage({ kind:'comp', parts:[{ kind:'tri', x:0, y:0, w:4, h:2, o:2 }, { kind:'rect', x:0, y:2, w:4, h:3 }] }));
-STAGES[3].shear = STAGES[4].shear = true;
-// ゲーム（katachi.js）の 🛠️ こうさくしつ から：?embed=1&s=（kata.js の かたち を JSON で）
-// その かたち だけ の ステージ に する。できたら ゲーム へ { type:'done', w, h, half }、もどる で { type:'close' }。
+const STAGES = [
+  { kind:'rect', w:4, h:3 }, { kind:'sq', w:4, h:4 }, { kind:'para', w:5, h:3, o:1 }, { kind:'rtri', w:4, h:3 }, { kind:'tri', w:4, h:3, o:1 },
+  { kind:'otri', w:3, h:4, o:5 }, { kind:'rhom', w:4, h:4 }, { kind:'trap', w:4, h:3, o:1, a:2 },
+  { kind:'comp', parts:[{ kind:'tri', x:0, y:0, w:4, h:2, o:2 }, { kind:'rect', x:0, y:2, w:4, h:3 }] },
+].map(makeStage);
 const EMBED = (() => { const q = new URLSearchParams(location.search); if(q.get('embed') !== '1') return null;
   try{ return JSON.parse(q.get('s')); }catch(e){ return { kind:'rect', w:4, h:3 }; } })();
 function tellGame(m){ if(!EMBED) return; try{ parent.postMessage(Object.assign({ from:'menseki' }, m), '*'); }catch(e){} }
 if(EMBED) STAGES.splice(0, STAGES.length, makeStage(EMBED));
 const $ = id => document.getElementById(id);
 const cv = $('c'), ctx = cv.getContext('2d');
-if(EMBED){ $('stages').style.display = 'none'; const bk = document.querySelector('.back'); bk.textContent = '← キャラ に もどる'; bk.href = '#';
-  bk.onclick = e => { e.preventDefault(); tellGame({ type:'close' }); }; document.querySelector('header h1').textContent = '🛠️ こうさくしつ'; }
+if(EMBED){ document.body.classList.add('embed'); $('stages').style.display = 'none'; document.querySelector('.back').style.display = 'none';
+  document.querySelector('header h1').textContent = '🛠️ こうさくしつ'; $('ok').style.display = 'block'; $('ok').onclick = () => tellGame({ type:'close' }); }
 let W = 0, H = 0, C = 30, OX = 0, OY = 0;   // 1マス の ピクセル と ばん の ひだりうえ
-let si = 0, pieces = [], sel = null, drag = null, cut = null, copies = 0, hintOn = false, doneAt = 0, nextId = 1, fx = [];
+let si = 0, pieces = [], sel = null, drag = null, cut = null, shearDrag = null, hintOn = false, doneAt = 0, nextId = 1, fx = [];
 let clear = (() => { try{ return JSON.parse(localStorage.getItem('nb_lab_menseki') || '[]'); }catch(e){ return []; } })();
-const MIRROR = () => ({ x: OX + (GW - 2.6)*C, y: OY + 0.2*C, w: 2.4*C, h: 2.6*C });
 
 // ── かたち の けいさん ──
 const areaOf = pts => { let s = 0; for(let i = 0; i < pts.length; i++){ const [x0,y0] = pts[i], [x1,y1] = pts[(i+1)%pts.length]; s += x0*y1 - x1*y0; } return Math.abs(s)/2; };
-const fmt = v => String(Math.round(v*100)/100);
 const world = p => p.pts.map(([x,y]) => [x + p.ox, y + p.oy]);
 const bbox = pts => { let a = [Infinity, Infinity, -Infinity, -Infinity]; for(const [x,y] of pts){ a = [Math.min(a[0],x), Math.min(a[1],y), Math.max(a[2],x), Math.max(a[3],y)]; } return a; };
 function inside(pts, x, y){ let c = false; for(let i = 0, j = pts.length-1; i < pts.length; j = i++){ const [xi,yi] = pts[i], [xj,yj] = pts[j];
   if((yi > y) !== (yj > y) && x < (xj-xi)*(y-yi)/(yj-yi) + xi) c = !c; } return c; }
-// とつ の たかっけい を せん（たて x＝v か よこ y＝v）で 2つ に
-function clip(pts, axis, v, keepLess){
-  const k = axis === 'x' ? 0 : 1, inS = p => keepLess ? p[k] <= v + 1e-9 : p[k] >= v - 1e-9, out = [];
+// とつ の たかっけい を、A→B を とおる まっすぐ な せん の かたがわ（sgn：＋1 ひだり／−1 みぎ）だけ に する
+const side = (A, B, p) => (B[0]-A[0])*(p[1]-A[1]) - (B[1]-A[1])*(p[0]-A[0]);
+function clipLine(pts, A, B, sgn){
+  const inS = p => sgn*side(A, B, p) >= -1e-9, out = [];
   for(let i = 0; i < pts.length; i++){
     const a = pts[i], b = pts[(i+1)%pts.length], ia = inS(a), ib = inS(b);
     if(ia) out.push(a);
-    if(ia !== ib && Math.abs(b[k]-a[k]) > 1e-9){ const t = (v - a[k])/(b[k] - a[k]); out.push([a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t]); }
+    if(ia !== ib){ const sa = side(A, B, a), sb = side(A, B, b), t = sa/(sa - sb); out.push([a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t]); }
   }
   // おなじ てん・いっちょくせん の てん を けす
   const q = out.filter((p, i) => { const n = out[(i+1)%out.length]; return Math.hypot(p[0]-n[0], p[1]-n[1]) > 1e-6; });
@@ -163,12 +188,15 @@ function rectOf(){
   }
   return { w: Math.round(w), h: Math.round(h) };
 }
+// その かたち（ワールド の てん）が いま ある か（てん の あつまり が おなじ）
+const samePoly = (P, Q) => P.length === Q.length && P.every(p => Q.some(q => Math.hypot(p[0]-q[0], p[1]-q[1]) < 1e-6));
+const hasPoly = T => pieces.some(p => samePoly(world(p), T));
 
 // ── ステージ ──
 function load(i){
-  si = i; const st = STAGES[i]; copies = 0; sel = null; drag = null; cut = null; hintOn = false; doneAt = 0; fx = [];
+  si = i; const st = STAGES[i]; sel = null; drag = null; cut = null; shearDrag = null; hintOn = false; doneAt = 0; fx = [];
   pieces = st.pieces.map((pts, k) => ({ id: nextId++, pts: pts.map(p => p.slice()), ox: st.at[k][0], oy: st.at[k][1] }));
-  $('say').textContent = st.say; $('say').style.display = ''; $('done').style.display = 'none'; resize();
+  $('say').textContent = st.say; $('say').style.display = ''; $('done').style.display = 'none'; $('ok').classList.remove('go'); resize();
   renderStages(); updateArea();
 }
 function renderStages(){
@@ -177,34 +205,23 @@ function renderStages(){
     if(i === si) b.classList.add('on'); if(clear.includes(i)) b.classList.add('clear'); b.onclick = () => load(i); box.appendChild(b); });
 }
 function updateArea(){
-  const st = STAGES[si];
   const total = pieces.reduce((s, p) => s + areaOf(p.pts), 0);
-  const base = st.pieces.reduce((s, pts) => s + areaOf(pts), 0);
-  $('area').textContent = 'ひろさ： ' + fmt(total) + ' マス' + (copies ? '（' + fmt(base) + ' の 2つぶん）' : '') + (pieces.length > 1 ? '　かたち ' + pieces.length + 'こ' : '');
+  $('area').textContent = 'ひろさ： ' + fmt(total) + ' マス' + (pieces.length > 1 ? '　かたち ' + pieces.length + 'こ' : '');
 }
 function check(){
-  const st = STAGES[si], r = rectOf(); if(!r || doneAt) return;
-  if(st.mirror && !copies) return;                       // さんかく は 2つ に して から
-  if(st.square && r.w !== r.h){ $('say').textContent = 'ながしかく に なった！ たて と よこ を おなじ に できるかな'; return; }
+  const st = STAGES[si]; if(doneAt) return;
+  let r = null;
+  if(st.goal === 'rect'){ r = rectOf(); if(!r) return;
+    if(st.square && r.w !== r.h){ $('say').textContent = 'ながしかく に なった！ たて と よこ を おなじ に できるかな'; return; } }
+  else if(st.goal.any){ if(!st.goal.any.some(hasPoly)) return; }
+  else if(st.goal.all){ if(!st.goal.all.every(hasPoly)) return; }
   doneAt = performance.now();
   if(!EMBED && !clear.includes(si)){ clear.push(si); try{ localStorage.setItem('nb_lab_menseki', JSON.stringify(clear)); }catch(e){} }
-  const A = r.w*r.h, lines = [];
-  const ty = st.type;
-  if(ty === 'rect') lines.push(`<span class="big">よこ ${r.w} × たて ${r.h} ＝ ${A}</span>`, `<span class="f">${r.w}マス が ${r.h}れつ。ながしかく の ひろさ ＝ よこ × たて</span>`);
-  if(ty === 'square') lines.push(`<span class="big">${r.w} × ${r.h} ＝ ${A}</span>`, `<span class="f">${r.w} の しかく（2じょう）。ましかく の ひろさ ＝ いっぺん × いっぺん</span>`);
-  if(ty === 'para') lines.push(`<span class="big">ていへん ${r.w} × たかさ ${r.h} ＝ ${A}</span>`, `<span class="f">きって うごかしても ひろさ は ${A} の まま。<br>へいこうしへんけい の ひろさ ＝ ていへん × たかさ</span>`);
-  if(ty === 'tri') lines.push(`ながしかく ${r.w} × ${r.h} ＝ ${A}`, `<span class="big">さんかく は その はんぶん → ${A} ÷ 2 ＝ ${fmt(A/2)}</span>`,
-                         `<span class="f">さんかく の ひろさ ＝ ていへん × たかさ ÷ 2</span>`);
-  if(ty === 'trap') lines.push(`ながしかく ${r.w} × ${r.h} ＝ ${A}`, `<span class="big">だいけい は その はんぶん → ${A} ÷ 2 ＝ ${fmt(A/2)}</span>`,
-                         `<span class="f">よこ ${r.w} は じょうてい ＋ かてい。<br>だいけい の ひろさ ＝（じょうてい ＋ かてい）× たかさ ÷ 2</span>`);
-  if(ty === 'rhom') lines.push(`<span class="big">ながしかく ${r.w} × ${r.h} ＝ ${A}</span>`,
-                         `<span class="f">まわり の ながしかく ${st.d[0]} × ${st.d[1]} ＝ ${st.d[0]*st.d[1]} の はんぶん。<br>ひしがた の ひろさ ＝ たいかくせん × たいかくせん ÷ 2</span>`);
-  if(ty === 'comp') lines.push(`<span class="big">ながしかく ${r.w} × ${r.h} ＝ ${A}</span>`, `<span class="f">ばらばら に して ならべかえても ひろさ は ${A} の まま</span>`);
-  const d = $('done'); d.innerHTML = '🎉 できた！<br>' + lines.join('<br>') + (EMBED ? '<br><button id="bk">キャラ で つくりに もどる ▶</button>' : si < STAGES.length-1 ? '<br><button id="nx">つぎ へ ▶</button>' : '');
+  const d = $('done'); d.innerHTML = '🎉 できた！<br>' + st.done(r).join('<br>') + (!EMBED && si < STAGES.length-1 ? '<br><button id="nx">つぎ へ ▶</button>' : '');
   d.style.display = 'block'; $('say').style.display = 'none'; resize();   // ばん は ちいさく なって、かたち に かぶらない
   const nx = $('nx'); if(nx) nx.onclick = () => load(si + 1);
-  const bk = $('bk'); if(bk) bk.onclick = () => tellGame({ type:'close' });
-  tellGame({ type:'done', w: r.w, h: r.h, half: !!st.mirror });
+  $('ok').classList.add('go');
+  tellGame({ type:'done', hint: st.tell(r) });
   for(let k = 0; k < 40; k++) fx.push({ x: W/2, y: H/2, vx: (Math.random()-0.5)*9, vy: -Math.random()*9 - 2, c: ['#f0a020','#3ebb47','#3f8fd0','#d0553f'][k%4], t: 0 });
   renderStages();
 }
@@ -212,13 +229,12 @@ function check(){
 // ── そうさ ──
 const toW = (x, y) => [(x - OX)/C, (y - OY)/C];
 function pick(x, y){ const [wx, wy] = toW(x, y); for(let i = pieces.length-1; i >= 0; i--) if(inside(world(pieces[i]), wx, wy)) return pieces[i]; return null; }
-// さんかく の てっぺん（ていへん が よこ の とき）。● を よこ に うごかすと ひろさ は おなじ まま かたち が かわる（とうせき へんけい）
+// さんかく の てっぺん（ていへん が よこ の とき）
 function apexOf(p){
   if(p.pts.length !== 3) return -1;
   for(let i = 0; i < 3; i++){ const a = p.pts[(i+1)%3], b = p.pts[(i+2)%3]; if(Math.abs(a[1] - b[1]) < 1e-9 && Math.abs(p.pts[i][1] - a[1]) > 1e-9) return i; }
   return -1;
 }
-let shearDrag = null;
 function down(x, y){
   if(doneAt) return;
   if(STAGES[si].shear){
@@ -227,7 +243,7 @@ function down(x, y){
       if(Math.hypot(q.pts[i][0] + q.ox - wx, q.pts[i][1] + q.oy - wy) < 0.8){ shearDrag = { p: q, i }; sel = q; return; } }
   }
   const p = pick(x, y);
-  if(p){ sel = p; pieces.splice(pieces.indexOf(p), 1); pieces.push(p); const [wx, wy] = toW(x, y); drag = { p, dx: wx - p.ox, dy: wy - p.oy, sx: p.ox, sy: p.oy }; }
+  if(p){ sel = p; pieces.splice(pieces.indexOf(p), 1); pieces.push(p); const [wx, wy] = toW(x, y); drag = { p, dx: wx - p.ox, dy: wy - p.oy }; }
   else cut = { x0: x, y0: y, x1: x, y1: y };
 }
 function move(x, y){
@@ -237,58 +253,50 @@ function move(x, y){
 }
 function up(){
   if(shearDrag){ const q = shearDrag.p, v = q.pts[shearDrag.i]; q.pts[shearDrag.i] = [Math.round(v[0] + q.ox) - q.ox, v[1]]; shearDrag = null; check(); updateArea(); return; }
-  if(drag){
-    const p = drag.p, drag0 = drag; drag = null;
-    p.ox = Math.round(p.ox); p.oy = Math.round(p.oy);
-    const b = bbox(world(p));                                 // ばん の なか に もどす
-    if(b[0] < 0) p.ox -= Math.floor(b[0]); if(b[1] < 0) p.oy -= Math.floor(b[1]);
-    if(b[2] > GW) p.ox -= Math.ceil(b[2] - GW); if(b[3] > GH) p.oy -= Math.ceil(b[3] - GH);
-    const m = MIRROR(), [cx, cy] = [(b[0]+b[2])/2*C + OX, (b[1]+b[3])/2*C + OY];
-    if(STAGES[si].mirror && cx > m.x - C*0.5 && cy < m.y + m.h + C*0.5){ p.ox = drag0.sx; p.oy = drag0.sy; copyPiece(p); }
-    check();
-  } else if(cut){ doCut(cut); cut = null; }
+  if(drag){ const p = drag.p; drag = null; p.ox = Math.round(p.ox); p.oy = Math.round(p.oy); clampPiece(p); check(); }
+  else if(cut){ doCut(cut); cut = null; check(); }
   updateArea();
-}
-function copyPiece(p){
-  // かがみ に いれた かたち は もとの ばしょ へ もどり、かがみ の した に おなじ かたち が でる
-  // （2つ め は なし。2ばい の あと ÷2 に するため）
-  if(copies) return;
-  copies = 1;
-  const b = bbox(p.pts), q = { id: nextId++, pts: p.pts.map(v => v.slice()), ox: GW - b[2], oy: 3 - b[1] };
-  clampPiece(q); pieces.push(q); sel = q;
 }
 function clampPiece(p){ const b = bbox(world(p)); if(b[0] < 0) p.ox -= Math.floor(b[0]); if(b[1] < 0) p.oy -= Math.floor(b[1]);
   if(b[2] > GW) p.ox -= Math.ceil(b[2] - GW); if(b[3] > GH) p.oy -= Math.ceil(b[3] - GH); }
+// なぞった せん で きる：てんせん（guides）に そって いれば その せん、ちがえば たて か よこ の マス の せん
 function doCut(c){
-  const dx = c.x1 - c.x0, dy = c.y1 - c.y0;
-  if(Math.hypot(dx, dy) < C*1.2) return;
-  const axis = Math.abs(dy) > Math.abs(dx) ? 'x' : 'y';           // たて に なぞる → x＝○ の せん で きる
-  const [ax, ay] = toW(c.x0, c.y0), [bx, by] = toW(c.x1, c.y1);
-  const v = Math.round(axis === 'x' ? (ax + bx)/2 : (ay + by)/2), lo = axis === 'x' ? Math.min(ay, by) : Math.min(ax, bx), hi = axis === 'x' ? Math.max(ay, by) : Math.max(ax, bx);
+  if(Math.hypot(c.x1 - c.x0, c.y1 - c.y0) < C*1.2) return;
+  const S0 = toW(c.x0, c.y0), S1 = toW(c.x1, c.y1), st = STAGES[si];
+  let A, B;
+  for(const [g0, g1] of st.guides || []){
+    const L = Math.hypot(g1[0]-g0[0], g1[1]-g0[1]), d = p => Math.abs(side(g0, g1, p))/L;
+    const ang = Math.abs((S1[0]-S0[0])*(g1[1]-g0[1]) - (S1[1]-S0[1])*(g1[0]-g0[0]))/(Math.hypot(S1[0]-S0[0], S1[1]-S0[1])*L);   // sin（なす かく）
+    if(d(S0) < 0.9 && d(S1) < 0.9 && ang < 0.35){ A = g0; B = g1; break; }
+  }
+  if(!A){
+    const vert = Math.abs(S1[1]-S0[1]) > Math.abs(S1[0]-S0[0]);           // たて に なぞる → x＝○ の せん
+    const v = Math.round(vert ? (S0[0] + S1[0])/2 : (S0[1] + S1[1])/2);
+    [A, B] = vert ? [[v, Math.min(S0[1], S1[1])], [v, Math.max(S0[1], S1[1])]] : [[Math.min(S0[0], S1[0]), v], [Math.max(S0[0], S1[0]), v]];
+  }
+  const lo = [Math.min(A[0], B[0]) - 1e-6, Math.min(A[1], B[1]) - 1e-6], hi = [Math.max(A[0], B[0]) + 1e-6, Math.max(A[1], B[1]) + 1e-6];
   let did = false;
   for(const p of pieces.slice()){
     const w = world(p), b = bbox(w);
-    const [mn, mx, plo, phi] = axis === 'x' ? [b[0], b[2], b[1], b[3]] : [b[1], b[3], b[0], b[2]];
-    if(!(v > mn + 1e-6 && v < mx - 1e-6) || hi < plo || lo > phi) continue;   // その せん が かたち を とおらない
-    const A = clip(w, axis, v, true), B = clip(w, axis, v, false);
-    if(A.length < 3 || B.length < 3) continue;
+    if(!w.some(q => side(A, B, q) > 1e-6) || !w.some(q => side(A, B, q) < -1e-6)) continue;   // せん が かたち を とおらない
+    if(b[2] < lo[0] || b[0] > hi[0] || b[3] < lo[1] || b[1] > hi[1]) continue;
+    const P1 = clipLine(w, A, B, 1), P2 = clipLine(w, A, B, -1);
+    if(P1.length < 3 || P2.length < 3) continue;
     const mk = pts => ({ id: nextId++, pts: pts.map(([x, y]) => [x - p.ox, y - p.oy]), ox: p.ox, oy: p.oy });
-    const pa = mk(A), pb = mk(B);
-    pieces.splice(pieces.indexOf(p), 1, pa, pb);
-    fx.push({ line: { axis, v, lo: Math.max(lo, plo), hi: Math.min(hi, phi) }, t: 0 });
+    pieces.splice(pieces.indexOf(p), 1, mk(P1), mk(P2));
     did = true;
   }
-  if(did) sel = pieces[pieces.length-1];
+  if(did){ fx.push({ seg: [A, B], t: 0 }); sel = pieces[pieces.length-1]; }
 }
 function rotate(){
   const p = sel && pieces.includes(sel) ? sel : pieces[pieces.length-1];
   if(!p || doneAt) return;
   const b = bbox(p.pts);
   p.pts = p.pts.map(([x, y]) => [b[0] + b[2] - x, b[1] + b[3] - y]).reverse();
-  clampPiece(p); p.spin = performance.now(); check(); updateArea();
+  clampPiece(p); check(); updateArea();
 }
 $('rot').onclick = rotate;
-$('hint').onclick = () => { hintOn = !hintOn; if(hintOn) $('say').textContent = '💡 ' + STAGES[si].hint; else $('say').textContent = STAGES[si].say; };
+$('hint').onclick = () => { hintOn = !hintOn; $('say').textContent = hintOn ? '💡 ' + STAGES[si].hint : STAGES[si].say; };
 $('reset').onclick = () => load(si);
 
 const pos = e => { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
@@ -305,69 +313,73 @@ function resize(){
   C = Math.floor(Math.min((W - 16)/GW, (H - 16)/GH)); OX = Math.round((W - C*GW)/2); OY = Math.round((H - C*GH)/2);
 }
 window.addEventListener('resize', resize);
+function tint(hex, k){ const n = parseInt(hex.slice(1), 16), f = c => Math.round(c + (255 - c)*k), h = v => f(v).toString(16).padStart(2, '0'); return '#' + h(n>>16) + h((n>>8)&255) + h(n&255); }
 function shade(hex, k){ const n = parseInt(hex.slice(1), 16), f = c => Math.max(0, Math.min(255, Math.round(c*k))); return `rgb(${f(n>>16)},${f((n>>8)&255)},${f(n&255)})`; }
+const SX = x => OX + x*C, SY = y => OY + y*C;
 function drawPiece(p, col){
-  const w = world(p), path = () => { ctx.beginPath(); w.forEach(([x, y], i) => { const X = OX + x*C, Y = OY + y*C; i ? ctx.lineTo(X, Y) : ctx.moveTo(X, Y); }); ctx.closePath(); };
+  const w = world(p), path = () => { ctx.beginPath(); w.forEach(([x, y], i) => i ? ctx.lineTo(SX(x), SY(y)) : ctx.moveTo(SX(x), SY(y))); ctx.closePath(); };
   ctx.save();
   if(p === sel){ ctx.shadowColor = 'rgba(40,60,90,0.35)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 3; }
   path(); ctx.fillStyle = col; ctx.fill();
   ctx.restore(); ctx.save(); path(); ctx.clip();
   // マス の せん（ブロック の つなぎめ）
   const b = bbox(w); ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5; ctx.beginPath();
-  for(let x = Math.floor(b[0]); x <= Math.ceil(b[2]); x++){ ctx.moveTo(OX + x*C, OY + b[1]*C); ctx.lineTo(OX + x*C, OY + b[3]*C); }
-  for(let y = Math.floor(b[1]); y <= Math.ceil(b[3]); y++){ ctx.moveTo(OX + b[0]*C, OY + y*C); ctx.lineTo(OX + b[2]*C, OY + y*C); }
+  for(let x = Math.floor(b[0]); x <= Math.ceil(b[2]); x++){ ctx.moveTo(SX(x), SY(b[1])); ctx.lineTo(SX(x), SY(b[3])); }
+  for(let y = Math.floor(b[1]); y <= Math.ceil(b[3]); y++){ ctx.moveTo(SX(b[0]), SY(y)); ctx.lineTo(SX(b[2]), SY(y)); }
   ctx.stroke(); ctx.restore();
-  path(); ctx.strokeStyle = shade(col.startsWith('#') ? col : '#888888', 0.6); ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.stroke();
-  // ひろさ（まんなか に）
-  let cx = 0, cy = 0, a2 = 0;                                // かたち の おもさ の まんなか
+  path(); ctx.strokeStyle = shade(col, 0.6); ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.stroke();
+  // ひろさ（おもさ の まんなか に）
+  let cx = 0, cy = 0, a2 = 0;
   for(let i = 0; i < w.length; i++){ const [x0, y0] = w[i], [x1, y1] = w[(i+1)%w.length], k = x0*y1 - x1*y0; a2 += k; cx += (x0 + x1)*k; cy += (y0 + y1)*k; }
   cx /= 3*a2; cy /= 3*a2;
   ctx.fillStyle = '#fff'; ctx.font = `900 ${Math.max(10, Math.min(C*0.5, Math.sqrt(areaOf(p.pts))*C*0.42))}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.25)'; const s = fmt(areaOf(p.pts)); ctx.strokeText(s, OX + cx*C, OY + cy*C); ctx.fillText(s, OX + cx*C, OY + cy*C);
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.25)'; const s = fmt(areaOf(p.pts)); ctx.strokeText(s, SX(cx), SY(cy)); ctx.fillText(s, SX(cx), SY(cy));
 }
 function draw(){
   ctx.clearRect(0, 0, W, H);
   // ばん（マス目）
   ctx.fillStyle = '#ffffff'; ctx.fillRect(OX, OY, GW*C, GH*C);
   ctx.strokeStyle = '#dfe7d2'; ctx.lineWidth = 1; ctx.beginPath();
-  for(let x = 0; x <= GW; x++){ ctx.moveTo(OX + x*C + 0.5, OY); ctx.lineTo(OX + x*C + 0.5, OY + GH*C); }
-  for(let y = 0; y <= GH; y++){ ctx.moveTo(OX, OY + y*C + 0.5); ctx.lineTo(OX + GW*C, OY + y*C + 0.5); }
+  for(let x = 0; x <= GW; x++){ ctx.moveTo(SX(x) + 0.5, OY); ctx.lineTo(SX(x) + 0.5, OY + GH*C); }
+  for(let y = 0; y <= GH; y++){ ctx.moveTo(OX, SY(y) + 0.5); ctx.lineTo(OX + GW*C, SY(y) + 0.5); }
   ctx.stroke();
   const st = STAGES[si];
-  if(st.mirror){ const m = MIRROR(); ctx.save(); const g = ctx.createLinearGradient(m.x, m.y, m.x + m.w, m.y + m.h);
-    g.addColorStop(0, '#e9f6ff'); g.addColorStop(0.5, '#c7e3f7'); g.addColorStop(1, '#f2e8ff'); ctx.fillStyle = g;
-    ctx.beginPath(); ctx.roundRect(m.x, m.y, m.w, m.h, m.w/2); ctx.fill(); ctx.strokeStyle = '#9ab0c8'; ctx.lineWidth = 3; ctx.stroke();
-    ctx.font = `${C*0.9}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🪞', m.x + m.w/2, m.y + m.h*0.45);
-    ctx.font = `900 ${Math.max(10, C*0.32)}px system-ui`; ctx.fillStyle = '#5a6a80'; ctx.fillText(copies ? 'つかった' : 'ここへ', m.x + m.w/2, m.y + m.h*0.82); ctx.restore(); }
-  if(hintOn && st.cut && pieces.length === st.pieces.length){
-    const p = pieces[0], lines = Array.isArray(st.cut[0][0]) ? st.cut : [st.cut];
-    ctx.save(); ctx.setLineDash([8, 6]); ctx.strokeStyle = '#d0553f'; ctx.lineWidth = 3; ctx.beginPath();
-    for(const [a, b] of lines){ const v = a[0] === b[0] ? [0, 0.6] : [0.6, 0];
-      ctx.moveTo(OX + (a[0]+p.ox - v[0])*C, OY + (a[1]+p.oy - v[1])*C); ctx.lineTo(OX + (b[0]+p.ox + v[0])*C, OY + (b[1]+p.oy + v[1])*C); }
-    ctx.stroke(); ctx.restore(); }
-  for(const p of pieces) drawPiece(p, p === sel ? st.color : shade(st.color, 0.92));
+  // ゴースト：できあがり の ながしかく（うすく）
+  if(st.ghost){ const [gx, gy, gw, gh] = st.ghost; ctx.save(); ctx.fillStyle = 'rgba(240,160,32,0.12)'; ctx.fillRect(SX(gx), SY(gy), gw*C, gh*C);
+    ctx.setLineDash([7, 5]); ctx.strokeStyle = '#e0a000'; ctx.lineWidth = 2.5; ctx.strokeRect(SX(gx), SY(gy), gw*C, gh*C); ctx.restore(); }
+  // できたら：きりだした かたち（さんかく・ひしがた）は その いろ、のこり の かど は うすく
+  const goalPolys = doneAt && st.goal !== 'rect' ? (st.goal.any || st.goal.all) : null;
+  for(const p of pieces){
+    const hit = goalPolys && goalPolys.some(T => samePoly(world(p), T));
+    drawPiece(p, goalPolys ? (hit ? st.color : tint(st.color, 0.6)) : p === sel ? st.color : shade(st.color, 0.92));
+  }
+  // てんせん：ここ で きる（ヒント の かたち）
+  if(st.guides && !doneAt){ ctx.save(); ctx.setLineDash([8, 6]); ctx.lineCap = 'round';
+    for(const pass of [['rgba(255,255,255,0.9)', 6], ['#d0553f', 3]]){ ctx.strokeStyle = pass[0]; ctx.lineWidth = pass[1] * (hintOn ? 1.4 : 1); ctx.beginPath();
+      for(const [a, b] of st.guides){ ctx.moveTo(SX(a[0]), SY(a[1])); ctx.lineTo(SX(b[0]), SY(b[1])); } ctx.stroke(); }
+    ctx.restore(); }
   if(st.shear && !doneAt) for(const p of pieces){ const i = apexOf(p); if(i < 0) continue;   // てっぺん の ●（よこ に うごかせる）
-    const X = OX + (p.pts[i][0] + p.ox)*C, Y = OY + (p.pts[i][1] + p.oy)*C;
-    ctx.save(); ctx.fillStyle = '#f0a020'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(X, Y, Math.max(9, C*0.3), 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    const X = SX(p.pts[i][0] + p.ox), Y = SY(p.pts[i][1] + p.oy);
+    ctx.save(); ctx.fillStyle = '#f0a020'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(X, Y, Math.max(10, C*0.32), 0, Math.PI*2); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#fff'; ctx.font = `900 ${Math.max(10, C*0.32)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('↔', X, Y + 1); ctx.restore(); }
   if(cut){ ctx.save(); ctx.strokeStyle = '#d0553f'; ctx.lineWidth = 3; ctx.setLineDash([10, 6]); ctx.beginPath(); ctx.moveTo(cut.x0, cut.y0); ctx.lineTo(cut.x1, cut.y1); ctx.stroke();
     ctx.font = `${C*0.8}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✂️', cut.x1, cut.y1); ctx.restore(); }
   // きった あと・できた の おいわい
   fx = fx.filter(f => (f.t += 1) < 60);
   for(const f of fx){
-    if(f.line){ const a = 1 - f.t/60, l = f.line; ctx.save(); ctx.globalAlpha = a; ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.beginPath();
-      if(l.axis === 'x'){ ctx.moveTo(OX + l.v*C, OY + l.lo*C); ctx.lineTo(OX + l.v*C, OY + l.hi*C); } else { ctx.moveTo(OX + l.lo*C, OY + l.v*C); ctx.lineTo(OX + l.hi*C, OY + l.v*C); }
-      ctx.stroke(); ctx.restore(); continue; }
+    if(f.seg){ ctx.save(); ctx.globalAlpha = 1 - f.t/60; ctx.strokeStyle = '#fff'; ctx.lineWidth = 6; ctx.beginPath();
+      ctx.moveTo(SX(f.seg[0][0]), SY(f.seg[0][1])); ctx.lineTo(SX(f.seg[1][0]), SY(f.seg[1][1])); ctx.stroke(); ctx.restore(); continue; }
     f.x += f.vx; f.y += f.vy; f.vy += 0.3; ctx.fillStyle = f.c; ctx.fillRect(f.x, f.y, 7, 7);
   }
   requestAnimationFrame(draw);
 }
 // テスト・デバッグ 用（マス の ざひょう で そうさ する）
 window.men = {
-  load, pieces: () => pieces.map(p => ({ id: p.id, pts: world(p), area: areaOf(p.pts) })), rect: rectOf, done: () => !!doneAt, copies: () => copies,
-  cut: (x0, y0, x1, y1) => { doCut({ x0: OX + x0*C, y0: OY + y0*C, x1: OX + x1*C, y1: OY + y1*C }); updateArea(); },
+  load, pieces: () => pieces.map(p => ({ id: p.id, pts: world(p), area: areaOf(p.pts) })), rect: rectOf, done: () => !!doneAt,
+  guides: () => STAGES[si].guides || [], ghost: () => STAGES[si].ghost || null,
+  cut: (x0, y0, x1, y1) => { doCut({ x0: SX(x0), y0: SY(y0), x1: SX(x1), y1: SY(y1) }); check(); updateArea(); },
   moveTo: (id, ox, oy) => { const p = pieces.find(q => q.id === id); p.ox = ox; p.oy = oy; sel = p; check(); updateArea(); },
-  mirror: id => { const p = pieces.find(q => q.id === id); copyPiece(p); updateArea(); return sel.id; },
+  move: (id, dx, dy) => { const p = pieces.find(q => q.id === id); p.ox += dx; p.oy += dy; sel = p; check(); updateArea(); },
   rotate: id => { sel = pieces.find(q => q.id === id); rotate(); },
   shear: (id, x) => { const q = pieces.find(p => p.id === id), i = apexOf(q); q.pts[i] = [x - q.ox, q.pts[i][1]]; sel = q; check(); updateArea(); },
 };

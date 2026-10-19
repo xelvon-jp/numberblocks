@@ -28,7 +28,7 @@ module.exports = {
     t.eq(nx, [4, false], 'つぎへ で すすまない');
   },
 
-  'かたち：ちがう かず は「あと ○ マス」「○ マス おおい」で キャラ は のこる。2かい で 🛠️ こうさくしつ → ながしかく に すると ヒント、もどる で とじる': async t => {
+  'かたち：ちがう かず は「あと ○ マス」「○ マス おおい」で キャラ は のこる。2かい で 🛠️ が ゆれる → こうさくしつ で ながしかく に すると ヒント、「めんせき わかった！」で とじる': async t => {
     const p = await openK(t);
     await p.evaluate(() => { katachiStart(3); spawnBlock(10); spawnBlock(7); });
     await p.waitForTimeout(300);
@@ -45,16 +45,17 @@ module.exports = {
     t.eq(sh, { kind:'rect', w:4, h:3 }, 'こうさくしつ に かたち が わたらない ' + src);
     const fr = await (await p.waitForSelector('iframe[src^="lab-menseki.html"]')).contentFrame();
     await fr.waitForFunction(() => window.men);
-    const inner = await fr.evaluate(() => { const ids = men.pieces().map(q => q.id), n0 = ids.length; ids.forEach((id, k) => men.moveTo(id, 2, 2 + k)); return [n0, men.done(), !!document.getElementById('bk')]; });
-    t.eq(inner, [3, true, true], 'こうさくしつ で ぼう 3ぼん の ながしかく に ならない');
+    const inner = await fr.evaluate(() => { const ids = men.pieces().map(q => q.id), n0 = ids.length; ids.forEach((id, k) => men.moveTo(id, 2, 2 + k));
+      return [n0, men.done(), getComputedStyle(document.getElementById('ok')).display, getComputedStyle(document.querySelector('.back')).display]; });
+    t.eq(inner, [3, true, 'block', 'none'], 'こうさくしつ で ぼう 3ぼん の ながしかく に ならない／「めんせき わかった！」が ない');
     await p.waitForTimeout(200);
-    t.eq(await p.evaluate(() => kst.hint), { w: 4, h: 3, half: false }, 'ヒント が ゲーム に こない');
-    await fr.click('#bk');
+    t.eq(await p.evaluate(() => kst.hint), '4 × 3', 'ヒント が ゲーム に こない');
+    await fr.click('#ok', { force: true });   // できた あと は ゆれて いる（とまる の を またない）
     await p.waitForTimeout(200);
     t.eq(await p.evaluate(() => [!!kousakuFrame, document.querySelectorAll('iframe[src^="lab-menseki"]').length]), [false, 0], 'もどる で とじない');
   },
 
-  'かたち：さんかく は ÷2 の かず（4 × 3 ÷ 2 ＝ 6）。こうさくしつ は かがみ つき。タブ を おすと おわる': async t => {
+  'かたち：さんかく は ÷2 の かず（4 × 3 ÷ 2 ＝ 6）。こうさくしつ は ながしかく から きりだす。タブ を おすと おわる': async t => {
     const p = await openK(t);
     const r = await p.evaluate(() => { katachiStart(6); spawnBlock(6); return [KATACHI[6].kind, kArea(KATACHI[6])]; });
     t.eq(r, ['rtri', 6], 'ちょっかく さんかく で ない');
@@ -65,8 +66,12 @@ module.exports = {
     await p.evaluate(() => { openKousaku(); });
     const fr = await (await p.waitForSelector('iframe[src^="lab-menseki.html"]')).contentFrame();
     await fr.waitForFunction(() => window.men);
-    const m = await fr.evaluate(() => { const [tr] = men.pieces(); const d = men.mirror(tr.id); men.rotate(d); return [men.copies(), getComputedStyle(document.getElementById('rot')).visibility]; });
-    t.eq(m, [1, 'visible'], 'こうさくしつ に かがみ・まわす が ない');
+    // とがった さんかく 5×3：まわり の ながしかく（15）から てんせん 2ほん で きりだす → ヒント「5 × 3 の はんぶん」
+    const m = await fr.evaluate(() => { const a0 = men.pieces().map(q => q.area); for(const g of men.guides()) men.cut(g[0][0], g[0][1], g[1][0], g[1][1]);
+      return [a0, men.done()]; });
+    t.eq(m, [[15], true], 'こうさくしつ で ながしかく から さんかく を きりだせない');
+    await p.waitForTimeout(200);
+    t.eq(await p.evaluate(() => kst.hint), '5 × 3 の はんぶん', 'さんかく の ヒント が ちがう');
     await p.evaluate(() => { drawTabsAndUI(ctx); const b = tabBtns.find(x => x.val === 'calc'); handleStart(b.x + b.w/2, b.y + b.h/2, 's'); });
     t.eq(await p.evaluate(() => [katachiOn, !!kousakuFrame]), [false, false], 'タブ で おわらない');
   },

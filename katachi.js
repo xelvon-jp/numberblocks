@@ -2,8 +2,8 @@
 // けいさん の がめん に かたち を おき、その ひろさ（マス の かず）の キャラ を けいさん で つくって
 // かたち の うえ で はなす。ぴったり なら かたち が キャラ の いろ で いっぱい に なる。
 //   たりない → みず の ように とちゅう まで たまって「あと ○ マス」。おおい → あふれて「○ マス おおい」。キャラ は もどる。
-//   なやんで いる（2かい ちがう・45びょう たつ）と 🛠️ こうさくしつ（lab-menseki.html を うえ に かさねる）。
-//   こうさくしつ で きって うごかして ながしかく に すると「よこ ○ × たて ○」が ヒント に のこる。
+//   🛠️ こうさくしつ（lab-menseki.html を うえ に かさねる）は いつでも おせる。なやんで いる（2かい ちがう・45びょう）と ゆれて しらせる。
+//   こうさくしつ で わかる と「ヒント：4 × 3 の はんぶん を つくろう」が のこる。
 // かたち と ひろさ は kata.js（こうさくしつ と おなじ）。
 // ためし（lab.html）から index.html?katachi=1 で ひらいた とき だけ。きろく（おだい）とは べつ。
 // index.html から よぶ のは katachiStart・katachiStop・katachiTap・katachiDrop・drawKatachi・drawKatachiFront だけ。
@@ -86,7 +86,7 @@ function katachiStop(){ katachiOn = false; kst = null; closeKousaku(); }
 function katachiTap(x, y){
   if(!katachiOn) return false;
   if(kst.done){ const b = kNextBtn(); if(ptInRect(x, y, b.x, b.y, b.w, b.h)){ katachiStart((katachiIdx + 1) % KATACHI.length); return true; } }
-  else if(kst.stuck){ const b = kousakuBtn(); if(ptInRect(x, y, b.x, b.y, b.w, b.h)){ openKousaku(); return true; } }
+  else { const b = kousakuBtn(); if(ptInRect(x, y, b.x, b.y, b.w, b.h)){ openKousaku(); return true; } }   // 🛠️ は いつも おせる
   return false;
 }
 // キャラ を はなした：かたち の うえ なら ためす。うけたら true（キャラ は ばしょ を かえる か きえる）
@@ -123,7 +123,7 @@ function openKousaku(){
 function closeKousaku(){ if(kousakuFrame){ kousakuFrame.remove(); kousakuFrame = null; } }
 window.addEventListener('message', e => {
   const d = e.data; if(!d || d.from !== 'menseki' || !kousakuFrame || e.source !== kousakuFrame.contentWindow) return;
-  if(d.type === 'done' && kst) kst.hint = { w: d.w, h: d.h, half: !!d.half };
+  if(d.type === 'done' && kst) kst.hint = d.hint;                 // 「4 × 3 の はんぶん」など
   if(d.type === 'close') closeKousaku();
 });
 
@@ -181,13 +181,19 @@ function drawKatachi(ctx, t){
   ctx.restore();
   // めもり（ticks・split）
   if((s.show === 'ticks' || s.show === 'split') && !kst.done){
-    ctx.save(); ctx.strokeStyle = '#4a5a74'; ctx.lineWidth = 2; ctx.beginPath();
-    const tickX = (y, x0, x1, d) => { for(let x = x0; x <= x1 + 1e-9; x++){ ctx.moveTo(X(x), Y(y)); ctx.lineTo(X(x), Y(y) + d); } };
-    const tickY = (x, y0, y1, d) => { for(let y = y0; y <= y1 + 1e-9; y++){ ctx.moveTo(X(x), Y(y)); ctx.lineTo(X(x) + d, Y(y)); } };
-    if(k === 'rhom'){ tickX(s.h/2, 0, s.w, 6); tickY(s.w/2, 0, s.h, 6); }
-    else if(k === 'comp'){ for(const p of s.parts){ tickX(p.y + p.h, p.x, p.x + p.w, 7); tickY(p.x, p.y, p.y + p.h, -7); } }
-    else { tickX(s.h, 0, s.w, 7); tickY(hx, 0, s.h, -7); if(k === 'trap') tickX(0, s.o, s.o + s.a, -7); }
-    ctx.stroke(); ctx.restore();
+    // めもり は かたち の うちがわ（しろい ところ）に ながめ に。そと に でる ところ も みえる よう しろ で ふちどり
+    const D = Math.max(8, C*0.32);
+    const ticks = () => { ctx.beginPath();
+      const tickX = (y, x0, x1, d) => { for(let x = x0; x <= x1 + 1e-9; x++){ ctx.moveTo(X(x), Y(y) - d/2); ctx.lineTo(X(x), Y(y) + d/2); } };
+      const tickY = (x, y0, y1, d) => { for(let y = y0; y <= y1 + 1e-9; y++){ ctx.moveTo(X(x) - d/2, Y(y)); ctx.lineTo(X(x) + d/2, Y(y)); } };
+      if(k === 'rhom'){ tickX(s.h/2, 0, s.w, D); tickY(s.w/2, 0, s.h, D); }
+      else if(k === 'comp'){ for(const p of s.parts){ tickX(p.y + p.h, p.x, p.x + p.w, D*2); tickY(p.x, p.y, p.y + p.h, D*2); } }
+      else { tickX(s.h, 0, s.w, D*2); tickY(hx, 0, s.h, D*2); if(k === 'trap') tickX(0, s.o, s.o + s.a, D*2); }
+      ctx.stroke(); };
+    ctx.save(); ctx.lineCap = 'round';
+    ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 6; ticks();
+    ctx.strokeStyle = '#2b3a52'; ctx.lineWidth = 2.5; ticks();
+    ctx.restore();
   }
   ctx.restore();
 }
@@ -211,16 +217,22 @@ function drawKatachiFront(ctx, t){
   kLabel(ctx, KATACHI_LV[s.lv] + '　' + (katachiIdx + 1) + '/' + KATACHI.length, 10, TAB_H + 140, 'left', 'top', '#5a6576', 'bold 12px sans-serif');
   let ty = L.y + L.H + 28;
   if(kst.hint && !kst.done){
-    const H = kst.hint; kLabel(ctx, 'ヒント：' + H.w + ' × ' + H.h + (H.half ? ' の はんぶん' : '') + ' を つくろう', sw/2, ty, 'center', 'top', '#7a5ad0', F); ty += 22;
+    kLabel(ctx, 'ヒント：' + kst.hint + ' を つくろう', sw/2, ty, 'center', 'top', '#7a5ad0', F); ty += 22;
   }
   if(kst.msg) kLabel(ctx, kst.msg, sw/2, ty, 'center', 'top', kst.done ? '#d06a00' : ink, kst.msg.length > 26 ? '900 14px sans-serif' : '900 17px sans-serif');
   if(kst.done){ const b = kNextBtn(); ctx.fillStyle = '#3ebb47'; ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 12); ctx.fill();
     ctx.fillStyle = '#fff'; ctx.font = '900 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('つぎ へ ▶', b.x + b.w/2, b.y + b.h/2); }
-  else if(kst.stuck){
-    const b = kousakuBtn(), z = 1 + 0.08*Math.sin(t*0.008);
+  else {
+    // 🛠️ こうさくしつ は さいしょ から。なやんで いる と ゆれて しらせる
+    const b = kousakuBtn(), z = kst.stuck ? 1 + 0.08*Math.sin(t*0.008) : 1;
     ctx.save(); ctx.translate(b.x + b.w/2, b.y + b.h/2); ctx.scale(z, z);
-    ctx.fillStyle = '#fff1c2'; ctx.strokeStyle = '#e0a000'; ctx.lineWidth = 3; ctx.beginPath(); ctx.roundRect(-b.w/2, -b.h/2, b.w, b.h, 12); ctx.fill(); ctx.stroke();
-    ctx.font = '24px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🛠️', 0, 1); ctx.restore();
+    ctx.fillStyle = kst.stuck ? '#fff1c2' : '#ffffff'; ctx.strokeStyle = kst.stuck ? '#e0a000' : '#9aa8bc'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(-b.w/2, -b.h/2, b.w, b.h, 12); ctx.fill(); ctx.stroke();
+    // えもじ は 'middle' だと すこし ずれる ので、じっさい の おおきさ で まんなか に
+    ctx.font = '24px sans-serif'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    const m = ctx.measureText('🛠️'), ew = m.actualBoundingBoxLeft + m.actualBoundingBoxRight, eh = m.actualBoundingBoxAscent + m.actualBoundingBoxDescent;
+    ctx.fillText('🛠️', -ew/2 + m.actualBoundingBoxLeft, -eh/2 + m.actualBoundingBoxAscent);
+    ctx.restore();
   }
   ctx.restore();
 }
