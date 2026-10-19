@@ -9,6 +9,7 @@ async function openK(t){
 // キャラ を もって かたち の まんなか で はなす
 const dropOnShape = (p, n) => p.evaluate(n => {
   const b = blocks.find(x => Num.toNumber(x.q) === n), L = kLayout(), tx = L.x + L.W/2, ty = L.y + L.H/2;
+  blocks.splice(blocks.indexOf(b), 1); blocks.push(b);        // かさなって いても この キャラ を つかむ（いちばん てまえ）
   handleStart(b.cx, b.cy, 7); handleMove(tx, ty, 7); handleEnd(tx, ty, 7);
   return { n: blocks.length, msg: kst.msg, done: kst.done, miss: kst.miss, stuck: kst.stuck };
 }, n);
