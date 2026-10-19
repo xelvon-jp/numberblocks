@@ -492,12 +492,12 @@ module.exports = {
     }
   },
 
-  'ゲームの せっていから ひっさん（ためし）を ひらける': async t => {
+  'ためし（lab.html）から ひっさん を ひらける。もどる で ゲームに もどる': async t => {
     const p = await t.open();
-    const has = await p.evaluate(() => { setOpen = true; drawSettings(ctx); return setBtns.some(b => b.val === 'hissan'); });
-    t.eq(has, true, 'せっていに ひっさん（ためし）が ない');
-    // ボタンを おすと、キャッシュの 古い版では なく 新しい版を ひらき、もどる で ゲームに もどる
-    await p.evaluate(() => { const b = setBtns.find(b => b.val === 'hissan'); handleSettingsTap(b.x + 2, b.y + 2); });
+    await p.goto(p.url().split('?')[0].replace('index.html', 'lab.html'));
+    const href = await p.evaluate(() => { const a = [...document.querySelectorAll('a.exp')].find(a => a.getAttribute('href').startsWith('hissan.html')); return a && a.getAttribute('href'); });
+    t.ok(href, 'ためし に ひっさん が ない');
+    await p.click('a.exp[href^="hissan.html"]');
     await p.waitForFunction(() => /hissan\.html\?v=\d+/.test(location.href) && typeof newProblem === 'function' && typeof Ink === 'object');
     await t.sleep(200);
     await p.evaluate(() => goBack());

@@ -33,7 +33,7 @@ module.exports = {
                  html: !!(document.getElementById('zukan-btn') || document.getElementById('fs-btn')) };
       });
       t.eq(r.tabH, 44, `${w}x${h} で上部バーの高さが 44 ではない`);
-      t.eq(r.vals, ['task','calc','factor','quiz','clock','waru','hanbun','settings'], `${w}x${h} でタブの並びがちがう`);
+      t.eq(r.vals, ['task','calc','hanbun','zukei','settings'], `${w}x${h} でタブの並びがちがう`);
       t.ok(!r.overlap, `${w}x${h} でタブどうしが重なる`);
       t.ok(!r.out, `${w}x${h} でタブが画面からはみ出す`);
       t.ok(!r.html, 'HTML の ずかん・全画面ボタンが残っている');
@@ -99,9 +99,9 @@ module.exports = {
     await pick();
     await tap('task');                                   // おだいの中で もう一度 押しても 聞かない
     t.eq(await p.evaluate(() => whoOpen), false, 'おだいの中で おだいタブを押したら また聞かれた');
-    await tap('clock');
-    t.eq(await p.evaluate(() => [taskOn, mode, taskActive(), whoOpen]), [false, 'clock', false, false],
-         'とけいタブで おだいが おわらない');
+    await tap('hanbun');
+    t.eq(await p.evaluate(() => [taskOn, mode, taskActive(), whoOpen]), [false, 'hanbun', false, false],
+         'はんぶんタブで おだいが おわらない');
     await tap('task');
     t.eq(await p.evaluate(() => [taskOn, whoOpen]), [true, true], 'もどってきたときに また聞かれない（毎回聞く）');
     await pick();
@@ -227,5 +227,20 @@ module.exports = {
     t.eq(r.month, [false, true, false], '10がつ だけ に ならない');
     t.eq(r.off, [false, 'off', false], 'OFF に できない');
     t.eq(r.on, [true, ''], 'ハロウィンの がめんで エラー');
+  },
+
+  'タブ は おだい・けいさん・はんぶん・ずけい。ずけい で かたち の いちらん。因数・ドリル・とけい・わけっこ・けんばん は ためし から（?mode=）。せってい に ひっさん・けんばん は ない': async t => {
+    const p = await t.open({ who:'papa' });
+    const r = await p.evaluate(() => { drawTabsAndUI(ctx); const tabs = tabBtns.map(b => b.val).filter(v => v !== 'settings');
+      const z = tabBtns.find(b => b.val === 'zukei'); handleStart(z.x + z.w/2, z.y + z.h/2, 's'); handleEnd(z.x + z.w/2, z.y + z.h/2, 's');
+      const zk = [katachiOn, kList, mode]; drawTabsAndUI(ctx);
+      setOpen = true; drawSettings(ctx); const sb = setBtns.map(b => b.val); setOpen = false;
+      return { tabs, zk, sb: ['hissan', 'kenban', 'lab'].map(v => sb.includes(v)) }; });
+    t.eq(r, { tabs: ['task', 'calc', 'hanbun', 'zukei'], zk: [true, true, 'x'], sb: [false, false, true] }, 'タブ・せってい が ちがう');
+    for(const m of ['factor', 'quiz', 'clock', 'waru', 'kenban']){
+      await p.goto(p.url().split('?')[0] + '?mode=' + m);
+      await p.waitForFunction(() => typeof drawFrame === 'function');
+      t.eq(await p.evaluate(() => [mode, taskOn]), [m, false], m + ' が ?mode= で ひらかない');
+    }
   },
 };

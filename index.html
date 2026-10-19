@@ -1273,13 +1273,14 @@ function isCalcMode(m){ return CALC_OPS.indexOf(m || mode) >= 0; }
 let lastOp = '+';   // けいさんタブに戻ったときに選び直す演算子
 // 「おだい」は ひとつの タブ。中の画面（キャラ／文字盤）は おだいに合わせて かわるが、
 // 上のタブは「おだい」のまま。ほかのタブは おだいなしの じゆうあそび。
+// 因数・ドリル・とけい・わけっこ・ひっさん・けんばん は ためし（lab.html）から index.html?mode=○○ で ひらく（パパ）。
 const TAB_DEFS = [
   {label:'おだい', val:'task'},
-  {label:'けいさん', val:'calc'}, {label:'因数', val:'factor'},
-  {label:'ドリル', val:'quiz'},   {label:'とけい', val:'clock'},
-  {label:'わけっこ', val:'waru'},  // あまりの ある わりざんを あそぶ（waru.html を 下に かさねる）
-  {label:'はんぶん', val:'hanbun'} // ピンチアウトで はんぶんこ・かさねて くっつく（0.5。hanbun.html を 下に かさねる）
+  {label:'けいさん', val:'calc'},
+  {label:'はんぶん', val:'hanbun'}, // ピンチアウトで はんぶんこ・かさねて くっつく（0.5。hanbun.html を 下に かさねる）
+  {label:'ずけい', val:'zukei'}     // かたち に ぴったり（めんせき。katachi.js）
 ];
+const LAB_MODES = ['factor', 'quiz', 'clock', 'waru', 'kenban'];   // ためし から ひらく がめん
 let tabBtns = [], opBarBtns = [];
 
 // ─── もどす（アンドゥ）────────────────────────────────────────────
@@ -1866,7 +1867,8 @@ function drawModeTabs(ctx){
     const td=TAB_DEFS[i];
     const ty=TOP_ROW_H;
     const active = (td.val==='task') ? taskOn
-                 : !taskOn && ((td.val==='calc') ? isCalcMode() : (td.val===mode));
+                 : (td.val==='zukei') ? katachiOn
+                 : !taskOn && !katachiOn && ((td.val==='calc') ? isCalcMode() : (td.val===mode));
     ctx.save();
     // 選んでいないタブが「押せない」ように見えないよう、はっきり明るくする
     ctx.fillStyle = active?'rgba(100,160,255,0.95)':'rgba(82,92,110,0.95)';
@@ -4281,25 +4283,19 @@ function drawSettings(ctx){
   ctx.beginPath(); ctx.moveTo(x+16,ty+6); ctx.lineTo(x+w-16,ty+6); ctx.stroke();
   ty += 14;
 
-  // ずかん・ひっさん（ためしの ページ）・全画面（全画面は使える端末だけ）
-  // どうき（かぞくの スマホと セーブデータを あわせる）も ここ
-  // けんばん（キーボードの おもちゃを ひくと キャラが でる。kenban.html を タブの 下に かさねる）
-  // ためし（lab.html。ほんたいに いれる まえに ためす ページの いちらん）
-  const n = CAN_FULLSCREEN ? 6 : 5, g2 = 8, bw2 = (w - 32 - g2*(n-1)) / n;
+  // ずかん・どうき（かぞくの スマホと セーブデータを あわせる）・全画面（全画面は使える端末だけ）
+  // ためし（lab.html。ほんたいに いれる まえに ためす ページ と、因数・ドリル・とけい・わけっこ・ひっさん・けんばん）
+  const n = CAN_FULLSCREEN ? 4 : 3, g2 = 8, bw2 = (w - 32 - g2*(n-1)) / n;
   drawCardBtn(ctx, x+16, ty, bw2, bigH, 'ずかん', 'rgba(228,233,242,0.98)', '#22314a');
   setBtns.push({ x:x+16, y:ty, w:bw2, h:bigH, val:'zukan' });
-  drawCardBtn(ctx, x+16+bw2+g2, ty, bw2, bigH, 'ひっさん', 'rgba(255,236,190,0.98)', '#6b4a00');
-  setBtns.push({ x:x+16+bw2+g2, y:ty, w:bw2, h:bigH, val:'hissan' });
-  drawCardBtn(ctx, x+16+(bw2+g2)*2, ty, bw2, bigH, 'けんばん', 'rgba(222,244,214,0.98)', '#2a5a1a');
-  setBtns.push({ x:x+16+(bw2+g2)*2, y:ty, w:bw2, h:bigH, val:'kenban' });
-  drawCardBtn(ctx, x+16+(bw2+g2)*3, ty, bw2, bigH, sync.label(), 'rgba(214,236,255,0.98)', '#1d4a7a');
-  setBtns.push({ x:x+16+(bw2+g2)*3, y:ty, w:bw2, h:bigH, val:'sync' });
-  drawCardBtn(ctx, x+16+(bw2+g2)*4, ty, bw2, bigH, 'ためし', 'rgba(240,226,255,0.98)', '#4a2a7a');
-  setBtns.push({ x:x+16+(bw2+g2)*4, y:ty, w:bw2, h:bigH, val:'lab' });
+  drawCardBtn(ctx, x+16+bw2+g2, ty, bw2, bigH, sync.label(), 'rgba(214,236,255,0.98)', '#1d4a7a');
+  setBtns.push({ x:x+16+bw2+g2, y:ty, w:bw2, h:bigH, val:'sync' });
+  drawCardBtn(ctx, x+16+(bw2+g2)*2, ty, bw2, bigH, 'ためし', 'rgba(240,226,255,0.98)', '#4a2a7a');
+  setBtns.push({ x:x+16+(bw2+g2)*2, y:ty, w:bw2, h:bigH, val:'lab' });
   if(CAN_FULLSCREEN){
-    drawCardBtn(ctx, x+16+(bw2+g2)*5, ty, bw2, bigH, document.fullscreenElement ? 'やめる' : 'ぜんがめん',
+    drawCardBtn(ctx, x+16+(bw2+g2)*3, ty, bw2, bigH, document.fullscreenElement ? 'やめる' : 'ぜんがめん',
                 'rgba(228,233,242,0.98)', '#22314a');
-    setBtns.push({ x:x+16+(bw2+g2)*5, y:ty, w:bw2, h:bigH, val:'fs' });
+    setBtns.push({ x:x+16+(bw2+g2)*3, y:ty, w:bw2, h:bigH, val:'fs' });
   }
   ty += bigH + (tight ? 8 : 12);
 
@@ -4351,9 +4347,7 @@ function handleSettingsTap(x, y){
     else if(b.val==='sync')  sync.setup();
     else if(b.val==='halloween'){ try{ localStorage.setItem('nb_halloween', b.v); }catch(e){} halloweenOn = isHalloween(); }
     else if(b.val==='zukan') location.href = 'zukan.html?v=' + Date.now();   // キャッシュの 古い版を ひらかない
-    else if(b.val==='hissan') location.href = 'hissan.html?v=' + Date.now();
     else if(b.val==='lab')   location.href = 'lab.html?v=' + Date.now();
-    else if(b.val==='kenban'){ setOpen = false; if(taskOn) setTaskOn(false); setMode('kenban'); }
     else if(b.val==='fs')    toggleFullscreen();
     else if(b.val==='arc')   { setOpen = false; openArcTuner(); }
     else if(b.val==='ptune') { setOpen = false; openParadeTuner(); }
@@ -5033,6 +5027,7 @@ function handleStart(x,y,pid){
     if(tb.val==='settings'){ setOpen = true; stageOpen = false; }
     // おだいに入るときは、かならず「だれが あそぶ？」を聞く（setTaskOn）
     else if(tb.val==='task'){ if(!taskOn) setTaskOn(true); }
+    else if(tb.val==='zukei'){ if(taskOn) setTaskOn(false); setMode('x'); katachiStart(katachiIdx); kList = true; }   // はじめ は いちらん
     else { if(taskOn) setTaskOn(false); setMode(tb.val); }
     return;
   }
@@ -5600,8 +5595,10 @@ quizMaxEl.value = String(quizMax); quizMaxVal.textContent = String(quizMax);
 quizLimitEl.textContent = quizLimitLabel();
 setMode('+');
 followTaskMode();          // 前回とけいの おだいの とちゅうなら、とけいの画面から始める
-// ためし（lab.html）の「かたち に ぴったり」から：index.html?katachi=1
+// ずけい（かたち に ぴったり）を じかに：index.html?katachi=1
 if(/[?&]katachi=1/.test(location.search)){ if(taskOn) setTaskOn(false); whoOpen = false; setMode('x'); katachiStart(0); kList = true; }   // はじめ は いちらん から
+// ためし（lab.html）から 因数・ドリル・とけい・わけっこ・けんばん：index.html?mode=factor など
+{ const m = /[?&]mode=(\w+)/.exec(location.search); if(m && LAB_MODES.includes(m[1])){ if(taskOn) setTaskOn(false); whoOpen = false; setMode(m[1]); } }
 if(typeof Mizu !== 'undefined') Mizu.autoStart();   // ガラス の みず の センサー は はじめ から オン（iPhone は さいしょに さわった とき に きく）
 requestAnimationFrame(loop);
 </script>

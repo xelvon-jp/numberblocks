@@ -1,9 +1,9 @@
 // けんばん（kenban.html）：キーボードの おもちゃの しろい けんばん（ひだりから 1〜15）を ひくと その かずの キャラが でる。
-// せっていの「けんばん」から ひらき、タブの 下に iframe で かさなる。
+// ためし の「けんばん」（index.html?mode=kenban）から ひらき、タブの 下に iframe で かさなる。
 
 async function openKenban(t, o){
   const p = await t.open(o);
-  await p.evaluate(() => { setOpen = true; drawSettings(ctx); const b = setBtns.find(x => x.val === 'kenban'); handleStart(b.x + b.w/2, b.y + b.h/2, 's'); });
+  await p.evaluate(() => { setMode('kenban'); /* ためし の「けんばん」（?mode=kenban）と おなじ */ });
   await p.waitForFunction(() => { const f = document.querySelector('iframe[src^="kenban.html"]'); return f && f.contentWindow && f.contentWindow.kenban; }, null, { timeout: 5000 });
   const f = p.frames().find(x => x.url().includes('kenban.html'));
   await f.evaluate(() => document.getElementById('startBox').classList.remove('on'));   // テストでは マイクを つかわない
@@ -13,7 +13,7 @@ const vis = p => p.evaluate(() => { const f = document.querySelector('iframe[src
 // マイクの かわりに ずっと なる おと（f Hz、ばいおんの つよさ parts）で「はじめる 🎤」
 async function openKenbanMic(t, f0, parts, o){
   const p = await t.open(o);
-  await p.evaluate(() => { setOpen = true; drawSettings(ctx); const b = setBtns.find(x => x.val === 'kenban'); handleStart(b.x + b.w/2, b.y + b.h/2, 's'); });
+  await p.evaluate(() => { setMode('kenban'); /* ためし の「けんばん」（?mode=kenban）と おなじ */ });
   await p.waitForFunction(() => { const f = document.querySelector('iframe[src^="kenban.html"]'); return f && f.contentWindow && f.contentWindow.kenban; }, null, { timeout: 5000 });
   const f = p.frames().find(x => x.url().includes('kenban.html'));
   await f.evaluate(([f0, parts]) => { navigator.mediaDevices.getUserMedia = async () => {
@@ -156,7 +156,7 @@ module.exports = {
                                          k1: kenban.whichKey(176.5*Math.pow(2, 1/12)), kOld: kenban.whichKey(176.5) }));
     t.eq([r.learning, r.w, r.b, r.k1, r.kOld], [null, 15, 10, { white: 0 }, null], 'おぼえなおし');
     await p.reload(); await p.waitForFunction(() => typeof drawFrame === 'function');
-    await p.evaluate(() => { whoOpen = false; setOpen = true; drawSettings(ctx); const b = setBtns.find(x => x.val === 'kenban'); handleStart(b.x + b.w/2, b.y + b.h/2, 's'); });
+    await p.evaluate(() => { whoOpen = false; setMode('kenban'); /* ためし の「けんばん」（?mode=kenban）と おなじ */ });
     await p.waitForFunction(() => { const fr = document.querySelector('iframe[src^="kenban.html"]'); return fr && fr.contentWindow && fr.contentWindow.kenban; });
     const f2 = p.frames().find(x => x.url().includes('kenban.html'));
     t.eq(await f2.evaluate(() => kenban.whichKey(176.5*Math.pow(2, 1/12))), { white: 0 }, 'のこらない');

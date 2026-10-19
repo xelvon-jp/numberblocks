@@ -1,7 +1,8 @@
 // わけっこ（waru.html）：ぜんぶの かずを いくつずつ に わけると、グループが なんこ・あまりが なんこ。
-// ゲームの「わけっこ」タブで タブの 下に iframe で かさなる。
+// ためし の「わけっこ」（index.html?mode=waru）で タブの 下に iframe で かさなる。
 
-const tapTab = (p, val) => p.evaluate(v => { const b = tabBtns.find(x => x.val === v); handleStart(b.x + b.w/2, b.y + b.h/2, 'm'); handleEnd(b.x + b.w/2, b.y + b.h/2, 'm'); }, val);
+// タブ に ない がめん（わけっこ・因数 など）は ためし から ひらく（index.html?mode=○○ と おなじ setMode）
+const tapTab = (p, val) => p.evaluate(v => { const b = tabBtns.find(x => x.val === v); if(!b){ setMode(v); return; } handleStart(b.x + b.w/2, b.y + b.h/2, 'm'); handleEnd(b.x + b.w/2, b.y + b.h/2, 'm'); }, val);
 async function openWaru(t, o){
   const p = await t.open(o);
   await tapTab(p, 'waru');
