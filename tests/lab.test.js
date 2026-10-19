@@ -35,4 +35,40 @@ module.exports = {
     await p.mouse.up(); await p.waitForTimeout(2000);
     t.ok(Math.abs(await th()) < 0.08, 'はなしても もどらない');
   },
+
+  'めんせき：ぼう を つむと ながしかく、へいこうしへんけい は きって うごかすと、さんかく は かがみ と まわす で できる。ひろさ は かわらない': async t => {
+    const p = await openLab(t, 'lab-menseki.html');
+    const r = await p.evaluate(() => {
+      const out = {};
+      men.load(0); const ids = men.pieces().map(q => q.id);
+      men.moveTo(ids[0], 2, 2); men.moveTo(ids[1], 2, 3); out.mid = men.done();
+      men.moveTo(ids[2], 2, 4); out.rows = [men.done(), JSON.stringify(men.rect())];
+      men.load(1); const sq = men.pieces().map(q => q.id);
+      sq.forEach((id, k) => men.moveTo(id, k*4 > 7 ? 0 : k*4, k*4 > 7 ? 1 : 0)); out.notSquare = men.done();   // 8×2 は ましかく で ない
+      sq.forEach((id, k) => men.moveTo(id, 1, 1 + k)); out.square = men.done();
+      // へいこうしへんけい：てっぺん の かど（x＝1）で たて に きる → さんかく を みぎ へ 5
+      men.load(2); const [pg] = men.pieces(); const ox = pg.pts[3][0], oy = pg.pts[0][1];
+      men.cut(ox + 1, oy - 1, ox + 1, oy + 4);
+      const ps = men.pieces(); out.cutN = ps.length; out.cutArea = ps.reduce((s, q) => s + q.area, 0);
+      const tri = ps.find(q => q.area === 1.5);
+      men.moveTo(tri.id, ox + 5, oy); out.pg = [men.done(), JSON.stringify(men.rect())];
+      // ちょっかく さんかく：かがみ → まわす → くっつける
+      men.load(3); const [rt] = men.pieces(); const c = men.mirror(rt.id); men.rotate(c);
+      men.moveTo(rt.id, 1, 4); men.moveTo(c, 1, 4); out.rt = [men.done(), men.copies(), men.pieces().reduce((s, q) => s + q.area, 0)];
+      // とがった さんかく：かがみ → まわす → ずらして くっつける → きる → うごかす
+      men.load(4); const [tr] = men.pieces(); const d = men.mirror(tr.id); men.rotate(d);
+      men.moveTo(tr.id, 1, 4); men.moveTo(d, 2, 4);           // へいこうしへんけい（1,4）〜（6,7）
+      out.para = men.done();
+      men.cut(2, 3, 2, 8); const small = men.pieces().find(q => Math.abs(q.area - 1.5) < 1e-9 && q.pts.some(v => v[0] === 1));
+      men.moveTo(small.id, 5, 4); out.tr = [men.done(), JSON.stringify(men.rect())];
+      return out;
+    });
+    t.eq([r.mid, ...r.rows], [false, true, '{"w":4,"h":3}'], 'ぼう 3ぼん で ながしかく に ならない');
+    t.eq([r.notSquare, r.square], [false, true], 'ましかく の はんてい が ちがう');
+    t.eq([r.cutN, r.cutArea], [2, 15], 'きると ひろさ が かわった／2つ に ならない');
+    t.eq(r.pg, [true, '{"w":5,"h":3}'], 'へいこうしへんけい が ながしかく に ならない');
+    t.eq(r.rt, [true, 1, 12], 'ちょっかく さんかく が できない');
+    t.eq(r.para, false, 'へいこうしへんけい の まま で できた に なった');
+    t.eq(r.tr, [true, '{"w":4,"h":3}'], 'とがった さんかく が できない');
+  },
 };
