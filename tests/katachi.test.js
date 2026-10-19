@@ -46,8 +46,9 @@ module.exports = {
     const fr = await (await p.waitForSelector('iframe[src^="lab-menseki.html"]')).contentFrame();
     await fr.waitForFunction(() => window.men);
     const inner = await fr.evaluate(() => { const ids = men.pieces().map(q => q.id), n0 = ids.length; ids.forEach((id, k) => men.moveTo(id, 2, 2 + k));
-      return [n0, men.done(), getComputedStyle(document.getElementById('ok')).display, getComputedStyle(document.querySelector('.back')).display]; });
-    t.eq(inner, [3, true, 'block', 'none'], 'こうさくしつ で ぼう 3ぼん の ながしかく に ならない／「めんせき わかった！」が ない');
+      const hid = id => getComputedStyle(document.getElementById(id)).display;
+      return [n0, men.done(), hid('ok'), getComputedStyle(document.querySelector('.back')).display, hid('say'), hid('done'), hid('hint')]; });
+    t.eq(inner, [3, true, 'block', 'none', 'none', 'none', 'none'], 'こうさくしつ で ぼう 3ぼん の ながしかく に ならない／「めんせき わかった！」が ない／もじ（せつめい・しき）が でている');
     await p.waitForTimeout(200);
     t.eq(await p.evaluate(() => kst.hint), '4 × 3', 'ヒント が ゲーム に こない');
     await fr.click('#ok', { force: true });   // できた あと は ゆれて いる（とまる の を またない）

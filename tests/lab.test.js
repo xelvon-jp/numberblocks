@@ -68,6 +68,10 @@ module.exports = {
       men.shear(ob.id, gx); out.ob = [men.done(), men.pieces()[0].area];
       men.load(6); for(const g of men.guides()) cutG(g); out.rhom = [men.done(), areas()];
       men.load(7); cutG(men.guides()[0]); out.trap = [men.done(), areas()];
+      // きった あと の さんかく も ● で とうせき へんけい（ひろさ は おなじ）
+      const tops = men.pieces(), t3 = tops.find(q => q.area === 3), ys = t3.pts.map(v => v[1]);
+      const ap = t3.pts.find(v => ys.filter(y => y === v[1]).length === 1);
+      men.shear(t3.id, ap[0] + 2); out.trapShear = [men.pieces().find(q => q.id === t3.id).area, men.pieces().find(q => q.id === t3.id).pts.some(v => v[0] === ap[0] + 2)];
       men.load(8); out.comp = men.pieces().reduce((s, q) => s + q.area, 0);
       // てんせん から はずれた ななめ は マス の せん（たて か よこ）で きれる
       men.load(3); const [gg] = men.guides(); men.cut(gg[0][0] + 2, gg[0][1] - 0.5, gg[0][0] + 2.2, gg[1][1] + 0.5); out.off = areas();
@@ -79,6 +83,7 @@ module.exports = {
     t.eq([r.ob1, r.ob], [[false, 6], [true, 6]], '● で ゴースト に いれても ひろさ が ちがう／できた に ならない');
     t.eq(r.rhom, [true, [2, 2, 2, 2, 8]], 'ひしがた を きりだせない');
     t.eq(r.trap, [true, [3, 6]], 'だいけい が さんかく 2つ に ならない');
+    t.eq(r.trapShear, [3, true], 'だいけい の さんかく を ● で うごかせない／ひろさ が かわった');
     t.eq(r.comp, 16, 'ふくざつ な かたち の ひろさ');
     t.eq(r.off, [6, 6], 'たて に なぞって も マス の せん で きれない');
   },

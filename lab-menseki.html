@@ -121,8 +121,8 @@ function makeStage(sh){
       tell: () => w + ' × ' + h + ' の はんぶん' };
   }
   if(kind === 'trap'){ const ox = cen(Math.max(w, o + a)), P = tr(Kata.partPts(sh), ox, oy);
-    return { name:'だいけい', color:'#c0558a', pieces:[Kata.partPts(sh)], at:[[ox, oy]], guides:[[P[1], P[3]]], goal:{ all:[[P[0], P[1], P[3]], [P[1], P[2], P[3]]] },
-      say:'だいけい。てんせん で きると さんかく が 2つ に なるよ',
+    return { name:'だいけい', color:'#c0558a', pieces:[Kata.partPts(sh)], at:[[ox, oy]], guides:[[P[1], P[3]]], shear:true, goal:{ all:[[P[0], P[1], P[3]], [P[1], P[2], P[3]]] },
+      say:'だいけい。てんせん で きると さんかく が 2つ に なるよ。さんかく の ● も うごかせる',
       hint:'ななめ の てんせん を なぞって きる',
       done: () => [`うえ の さんかく ${a} × ${h} ÷ 2 ＋ した の さんかく ${w} × ${h} ÷ 2`, `<span class="big">（${a} ＋ ${w}）× ${h} ÷ 2 ＝ ${fmt((a + w)*h/2)}</span>`,
                    `<span class="f">だいけい の ひろさ ＝（じょうてい ＋ かてい）× たかさ ÷ 2</span>`],
@@ -148,7 +148,9 @@ function tellGame(m){ if(!EMBED) return; try{ parent.postMessage(Object.assign({
 if(EMBED) STAGES.splice(0, STAGES.length, makeStage(EMBED));
 const $ = id => document.getElementById(id);
 const cv = $('c'), ctx = cv.getContext('2d');
+// ゲーム の こうさくしつ では もじ を ださない（せつめい・できた とき の しき・ヒント。こたえ が わかって しまう。パパ）
 if(EMBED){ document.body.classList.add('embed'); $('stages').style.display = 'none'; document.querySelector('.back').style.display = 'none';
+  for(const id of ['say', 'area', 'hint']) $(id).style.display = 'none';
   document.querySelector('header h1').textContent = '🛠️ こうさくしつ'; $('ok').style.display = 'block'; $('ok').onclick = () => tellGame({ type:'close' }); }
 let W = 0, H = 0, C = 30, OX = 0, OY = 0;   // 1マス の ピクセル と ばん の ひだりうえ
 let si = 0, pieces = [], sel = null, drag = null, cut = null, shearDrag = null, hintOn = false, doneAt = 0, nextId = 1, fx = [];
@@ -196,7 +198,7 @@ const hasPoly = T => pieces.some(p => samePoly(world(p), T));
 function load(i){
   si = i; const st = STAGES[i]; sel = null; drag = null; cut = null; shearDrag = null; hintOn = false; doneAt = 0; fx = [];
   pieces = st.pieces.map((pts, k) => ({ id: nextId++, pts: pts.map(p => p.slice()), ox: st.at[k][0], oy: st.at[k][1] }));
-  $('say').textContent = st.say; $('say').style.display = ''; $('done').style.display = 'none'; $('ok').classList.remove('go'); resize();
+  $('say').textContent = st.say; $('say').style.display = EMBED ? 'none' : ''; $('done').style.display = 'none'; $('ok').classList.remove('go'); resize();
   renderStages(); updateArea();
 }
 function renderStages(){
@@ -217,7 +219,7 @@ function check(){
   doneAt = performance.now();
   if(!EMBED && !clear.includes(si)){ clear.push(si); try{ localStorage.setItem('nb_lab_menseki', JSON.stringify(clear)); }catch(e){} }
   const d = $('done'); d.innerHTML = '🎉 できた！<br>' + st.done(r).join('<br>') + (!EMBED && si < STAGES.length-1 ? '<br><button id="nx">つぎ へ ▶</button>' : '');
-  d.style.display = 'block'; $('say').style.display = 'none'; resize();   // ばん は ちいさく なって、かたち に かぶらない
+  if(!EMBED){ d.style.display = 'block'; $('say').style.display = 'none'; resize(); }   // ばん は ちいさく なって、かたち に かぶらない（ゲーム では しき を みせない）
   const nx = $('nx'); if(nx) nx.onclick = () => load(si + 1);
   $('ok').classList.add('go');
   tellGame({ type:'done', hint: st.tell(r) });
@@ -234,8 +236,7 @@ function apexOf(p){
   for(let i = 0; i < 3; i++){ const a = p.pts[(i+1)%3], b = p.pts[(i+2)%3]; if(Math.abs(a[1] - b[1]) < 1e-9 && Math.abs(p.pts[i][1] - a[1]) > 1e-9) return i; }
   return -1;
 }
-function down(x, y){
-  if(doneAt) return;
+function down(x, y){                                   // できた あと も さわって いい（だいけい は きった あと に ● で とうせき へんけい）
   if(STAGES[si].shear){
     const [wx, wy] = toW(x, y);
     for(let k = pieces.length - 1; k >= 0; k--){ const q = pieces[k], i = apexOf(q); if(i < 0) continue;
@@ -289,7 +290,7 @@ function doCut(c){
 }
 function rotate(){
   const p = sel && pieces.includes(sel) ? sel : pieces[pieces.length-1];
-  if(!p || doneAt) return;
+  if(!p) return;
   const b = bbox(p.pts);
   p.pts = p.pts.map(([x, y]) => [b[0] + b[2] - x, b[1] + b[3] - y]).reverse();
   clampPiece(p); check(); updateArea();
@@ -352,7 +353,7 @@ function draw(){
     for(const pass of [['rgba(255,255,255,0.9)', 6], ['#d0553f', 3]]){ ctx.strokeStyle = pass[0]; ctx.lineWidth = pass[1] * (hintOn ? 1.4 : 1); ctx.beginPath();
       for(const [a, b] of st.guides){ ctx.moveTo(SX(a[0]), SY(a[1])); ctx.lineTo(SX(b[0]), SY(b[1])); } ctx.stroke(); }
     ctx.restore(); }
-  if(st.shear && !doneAt) for(const p of pieces){ const i = apexOf(p); if(i < 0) continue;   // てっぺん の ●（よこ に うごかせる）
+  if(st.shear) for(const p of pieces){ const i = apexOf(p); if(i < 0) continue;   // てっぺん の ●（よこ に うごかせる）
     const X = SX(p.pts[i][0] + p.ox), Y = SY(p.pts[i][1] + p.oy);
     ctx.save(); ctx.fillStyle = '#f0a020'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(X, Y, Math.max(10, C*0.32), 0, Math.PI*2); ctx.fill(); ctx.stroke();
     ctx.fillStyle = '#fff'; ctx.font = `900 ${Math.max(10, C*0.32)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('↔', X, Y + 1); ctx.restore(); }
