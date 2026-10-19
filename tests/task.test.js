@@ -24,15 +24,15 @@ module.exports = {
          'index.html の best/ref が計算と食いちがう（node tools/solver.js --write で直せる）');
   },
 
-  'おだいは せいすう 6レベルに10問ずつ ＋ しょうすう 2レベルに8問ずつ、おてほんは最短以上（とけいは ここには置かない）': async t => {
+  'おだいは せいすう 6レベルに10問ずつ ＋ しょうすう 6レベルに8問ずつ、おてほんは最短以上（とけいは ここには置かない）': async t => {
     const p = await t.open();
     const r = await p.evaluate(() => ({
       perLv: TASK_LEVELS.map((_, lv) => TASKS.filter(x => x.lv === lv).length),
       n: TASKS.length, clock: TASKS.filter(x => x.k).length,
       badRef: TASKS.filter(x => !(x.ref >= x.best)).map(x => x.n)
     }));
-    t.eq(r.perLv, [10,10,10,10,10,10,8,8], 'レベルごとの問題数がずれている');
-    t.eq([r.n, r.clock], [76, 0], 'けいさんの76問だけ のはず');
+    t.eq(r.perLv, [10,10,10,10,10,10,8,8,8,8,8,8], 'レベルごとの問題数がずれている');
+    t.eq([r.n, r.clock], [108, 0], 'けいさんの108問だけ のはず');
     t.eq(r.badRef, [], 'おてほん手数が最短より少ないおだいがある');
   },
 

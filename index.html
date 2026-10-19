@@ -304,7 +304,11 @@ const TASK_LEVELS = [
   { name:'1000へ',       color:'#7a5ad0' },
   { name:'なぞとき',     color:'#d0553f' },
   { name:'はんぶんこ',   color:'#2a9db0' },   // ここから しょうすう（はんぶん と とうごう。まぜまぜ には まだ いれない）
-  { name:'しょうすう',   color:'#3a7fc0' }
+  { name:'しょうすう',   color:'#3a7fc0' },
+  { name:'0.1を あつめる', color:'#3f9a7a' },
+  { name:'てん5を つくる', color:'#5a8fd8' },
+  { name:'はんぶん いろいろ', color:'#2a8fa0' },
+  { name:'ひいて しょうすう', color:'#8a6ad0' }
 ];
 const TASKS = [
   // レベル1：つみかさねる
@@ -390,7 +394,43 @@ const TASKS = [
   { lv:7, n:0.8,  use:[0.1], best:4, ref:4, way:[0.2,0.4],      hint:'×2を 3かい' },
   { lv:7, n:0.7,  use:[0.5,0.1], best:4, ref:4, way:[0.2],   hint:'0.5と 0.1と 0.1' },
   { lv:7, n:1,    use:[0.1], best:3, ref:6, way:[0.2,0.4,0.5],      hint:'0.5を つくって ×2' },
-  { lv:7, n:0.9,  use:[1,0.1], best:3, ref:6, way:[],   hint:'1から 0.1を ひく' }
+  { lv:7, n:0.9,  use:[1,0.1], best:3, ref:6, way:[],   hint:'1から 0.1を ひく' },
+  // レベル9：0.1を あつめる
+  { lv:8, n:0.2, use:[0.1], best:2, ref:2, way:[], hint:'0.1を 2こ' },
+  { lv:8, n:0.4, use:[0.1], best:3, ref:3, way:[0.2], hint:'0.1を ×2、×2' },
+  { lv:8, n:0.6, use:[0.1], best:5, ref:5, way:[0.2,0.3], hint:'0.3を つくって ×2' },
+  { lv:8, n:0.7, use:[0.1,7], best:3, ref:3, way:[], hint:'0.1 × 7' },
+  { lv:8, n:0.9, use:[0.1,9], best:3, ref:3, way:[], hint:'0.1 × 9' },
+  { lv:8, n:0.6, use:[0.5,0.1], best:3, ref:3, way:[], hint:'0.5と 0.1' },
+  { lv:8, n:1.1, use:[1,0.1], best:3, ref:3, way:[], hint:'1と 0.1' },
+  { lv:8, n:1.6, use:[0.1], best:5, ref:5, way:[0.2,0.4,0.8], hint:'0.1から ×2を 4かい' },
+  // レベル10：てん5を つくる
+  { lv:9, n:1.5, use:[1,0.5], best:3, ref:3, way:[], hint:'1と 0.5' },
+  { lv:9, n:2.5, use:[2,0.5], best:3, ref:3, way:[], hint:'2と 0.5' },
+  { lv:9, n:3.5, use:[3,0.5], best:3, ref:3, way:[], hint:'3と 0.5' },
+  { lv:9, n:4.5, use:[4,0.5], best:3, ref:3, way:[], hint:'4と 0.5' },
+  { lv:9, n:6.5, use:[6,0.5], best:3, ref:3, way:[], hint:'6と 0.5' },
+  { lv:9, n:8.5, use:[8,0.5], best:3, ref:3, way:[], hint:'8と 0.5' },
+  { lv:9, n:10.5, use:[10,0.5], best:3, ref:3, way:[], hint:'10と 0.5' },
+  { lv:9, n:0.9, use:[0.5,0.1], best:4, ref:5, way:[0.2,0.4], hint:'0.5と 0.4' },
+  // レベル11：はんぶん いろいろ
+  { lv:10, n:1.5, use:[3], best:2, ref:2, way:[], hint:'3を はんぶんこ' },
+  { lv:10, n:0.5, use:[2], best:3, ref:3, way:[1], hint:'2の はんぶんの はんぶん' },
+  { lv:10, n:1.5, use:[6], best:3, ref:3, way:[3], hint:'6の はんぶんの はんぶん' },
+  { lv:10, n:0.5, use:[4], best:4, ref:4, way:[2,1], hint:'4を 3かい はんぶんこ' },
+  { lv:10, n:4.5, use:[3], best:3, ref:3, way:[9], hint:'3の しかく（9）を はんぶんこ' },
+  { lv:10, n:6.5, use:[10,3], best:4, ref:4, way:[13], hint:'13の はんぶん' },
+  { lv:10, n:8.5, use:[10,7], best:4, ref:4, way:[17], hint:'17の はんぶん' },
+  { lv:10, n:0.5, use:[8], best:4, ref:5, way:[4,2,1], hint:'8を はんぶんこ していく' },
+  // レベル12：ひいて しょうすう
+  { lv:11, n:9.5, use:[10,0.5], best:3, ref:8, way:[], hint:'10から 0.5を ひく' },
+  { lv:11, n:4.9, use:[5,0.1], best:3, ref:10, way:[], hint:'5から 0.1を ひく' },
+  { lv:11, n:9.9, use:[10,0.1], best:3, ref:12, way:[], hint:'10から 0.1を ひく' },
+  { lv:11, n:2.9, use:[3,0.1], best:3, ref:9, way:[], hint:'3から 0.1を ひく' },
+  { lv:11, n:4.5, use:[5,0.5], best:3, ref:6, way:[], hint:'5から 0.5を ひく' },
+  { lv:11, n:1.9, use:[2,0.1], best:3, ref:9, way:[], hint:'2から 0.1を ひく' },
+  { lv:11, n:5.5, use:[6,0.5], best:3, ref:7, way:[], hint:'6から 0.5を ひく' },
+  { lv:11, n:7.9, use:[8,0.1], best:3, ref:12, way:[], hint:'8から 0.1を ひく' }
 ];
 const TASK_KEY = 'nbg.task.v1';
 // おだいの ならびの版。60番より うしろを 入れかえたら 1つ上げる（読みこむときに 古い記録を けす）
