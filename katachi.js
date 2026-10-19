@@ -9,36 +9,37 @@
 // index.html から よぶ のは katachiStart・katachiStop・katachiTap・katachiDrop・drawKatachi・drawKatachiFront だけ。
 //
 // レベル は パパと きめた じゅん：ましかく → ながしかく → ちょっかく さんかく → えいかく さんかく → どんかく さんかく
-//   → ひしがた → へいこうしへんけい → だいけい → ふくざつ な かたち。どれも 3もん（マス が みえる → めもり だけ → へん の かず だけ）。
+//   → ひしがた → へいこうしへんけい → だいけい → ふくざつ な かたち。どれも 3もん（マス が みえる 2もん → へん の かず だけ）。
+// めもり だけ（マス目 なし）は「とても わかりにくい」ので やめた（パパ）。
 const KATACHI_LV = ['ましかく', 'ながしかく', 'ちょっかく さんかく', 'えいかく さんかく', 'どんかく さんかく', 'ひしがた', 'へいこうしへんけい', 'だいけい', 'ふくざつ な かたち'];
 const KATACHI = [
   { lv:0, show:'grid',  kind:'sq',   w:3, h:3 },
-  { lv:0, show:'ticks', kind:'sq',   w:4, h:4 },
+  { lv:0, show:'grid',  kind:'sq',   w:4, h:4 },
   { lv:0, show:'num',   kind:'sq',   w:6, h:6 },
   { lv:1, show:'grid',  kind:'rect', w:4, h:3 },
-  { lv:1, show:'ticks', kind:'rect', w:6, h:3 },
+  { lv:1, show:'grid',  kind:'rect', w:6, h:3 },
   { lv:1, show:'num',   kind:'rect', w:7, h:4 },
   { lv:2, show:'grid',  kind:'rtri', w:4, h:3 },
-  { lv:2, show:'ticks', kind:'rtri', w:6, h:4 },
+  { lv:2, show:'grid',  kind:'rtri', w:6, h:4 },
   { lv:2, show:'num',   kind:'rtri', w:5, h:3 },
   { lv:3, show:'grid',  kind:'tri',  w:4, h:3, o:1 },
-  { lv:3, show:'ticks', kind:'tri',  w:6, h:4, o:2 },
+  { lv:3, show:'grid',  kind:'tri',  w:6, h:4, o:2 },
   { lv:3, show:'num',   kind:'tri',  w:5, h:3, o:2 },
   { lv:4, show:'grid',  kind:'otri', w:3, h:4, o:5 },
-  { lv:4, show:'ticks', kind:'otri', w:4, h:3, o:6 },
+  { lv:4, show:'grid',  kind:'otri', w:4, h:3, o:6 },
   { lv:4, show:'num',   kind:'otri', w:4, h:5, o:7 },
   { lv:5, show:'grid',  kind:'rhom', w:4, h:4 },
-  { lv:5, show:'ticks', kind:'rhom', w:6, h:4 },
+  { lv:5, show:'grid',  kind:'rhom', w:6, h:4 },
   { lv:5, show:'num',   kind:'rhom', w:6, h:6 },
   { lv:6, show:'grid',  kind:'para', w:5, h:3, o:1 },
-  { lv:6, show:'ticks', kind:'para', w:5, h:3, o:2 },
+  { lv:6, show:'grid',  kind:'para', w:5, h:3, o:2 },
   { lv:6, show:'num',   kind:'para', w:6, h:4, o:2 },
   { lv:7, show:'grid',  kind:'trap', w:4, h:3, o:1, a:2 },
-  { lv:7, show:'ticks', kind:'trap', w:5, h:2, o:1, a:3 },
+  { lv:7, show:'grid',  kind:'trap', w:5, h:2, o:1, a:3 },
   { lv:7, show:'num',   kind:'trap', w:6, h:4, o:2, a:2 },
-  // ふくざつ：ながしかく や さんかく を あわせた かたち（split ＝ めもり と、わけめ の てんせん）
+  // ふくざつ：ながしかく や さんかく を あわせた かたち（split ＝ マス目 と、わけめ の てんせん）
   { lv:8, show:'grid',  kind:'comp', parts:[{ kind:'rect', x:0, y:0, w:3, h:2 }, { kind:'rect', x:0, y:2, w:6, h:2 }] },
-  { lv:8, show:'ticks', kind:'comp', parts:[{ kind:'rect', x:1, y:0, w:2, h:2 }, { kind:'rect', x:0, y:2, w:4, h:2 }] },
+  { lv:8, show:'grid',  kind:'comp', parts:[{ kind:'rect', x:1, y:0, w:2, h:2 }, { kind:'rect', x:0, y:2, w:4, h:2 }] },
   { lv:8, show:'split', kind:'comp', parts:[{ kind:'tri', x:0, y:0, w:4, h:2, o:2 }, { kind:'rect', x:0, y:2, w:4, h:3 }] },
 ];
 const KATACHI_STUCK_MISS = 2, KATACHI_STUCK_MS = 45000;
@@ -164,7 +165,7 @@ function drawKatachi(ctx, t){
     }
   }
   // マス目（grid の とき・ぴったり の あと）
-  if(s.show === 'grid' || kst.done){
+  if(s.show === 'grid' || s.show === 'split' || kst.done){
     ctx.save(); all(); ctx.clip(); ctx.strokeStyle = kst.done ? 'rgba(255,255,255,0.6)' : 'rgba(120,140,170,0.45)'; ctx.lineWidth = 1.5; ctx.beginPath();
     for(let x = 0; x <= L.bw; x++){ ctx.moveTo(X(x), L.y); ctx.lineTo(X(x), L.y + L.H); }
     for(let y = 0; y <= L.bh; y++){ ctx.moveTo(L.x, Y(y)); ctx.lineTo(L.x + L.W, Y(y)); }
@@ -179,22 +180,6 @@ function drawKatachi(ctx, t){
   ctx.stroke();
   if(k === 'comp' && s.show === 'split'){ ctx.strokeStyle = '#7a8aa4'; for(const P of parts){ path(P); ctx.stroke(); } }
   ctx.restore();
-  // めもり（ticks・split）
-  if((s.show === 'ticks' || s.show === 'split') && !kst.done){
-    // めもり は かたち の うちがわ（しろい ところ）に ながめ に。そと に でる ところ も みえる よう しろ で ふちどり
-    const D = Math.max(8, C*0.32);
-    const ticks = () => { ctx.beginPath();
-      const tickX = (y, x0, x1, d) => { for(let x = x0; x <= x1 + 1e-9; x++){ ctx.moveTo(X(x), Y(y) - d/2); ctx.lineTo(X(x), Y(y) + d/2); } };
-      const tickY = (x, y0, y1, d) => { for(let y = y0; y <= y1 + 1e-9; y++){ ctx.moveTo(X(x) - d/2, Y(y)); ctx.lineTo(X(x) + d/2, Y(y)); } };
-      if(k === 'rhom'){ tickX(s.h/2, 0, s.w, D); tickY(s.w/2, 0, s.h, D); }
-      else if(k === 'comp'){ for(const p of s.parts){ tickX(p.y + p.h, p.x, p.x + p.w, D*2); tickY(p.x, p.y, p.y + p.h, D*2); } }
-      else { tickX(s.h, 0, s.w, D*2); tickY(hx, 0, s.h, D*2); if(k === 'trap') tickX(0, s.o, s.o + s.a, D*2); }
-      ctx.stroke(); };
-    ctx.save(); ctx.lineCap = 'round';
-    ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.lineWidth = 6; ticks();
-    ctx.strokeStyle = '#2b3a52'; ctx.lineWidth = 2.5; ticks();
-    ctx.restore();
-  }
   ctx.restore();
 }
 // もじ・ボタン は キャラ より てまえ（キャラ に かくれない）
