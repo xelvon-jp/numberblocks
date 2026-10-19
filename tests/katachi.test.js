@@ -28,16 +28,16 @@ module.exports = {
     t.eq(nx, [4, false], 'つぎへ で すすまない');
   },
 
-  'かたち：ちがう かず は「あと ○ マス」「○ マス おおい」で キャラ は のこる。2かい で 🛠️ が ゆれる → こうさくしつ で ながしかく に すると ヒント、「めんせき わかった！」で とじる': async t => {
+  'かたち：ちがう かず は「たりない！」「おおすぎ！」（いくつ ちがう か は いわない）で キャラ は のこる。2かい で 🛠️ が ゆれる → こうさくしつ で ながしかく に すると ヒント、「めんせき わかった！」で とじる': async t => {
     const p = await openK(t);
     await p.evaluate(() => { katachiStart(3); spawnBlock(10); spawnBlock(7); });
     await p.waitForTimeout(300);
     const a = await dropOnShape(p, 10);
-    t.eq([a.n, a.done, a.msg, a.stuck], [2, false, 'あと 2 マス たりない', false], 'たりない とき が ちがう');
+    t.eq([a.n, a.done, a.msg, a.stuck], [2, false, 'たりない！', false], 'たりない とき が ちがう');
     await p.evaluate(() => { setMode('+'); fuseBlocks(blocks[0], blocks[1]); });   // 17
     await p.waitForTimeout(300);
     const b = await dropOnShape(p, 17);
-    t.eq([b.n, b.msg, b.miss], [1, '5 マス おおい', 2], 'おおい とき が ちがう');
+    t.eq([b.n, b.msg, b.miss], [1, 'おおすぎ！', 2], 'おおい とき が ちがう');
     await p.waitForTimeout(50);
     t.eq(await p.evaluate(() => kst.stuck), true, '2かい ちがって も こうさくしつ が でない');
     const src = await p.evaluate(() => { const b = kousakuBtn(); handleStart(b.x + b.w/2, b.y + b.h/2, 9); handleEnd(b.x + b.w/2, b.y + b.h/2, 9); return kousakuFrame && kousakuFrame.getAttribute('src'); });

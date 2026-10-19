@@ -1,7 +1,8 @@
 // ─── かたち に ぴったり（めんせき・ためし）──────────────────────────────────
 // けいさん の がめん に かたち を おき、その ひろさ（マス の かず）の キャラ を けいさん で つくって
 // かたち の うえ で はなす。ぴったり なら かたち が キャラ の いろ で いっぱい に なる。
-//   たりない → みず の ように とちゅう まで たまって「あと ○ マス」。おおい → あふれて「○ マス おおい」。キャラ は もどる。
+//   たりない → みず の ように とちゅう まで たまって「たりない！」。おおい → あふれて「おおすぎ！」。キャラ は もどる。
+//   いくつ ちがう か は ださない（そこ から こたえ が でて しまう。パパ）。
 //   🛠️ こうさくしつ（lab-menseki.html を うえ に かさねる）は いつでも おせる。なやんで いる（2かい ちがう・45びょう）と ゆれて しらせる。
 //   こうさくしつ で わかる と「ヒント：4 × 3 の はんぶん を つくろう」が のこる。
 // かたち と ひろさ は kata.js（こうさくしつ と おなじ）。
@@ -115,12 +116,13 @@ function kLayout(){
   const s = KATACHI[katachiIdx], parts = Kata.parts(s);
   let bw = 0, bh = 0; for(const P of parts) for(const [x, y] of P){ bw = Math.max(bw, x); bh = Math.max(bh, y); }
   const top = TAB_H + 158, availH = Math.max(90, calcFloor() - 150 - top);
-  const C = Math.max(12, Math.floor(Math.min(34, (sw - 110)/bw, availH/bh)));
+  const m = s.show === 'num' ? 0 : 1;                           // まわり の ほうがんし（マス）
+  const C = Math.max(12, Math.floor(Math.min(34, (sw - 120)/(bw + 2*m), availH/(bh + 2*m))));
   const W = bw*C, H = bh*C;
-  return { s, parts, C, bw, bh, x: Math.round((sw - W)/2), y: top, W, H };
+  return { s, parts, C, bw, bh, x: Math.round((sw - W)/2), y: top + m*C, W, H, pad: m*C };
 }
-function kousakuBtn(){ const L = kLayout(); return { x: Math.min(sw - 52, L.x + L.W + 10), y: L.y - 6, w: 44, h: 44 }; }
-function kNextBtn(){ const L = kLayout(); return { x: sw/2 - 70, y: L.y + L.H + 56, w: 140, h: 40 }; }   // 「ぴったり！」の した
+function kousakuBtn(){ const L = kLayout(); return { x: Math.min(sw - 50, L.x + L.W + L.pad + 10), y: L.y - L.pad - 4, w: 44, h: 44 }; }
+function kNextBtn(){ const L = kLayout(); return { x: sw/2 - 70, y: L.y + L.H + L.pad + 56, w: 140, h: 40 }; }   // 「ぴったり！」の した
 
 function katachiStart(i){
   katachiOn = true; katachiIdx = Math.max(0, Math.min(KATACHI.length - 1, i || 0));
@@ -152,7 +154,7 @@ function katachiDrop(b, x, y){
   } else {
     kst.miss++;
     kst.fill = { f: 0, to: Math.min(1, v/A), col, t: now, over: v > A ? v - A : 0 };
-    kst.msg = v < A ? 'あと ' + Kata.fmt(A - v) + ' マス たりない' : Kata.fmt(v - A) + ' マス おおい';
+    kst.msg = v < A ? 'たりない！' : 'おおすぎ！';
     b.y = calcFloor() - b.height; b.vy = -6; b.x = Math.min(Math.max(playLeft(), b.x), sw - EDGE_MARGIN - b.width);   // キャラ は した へ もどる
   }
   updateTargets();
@@ -191,10 +193,19 @@ function drawKatachi(ctx, t){
   ctx.save();
   // ドラッグ ちゅう に うえ に くると ひかる
   const hover = !!(dragBlock && dragPtr && dragPtr.x > L.x - 16 && dragPtr.x < L.x + L.W + 16 && dragPtr.y > L.y - 16 && dragPtr.y < L.y + L.H + 16);
+  // まわり も ほうがんし（マス目 の もんだい）：かたち の まわり 1マス ぶん に おなじ マス目 を しく
+  if(s.show !== 'num'){
+    const m = 1, gx = L.x - m*C, gy = L.y - m*C, gw = L.W + 2*m*C, gh = L.H + 2*m*C;
+    ctx.save(); ctx.fillStyle = 'rgba(232,238,246,0.92)'; ctx.beginPath(); ctx.roundRect(gx - 4, gy - 4, gw + 8, gh + 8, 10); ctx.fill();
+    ctx.strokeStyle = 'rgba(120,140,170,0.45)'; ctx.lineWidth = 1.5; ctx.beginPath();
+    for(let x = -m; x <= L.bw + m; x++){ ctx.moveTo(X(x), gy); ctx.lineTo(X(x), gy + gh); }
+    for(let y = -m; y <= L.bh + m; y++){ ctx.moveTo(gx, Y(y)); ctx.lineTo(gx + gw, Y(y)); }
+    ctx.stroke(); ctx.restore();
+  }
   // ふち：ぜんぶ の かたち を ふとく なぞって から なか を ぬる と、あわせめ の せん は きえて そと がわ だけ のこる
   ctx.lineJoin = 'round'; ctx.strokeStyle = hover ? '#e0a000' : '#4a5a74'; ctx.lineWidth = 6;
   for(const P of parts){ path(P); ctx.stroke(); }
-  ctx.fillStyle = hover ? 'rgb(255,250,215)' : 'rgb(250,251,253)';
+  ctx.fillStyle = hover ? 'rgb(255,250,215)' : 'rgb(255,255,255)';
   for(const P of parts){ path(P); ctx.fill(); }
   // みず の ように たまる（ぴったり なら いっぱい）
   if(kst.fill){
@@ -206,7 +217,7 @@ function drawKatachi(ctx, t){
       ctx.save(); all(); ctx.clip(); ctx.fillStyle = rgb(F.col); ctx.fillRect(L.x - 2, Y(lv), L.W + 4, L.H - lv*C + 2); ctx.restore();
       if(F.over && rise >= 1 && drain < 1){                    // あふれた ぶん：うえ に こぼれる ブロック
         ctx.save(); ctx.globalAlpha = 1 - drain; ctx.fillStyle = rgb(F.col);
-        const n = Math.min(24, Math.ceil(F.over)), bob = Math.sin(now*0.012)*2;
+        const n = 5, bob = Math.sin(now*0.012)*2;              // こぼれる かず は いつも おなじ（ちがい が かぞえられない ように）
         for(let i = 0; i < n; i++){ const cx = L.x + L.W/2 + (i - (n-1)/2)*(C*0.62), cy = L.y - C*0.6 - (i%2)*C*0.35 + bob; ctx.fillRect(cx - C*0.27, cy - C*0.27, C*0.54, C*0.54); }
         ctx.restore();
       }
@@ -250,7 +261,7 @@ function drawKatachiFront(ctx, t){
   { const b = kListOpenBtn(), k = KATACHI.slice(0, katachiIdx).filter(q => q.lv === s.lv).length;   // 📋 いちらん を ひらく
     ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 10); ctx.fill();
     kLabel(ctx, '📋 ' + KATACHI_LV[s.lv] + ' ' + (k + 1) + '/3', b.x + 8, b.y + b.h/2, 'left', 'middle', KATACHI_COLORS[s.lv], 'bold 13px sans-serif'); }
-  let ty = L.y + L.H + 28;
+  let ty = L.y + L.H + L.pad + 28;
   if(kst.hint && !kst.done){
     kLabel(ctx, 'ヒント：' + kst.hint + ' を つくろう', sw/2, ty, 'center', 'top', '#7a5ad0', F); ty += 22;
   }
