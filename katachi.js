@@ -185,7 +185,7 @@ function drawKatachi(ctx, t){
   if(!katachiOn || !kst) return;
   const L = kLayout(), { s, C, parts } = L, now = performance.now();
   if(!kst.done && !kst.stuck && (kst.miss >= KATACHI_STUCK_MISS || Date.now() - kst.t0 > KATACHI_STUCK_MS)){
-    kst.stuck = true; if(!kst.fill) kst.msg = 'こまったら 🛠️ こうさくしつ で しらべて みよう';
+    kst.stuck = true;                                          // 🛠️ が ゆれる だけ（ことば は ださない。パパ）
   }
   const X = x => L.x + x*C, Y = y => L.y + y*C;
   const path = P => { ctx.beginPath(); P.forEach(([x, y], i) => i ? ctx.lineTo(X(x), Y(y)) : ctx.moveTo(X(x), Y(y))); ctx.closePath(); };
@@ -211,7 +211,7 @@ function drawKatachi(ctx, t){
   if(kst.fill){
     const F = kst.fill, age = now - F.t, rise = Math.min(1, age/700), drain = F.keep ? 0 : Math.max(0, (age - 1900)/600);
     F.f = F.to * rise * (1 - Math.min(1, drain));
-    if(!F.keep && drain >= 1){ kst.fill = null; if(kst.stuck) kst.msg = 'こまったら 🛠️ こうさくしつ で しらべて みよう'; }
+    if(!F.keep && drain >= 1) kst.fill = null;
     else if(F.f > 0.001){
       const lv = kLevel(parts, L.bh, F.f);
       ctx.save(); all(); ctx.clip(); ctx.fillStyle = rgb(F.col); ctx.fillRect(L.x - 2, Y(lv), L.W + 4, L.H - lv*C + 2); ctx.restore();
@@ -247,14 +247,20 @@ function drawKatachiFront(ctx, t){
   const L = kLayout(), { s, C } = L, X = x => L.x + x*C, Y = y => L.y + y*C, k = s.kind;
   const F = '900 15px sans-serif', red = '#d0553f', ink = '#2b3a52';
   ctx.save();
-  if((s.show === 'num' || kst.done) && k !== 'comp'){
-    if(k === 'sq'){ kLabel(ctx, 'いっぺん ' + s.w, X(s.w/2), Y(s.h) + 4, 'center', 'top', ink, F); }
-    else if(k === 'rect'){ kLabel(ctx, 'よこ ' + s.w, X(s.w/2), Y(s.h) + 4, 'center', 'top', ink, F); kLabel(ctx, 'たて ' + s.h, L.x - 6, Y(s.h/2), 'right', 'middle', ink, F); }
-    else if(k === 'rhom'){ kLabel(ctx, 'たいかくせん ' + s.w, X(s.w/2), Y(s.h) + 4, 'center', 'top', red, F); kLabel(ctx, s.h, L.x - 6, Y(s.h/2), 'right', 'middle', red, F); }
+  // へん の なまえ：かず だけ の もんだい（と できた あと）は かず、マス目 の もんだい は「？」（なに を かければ いいか の ヒント。パパ）
+  if(k !== 'comp'){
+    const known = s.show === 'num' || kst.done, v = n => known ? ' ' + n : '：？', P = L.pad;   // 「ていへん 7」／「ていへん：？」
+    // マス目 の もんだい は まわり の ほうがんし の ふち に かく（した は した の 1れつ、ひだり は たて がき）
+    const bottom = (t, col) => P ? kLabel(ctx, t, X(s.w/2), Y(s.h) + P/2, 'center', 'middle', col, F) : kLabel(ctx, t, X(s.w/2), Y(s.h) + 4, 'center', 'top', col, F);
+    const left = (t, col) => P ? kVLabel(ctx, String(t), L.x - P/2, Y(s.h/2), col) : kLabel(ctx, t, L.x - 6, Y(s.h/2), 'right', 'middle', col, F);
+    const topL = (t, x) => P ? kLabel(ctx, t, x, L.y - P/2, 'center', 'middle', ink, F) : kLabel(ctx, t, x, L.y - 4, 'center', 'bottom', ink, F);
+    if(k === 'sq') bottom('いっぺん' + v(s.w), ink);
+    else if(k === 'rect'){ bottom('よこ' + v(s.w), ink); left('たて' + v(s.h), ink); }
+    else if(k === 'rhom'){ bottom('たいかくせん' + v(s.w), red); left(known ? s.h : '？', red); }
     else {
-      kLabel(ctx, (k === 'trap' ? 'かてい ' : 'ていへん ') + s.w, X(s.w/2), Y(s.h) + 4, 'center', 'top', ink, F);
-      kLabel(ctx, 'たかさ ' + s.h, L.x - 6, Y(s.h/2), 'right', 'middle', red, F);
-      if(k === 'trap') kLabel(ctx, 'じょうてい ' + s.a, X(s.o + s.a/2), L.y - 4, 'center', 'bottom', ink, F);
+      bottom((k === 'trap' ? 'かてい' : 'ていへん') + v(s.w), ink);
+      left('たかさ' + v(s.h), red);
+      if(k === 'trap') topL('じょうてい' + v(s.a), X(s.o + s.a/2));
     }
   }
   // なんもんめ・ことば・ヒント
@@ -281,6 +287,11 @@ function drawKatachiFront(ctx, t){
     ctx.restore();
   }
   ctx.restore();
+}
+// たて がき（ひだり の ほうがんし の ふち に「た か さ ？」）
+function kVLabel(ctx, text, x, cy, col){
+  const ch = [...text.replace(/ /g, '').replace('：', '')], lh = 16, y0 = cy - (ch.length - 1)*lh/2;
+  ch.forEach((c, i) => kLabel(ctx, c, x, y0 + i*lh, 'center', 'middle', col, '900 14px sans-serif'));
 }
 function kLabel(ctx, text, x, y, align, base, col, font){
   text = String(text);
