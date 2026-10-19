@@ -205,8 +205,7 @@ function renderStages(){
     if(i === si) b.classList.add('on'); if(clear.includes(i)) b.classList.add('clear'); b.onclick = () => load(i); box.appendChild(b); });
 }
 function updateArea(){
-  const total = pieces.reduce((s, p) => s + areaOf(p.pts), 0);
-  $('area').textContent = 'ひろさ： ' + fmt(total) + ' マス' + (pieces.length > 1 ? '　かたち ' + pieces.length + 'こ' : '');
+  $('area').textContent = pieces.length > 1 ? 'かたち ' + pieces.length + 'こ' : '';   // ひろさ の かず は ださない
 }
 function check(){
   const st = STAGES[si]; if(doneAt) return;
@@ -328,12 +327,7 @@ function drawPiece(p, col){
   for(let y = Math.floor(b[1]); y <= Math.ceil(b[3]); y++){ ctx.moveTo(SX(b[0]), SY(y)); ctx.lineTo(SX(b[2]), SY(y)); }
   ctx.stroke(); ctx.restore();
   path(); ctx.strokeStyle = shade(col, 0.6); ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.stroke();
-  // ひろさ（おもさ の まんなか に）
-  let cx = 0, cy = 0, a2 = 0;
-  for(let i = 0; i < w.length; i++){ const [x0, y0] = w[i], [x1, y1] = w[(i+1)%w.length], k = x0*y1 - x1*y0; a2 += k; cx += (x0 + x1)*k; cy += (y0 + y1)*k; }
-  cx /= 3*a2; cy /= 3*a2;
-  ctx.fillStyle = '#fff'; ctx.font = `900 ${Math.max(10, Math.min(C*0.5, Math.sqrt(areaOf(p.pts))*C*0.42))}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.25)'; const s = fmt(areaOf(p.pts)); ctx.strokeText(s, SX(cx), SY(cy)); ctx.fillText(s, SX(cx), SY(cy));
+  // ひろさ の かず は ださない（こたえ が みえて しまう。マス を かぞえて きづく ように。パパ）
 }
 function draw(){
   ctx.clearRect(0, 0, W, H);

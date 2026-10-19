@@ -5018,6 +5018,7 @@ function handleStart(x,y,pid){
   }
   // いちらんを出しているあいだは、ほかのボタンには触れさせない
   if(stageOpen){ handleStageTap(x,y,pid); return; }
+  if(katachiListTap(x,y)) return;                   // かたち（ためし）の いちらん
   // パレードの とちゅうは、ながおし で つぎの おだいへ（ちょんと おしただけでは すすまない。
   // ひなたが さいごまで 見られるように）。タブと 歯車は そのまま きく。
   if(paradeBreak && y > TAB_H){ paradeHold = { pid, t0: Date.now(), x, y }; return; }
@@ -5510,6 +5511,7 @@ function drawFrame(ts){
   }
   // ステージいちらんはいちばん上に重ねる
   if(stageOpen) drawStageSelect(ctx, walkTime);
+  drawKatachiList(ctx, walkTime);
   if(setOpen) drawSettings(ctx);
   // 「だれが あそぶ？」はさらにその上
   if(whoOpen) drawWhoPicker(ctx, walkTime);
@@ -5599,7 +5601,7 @@ quizLimitEl.textContent = quizLimitLabel();
 setMode('+');
 followTaskMode();          // 前回とけいの おだいの とちゅうなら、とけいの画面から始める
 // ためし（lab.html）の「かたち に ぴったり」から：index.html?katachi=1
-if(/[?&]katachi=1/.test(location.search)){ if(taskOn) setTaskOn(false); whoOpen = false; setMode('x'); katachiStart(0); }
+if(/[?&]katachi=1/.test(location.search)){ if(taskOn) setTaskOn(false); whoOpen = false; setMode('x'); katachiStart(0); kList = true; }   // はじめ は いちらん から
 if(typeof Mizu !== 'undefined') Mizu.autoStart();   // ガラス の みず の センサー は はじめ から オン（iPhone は さいしょに さわった とき に きく）
 requestAnimationFrame(loop);
 </script>

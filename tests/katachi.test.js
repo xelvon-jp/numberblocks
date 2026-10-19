@@ -3,7 +3,7 @@ async function openK(t){
   const p = await t.open();
   await p.goto(p.url().split('?')[0] + '?katachi=1');
   await p.waitForFunction(() => typeof drawFrame === 'function' && katachiOn);
-  await p.evaluate(() => { whoOpen = false; setQuizOn(false); });
+  await p.evaluate(() => { whoOpen = false; setQuizOn(false); kList = false; });
   return p;
 }
 // キャラ を もって かたち の まんなか で はなす
@@ -55,37 +55,60 @@ module.exports = {
     t.eq(await p.evaluate(() => [!!kousakuFrame, document.querySelectorAll('iframe[src^="lab-menseki"]').length]), [false, 0], 'もどる で とじない');
   },
 
-  'かたち：さんかく は ÷2 の かず（4 × 3 ÷ 2 ＝ 6）。こうさくしつ は ながしかく から きりだす。タブ を おすと おわる': async t => {
+  'かたち：さんかく は ÷2 の かず（5 × 4 ÷ 2 ＝ 10）。こうさくしつ は ながしかく から きりだす。タブ を おすと おわる': async t => {
     const p = await openK(t);
-    const r = await p.evaluate(() => { katachiStart(6); spawnBlock(6); return [KATACHI[6].kind, kArea(KATACHI[6])]; });
-    t.eq(r, ['rtri', 6], 'ちょっかく さんかく で ない');
+    const r = await p.evaluate(() => { katachiStart(7); spawnBlock(10); return [KATACHI[7].kind, kArea(KATACHI[7])]; });
+    t.eq(r, ['rtri', 10], 'ちょっかく さんかく で ない');
     await p.waitForTimeout(300);
-    t.eq((await dropOnShape(p, 6)).msg, 'ぴったり！ ていへん 4 × たかさ 3 ÷ 2 ＝ 6', 'さんかく が ぴったり に ならない');
-    const half = await p.evaluate(() => { katachiStart(11); return kArea(KATACHI[11]); });
-    t.eq(half, 7.5, '5 × 3 ÷ 2 が 7.5 で ない');
+    t.eq((await dropOnShape(p, 10)).msg, 'ぴったり！ ていへん 5 × たかさ 4 ÷ 2 ＝ 10', 'さんかく が ぴったり に ならない');
+    await p.evaluate(() => katachiStart(9));      // えいかく さんかく 6×5
     await p.evaluate(() => { openKousaku(); });
     const fr = await (await p.waitForSelector('iframe[src^="lab-menseki.html"]')).contentFrame();
     await fr.waitForFunction(() => window.men);
     // とがった さんかく 5×3：まわり の ながしかく（15）から てんせん 2ほん で きりだす → ヒント「5 × 3 の はんぶん」
     const m = await fr.evaluate(() => { const a0 = men.pieces().map(q => q.area); for(const g of men.guides()) men.cut(g[0][0], g[0][1], g[1][0], g[1][1]);
       return [a0, men.done()]; });
-    t.eq(m, [[15], true], 'こうさくしつ で ながしかく から さんかく を きりだせない');
+    t.eq(m, [[30], true], 'こうさくしつ で ながしかく から さんかく を きりだせない');
     await p.waitForTimeout(200);
-    t.eq(await p.evaluate(() => kst.hint), '5 × 3 の はんぶん', 'さんかく の ヒント が ちがう');
+    t.eq(await p.evaluate(() => kst.hint), '6 × 5 の はんぶん', 'さんかく の ヒント が ちがう');
     await p.evaluate(() => { drawTabsAndUI(ctx); const b = tabBtns.find(x => x.val === 'calc'); handleStart(b.x + b.w/2, b.y + b.h/2, 's'); });
     t.eq(await p.evaluate(() => [katachiOn, !!kousakuFrame]), [false, false], 'タブ で おわらない');
   },
 
-  'かたち：9 レベル の ひろさ と しき（どんかく・ひしがた・だいけい・ふくざつ も）': async t => {
+  'かたち：9 レベル の ひろさ と しき（ぜんぶ せいすう・ぜんぶ ちがう こたえ。どんかく・ひしがた・だいけい・ふくざつ も）': async t => {
     const p = await openK(t);
     const r = await p.evaluate(() => KATACHI.map(s => [s.lv, Kata.area(s)]));
     t.eq(r.map(x => x[0]), [0,0,0,1,1,1,2,2,2,3,3,3,4,4,4,5,5,5,6,6,6,7,7,7,8,8,8], 'レベル の じゅん が ちがう');
-    t.eq(r.map(x => x[1]), [9,16,36,12,18,28,6,12,7.5,6,12,7.5,6,6,10,8,12,18,15,15,24,9,8,16,18,12,16], 'ひろさ が ちがう');
+    const A = r.map(x => x[1]);
+    t.eq(A, [9,25,36,12,30,32,3,10,14,15,20,21,5,6,7,4,8,24,16,28,40,11,13,26,18,22,27], 'ひろさ が ちがう');
+    t.eq([A.every(Number.isInteger), new Set(A).size], [true, 27], 'ひろさ に .5 が ある／おなじ こたえ が ある');
     const f = await p.evaluate(() => [12, 15, 21, 24, 26].map(i => Kata.formula(KATACHI[i])));
-    t.eq(f, ['ていへん 3 × たかさ 4 ÷ 2 ＝ 6', 'たいかくせん 4 × 4 ÷ 2 ＝ 8', '（じょうてい 2 ＋ かてい 4）× たかさ 3 ÷ 2 ＝ 9', '3 × 2 ＋ 6 × 2 ＝ 18', '4 × 2 ÷ 2 ＋ 4 × 3 ＝ 16'], 'しき が ちがう');
+    t.eq(f, ['ていへん 2 × たかさ 5 ÷ 2 ＝ 5', 'たいかくせん 4 × 2 ÷ 2 ＝ 4', '（じょうてい 3 ＋ かてい 8）× たかさ 2 ÷ 2 ＝ 11', '3 × 2 ＋ 6 × 2 ＝ 18', '6 × 3 ÷ 2 ＋ 6 × 3 ＝ 27'], 'しき が ちがう');
     // ふくざつ（L の かたち）も ぴったり で いっぱい に なる
     await p.evaluate(() => { katachiStart(24); setMode('+'); spawnBlock(9); spawnBlock(9); fuseBlocks(blocks[0], blocks[1]); });
     await p.waitForTimeout(300);
     t.eq((await dropOnShape(p, 18)).done, true, 'ふくざつ な かたち が ぴったり に ならない');
+  },
+
+  'かたち：はじめ は いちらん。もんだい を えらぶ と はじまり、ぴったり で ⭐ が のこる。いちらん の あいだ は うしろ を さわれない': async t => {
+    const p = await t.open();
+    await p.goto(p.url().split('?')[0] + '?katachi=1');
+    await p.waitForFunction(() => typeof drawFrame === 'function' && katachiOn);
+    await p.evaluate(() => { whoOpen = false; setQuizOn(false); });
+    await p.waitForTimeout(200);
+    const r = await p.evaluate(() => {
+      const open0 = kList, cell = kListBtns.find(b => b.i === 4);
+      const pad = getNumpadLayout().find(b => b.label === '3');
+      handleStart(pad.x + pad.w/2, pad.y + pad.h/2, 1); handleEnd(pad.x + pad.w/2, pad.y + pad.h/2, 1);   // うしろ の キー は きかない
+      const n0 = blocks.length;
+      handleStart(cell.x + cell.w/2, cell.y + cell.h/2, 2);
+      return [open0, n0, kList, katachiIdx];
+    });
+    t.eq(r, [true, 0, false, 4], 'いちらん から えらべない／うしろ の キー が きいた');
+    await p.evaluate(() => { spawnBlock(6); spawnBlock(5); fuseBlocks(blocks[0], blocks[1]); });   // 6 × 5 ＝ 30
+    await p.waitForTimeout(300);
+    t.eq((await dropOnShape(p, 30)).done, true, 'ぴったり に ならない');
+    const st = await p.evaluate(() => { const b = kListOpenBtn(); handleStart(b.x + 10, b.y + 10, 3); drawKatachiList(ctx, 0); return [kList, kClears(), kListBtns.length]; });
+    t.eq(st, [true, [4], 28], '⭐ が のこらない／📋 で いちらん が ひらかない');
   },
 };

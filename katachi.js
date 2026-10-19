@@ -12,38 +12,84 @@
 //   → ひしがた → へいこうしへんけい → だいけい → ふくざつ な かたち。どれも 3もん（マス が みえる 2もん → へん の かず だけ）。
 // めもり だけ（マス目 なし）は「とても わかりにくい」ので やめた（パパ）。
 const KATACHI_LV = ['ましかく', 'ながしかく', 'ちょっかく さんかく', 'えいかく さんかく', 'どんかく さんかく', 'ひしがた', 'へいこうしへんけい', 'だいけい', 'ふくざつ な かたち'];
+// ひろさ は ぜんぶ せいすう（.5 は ださない）で、27もん とも ちがう こたえ（おなじ しき・こたえ を くりかえさない）。パパと きめた。
 const KATACHI = [
-  { lv:0, show:'grid',  kind:'sq',   w:3, h:3 },
-  { lv:0, show:'grid',  kind:'sq',   w:4, h:4 },
-  { lv:0, show:'num',   kind:'sq',   w:6, h:6 },
-  { lv:1, show:'grid',  kind:'rect', w:4, h:3 },
-  { lv:1, show:'grid',  kind:'rect', w:6, h:3 },
-  { lv:1, show:'num',   kind:'rect', w:7, h:4 },
-  { lv:2, show:'grid',  kind:'rtri', w:4, h:3 },
-  { lv:2, show:'grid',  kind:'rtri', w:6, h:4 },
-  { lv:2, show:'num',   kind:'rtri', w:5, h:3 },
-  { lv:3, show:'grid',  kind:'tri',  w:4, h:3, o:1 },
-  { lv:3, show:'grid',  kind:'tri',  w:6, h:4, o:2 },
-  { lv:3, show:'num',   kind:'tri',  w:5, h:3, o:2 },
-  { lv:4, show:'grid',  kind:'otri', w:3, h:4, o:5 },
-  { lv:4, show:'grid',  kind:'otri', w:4, h:3, o:6 },
-  { lv:4, show:'num',   kind:'otri', w:4, h:5, o:7 },
-  { lv:5, show:'grid',  kind:'rhom', w:4, h:4 },
-  { lv:5, show:'grid',  kind:'rhom', w:6, h:4 },
-  { lv:5, show:'num',   kind:'rhom', w:6, h:6 },
-  { lv:6, show:'grid',  kind:'para', w:5, h:3, o:1 },
-  { lv:6, show:'grid',  kind:'para', w:5, h:3, o:2 },
-  { lv:6, show:'num',   kind:'para', w:6, h:4, o:2 },
-  { lv:7, show:'grid',  kind:'trap', w:4, h:3, o:1, a:2 },
-  { lv:7, show:'grid',  kind:'trap', w:5, h:2, o:1, a:3 },
-  { lv:7, show:'num',   kind:'trap', w:6, h:4, o:2, a:2 },
+  { lv:0, show:'grid',  kind:'sq',   w:3, h:3 },                 //  9
+  { lv:0, show:'grid',  kind:'sq',   w:5, h:5 },                 // 25
+  { lv:0, show:'num',   kind:'sq',   w:6, h:6 },                 // 36
+  { lv:1, show:'grid',  kind:'rect', w:4, h:3 },                 // 12
+  { lv:1, show:'grid',  kind:'rect', w:6, h:5 },                 // 30
+  { lv:1, show:'num',   kind:'rect', w:8, h:4 },                 // 32
+  { lv:2, show:'grid',  kind:'rtri', w:3, h:2 },                 //  3
+  { lv:2, show:'grid',  kind:'rtri', w:5, h:4 },                 // 10
+  { lv:2, show:'num',   kind:'rtri', w:7, h:4 },                 // 14
+  { lv:3, show:'grid',  kind:'tri',  w:6, h:5, o:2 },            // 15
+  { lv:3, show:'grid',  kind:'tri',  w:8, h:5, o:3 },            // 20
+  { lv:3, show:'num',   kind:'tri',  w:7, h:6, o:3 },            // 21
+  { lv:4, show:'grid',  kind:'otri', w:2, h:5, o:4 },            //  5
+  { lv:4, show:'grid',  kind:'otri', w:3, h:4, o:5 },            //  6
+  { lv:4, show:'num',   kind:'otri', w:2, h:7, o:4 },            //  7
+  { lv:5, show:'grid',  kind:'rhom', w:4, h:2 },                 //  4
+  { lv:5, show:'grid',  kind:'rhom', w:4, h:4 },                 //  8
+  { lv:5, show:'num',   kind:'rhom', w:8, h:6 },                 // 24
+  { lv:6, show:'grid',  kind:'para', w:4, h:4, o:1 },            // 16
+  { lv:6, show:'grid',  kind:'para', w:7, h:4, o:2 },            // 28
+  { lv:6, show:'num',   kind:'para', w:8, h:5, o:2 },            // 40
+  { lv:7, show:'grid',  kind:'trap', w:8, h:2, o:2, a:3 },       // 11
+  { lv:7, show:'grid',  kind:'trap', w:9, h:2, o:2, a:4 },       // 13
+  { lv:7, show:'num',   kind:'trap', w:8, h:4, o:1, a:5 },       // 26
   // ふくざつ：ながしかく や さんかく を あわせた かたち（split ＝ マス目 と、わけめ の てんせん）
-  { lv:8, show:'grid',  kind:'comp', parts:[{ kind:'rect', x:0, y:0, w:3, h:2 }, { kind:'rect', x:0, y:2, w:6, h:2 }] },
-  { lv:8, show:'grid',  kind:'comp', parts:[{ kind:'rect', x:1, y:0, w:2, h:2 }, { kind:'rect', x:0, y:2, w:4, h:2 }] },
-  { lv:8, show:'split', kind:'comp', parts:[{ kind:'tri', x:0, y:0, w:4, h:2, o:2 }, { kind:'rect', x:0, y:2, w:4, h:3 }] },
+  { lv:8, show:'grid',  kind:'comp', parts:[{ kind:'rect', x:0, y:0, w:3, h:2 }, { kind:'rect', x:0, y:2, w:6, h:2 }] },               // 18（L）
+  { lv:8, show:'grid',  kind:'comp', parts:[{ kind:'rect', x:2, y:0, w:2, h:2 }, { kind:'rect', x:0, y:2, w:6, h:3 }] },               // 22（凸）
+  { lv:8, show:'split', kind:'comp', parts:[{ kind:'tri', x:0, y:0, w:6, h:3, o:3 }, { kind:'rect', x:0, y:3, w:6, h:3 }] },           // 27（いえ）
 ];
 const KATACHI_STUCK_MISS = 2, KATACHI_STUCK_MS = 45000;
 let katachiOn = false, katachiIdx = 0, kst = null, kousakuFrame = null;
+// ── いちらん（おだい と おなじ ように レベル と もんだい を えらぶ）。できた もんだい は ⭐（ひと ごと に のこす）──
+let kList = false, kListBtns = [];
+const KATACHI_COLORS = ['#c08a20', '#4a9a55', '#c0558a', '#7a5ad0', '#d0553f', '#2a9db0', '#3f8fd0', '#b0508a', '#6a7a2a'];
+const kWho = () => { try{ return profile().id; }catch(e){ return 'x'; } };
+function kClears(){ try{ return (JSON.parse(localStorage.getItem('nb_katachi') || '{}')[kWho()]) || []; }catch(e){ return []; } }
+function kMarkClear(i){ try{ const all = JSON.parse(localStorage.getItem('nb_katachi') || '{}'), a = all[kWho()] || []; if(!a.includes(i)) a.push(i); all[kWho()] = a; localStorage.setItem('nb_katachi', JSON.stringify(all)); }catch(e){} }
+function kListOpenBtn(){ return { x: 6, y: TAB_H + 126, w: 170, h: 28 }; }
+function kListLayout(){
+  const w = Math.min(360, sw - 20), rowH = Math.max(30, Math.min(46, (sh - TAB_H - 130)/KATACHI_LV.length)), head = 44;
+  const h = head + rowH*KATACHI_LV.length + 58, x = (sw - w)/2, y = Math.max(TAB_H + 8, (sh - h)/2);
+  return { x, y, w, h, rowH, head };
+}
+// いちらん を だして いる あいだ は、ぜんぶ の タップ を ここ で うける（うしろ の ボタン に とどかない）
+function katachiListTap(x, y){
+  if(!katachiOn || !kList) return false;
+  for(const b of kListBtns) if(ptInRect(x, y, b.x, b.y, b.w, b.h)){ if(b.i === -1) kList = false; else { kList = false; katachiStart(b.i); } return true; }
+  return true;
+}
+function drawKatachiList(ctx, t){
+  if(!katachiOn || !kList) return;
+  const L = kListLayout(), cl = kClears(); kListBtns = [];
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, TAB_H, sw, sh - TAB_H);
+  ctx.fillStyle = '#fdfdff'; ctx.beginPath(); ctx.roundRect(L.x, L.y, L.w, L.h, 14); ctx.fill();
+  ctx.fillStyle = '#2b3a52'; ctx.font = '900 18px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('🔷 かたち の いちらん（⭐ ' + cl.length + '/' + KATACHI.length + '）', L.x + L.w/2, L.y + L.head/2 + 2);
+  const nameW = Math.min(150, L.w*0.44), cellW = (L.w - nameW - 28)/3;
+  KATACHI_LV.forEach((name, lv) => {
+    const ry = L.y + L.head + lv*L.rowH, col = KATACHI_COLORS[lv];
+    ctx.fillStyle = col; ctx.beginPath(); ctx.roundRect(L.x + 8, ry + 3, nameW, L.rowH - 6, 9); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = '900 ' + (name.length > 7 ? 12 : 14) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.fillText(name, L.x + 8 + nameW/2, ry + L.rowH/2);
+    KATACHI.forEach((sh, i) => { if(sh.lv !== lv) return;
+      const k = KATACHI.slice(0, i).filter(q => q.lv === lv).length, cx = L.x + 16 + nameW + k*cellW, done = cl.includes(i), cur = i === katachiIdx;
+      ctx.fillStyle = done ? '#fff1c2' : '#eef2f7'; ctx.beginPath(); ctx.roundRect(cx + 2, ry + 3, cellW - 4, L.rowH - 6, 9); ctx.fill();
+      if(cur){ ctx.strokeStyle = col; ctx.lineWidth = 3; ctx.stroke(); }
+      ctx.fillStyle = '#2b3a52'; ctx.font = '900 15px sans-serif'; ctx.fillText((k + 1) + (sh.show === 'num' ? ' 🔢' : '') + (done ? ' ⭐' : ''), cx + cellW/2, ry + L.rowH/2);
+      kListBtns.push({ x: cx + 2, y: ry + 3, w: cellW - 4, h: L.rowH - 6, i });
+    });
+  });
+  const bx = L.x + L.w/2 - 70, by = L.y + L.h - 48;
+  ctx.fillStyle = '#dfe6ef'; ctx.beginPath(); ctx.roundRect(bx, by, 140, 38, 12); ctx.fill();
+  ctx.fillStyle = '#2b3a52'; ctx.font = '900 16px sans-serif'; ctx.fillText('とじる', bx + 70, by + 19);
+  kListBtns.push({ x: bx, y: by, w: 140, h: 38, i: -1 });
+  ctx.restore();
+}
 
 const kArea = s => Kata.area(s);
 // y ＞＝ v の ところ（した がわ）だけ のこす（とつ で ない かたち でも ひろさ は ただしい）
@@ -81,11 +127,12 @@ function katachiStart(i){
   kst = { miss: 0, t0: Date.now(), fill: null, msg: '', hint: null, done: false, stuck: false };
   if(typeof blocks !== 'undefined'){ blocks = []; clearUndo(); }
 }
-function katachiStop(){ katachiOn = false; kst = null; closeKousaku(); }
+function katachiStop(){ katachiOn = false; kst = null; kList = false; closeKousaku(); }
 
 // タップ：🛠️ と つぎへ。うけたら true
 function katachiTap(x, y){
   if(!katachiOn) return false;
+  { const b = kListOpenBtn(); if(ptInRect(x, y, b.x, b.y, b.w, b.h)){ kList = true; return true; } }   // 📋 いちらん
   if(kst.done){ const b = kNextBtn(); if(ptInRect(x, y, b.x, b.y, b.w, b.h)){ katachiStart((katachiIdx + 1) % KATACHI.length); return true; } }
   else { const b = kousakuBtn(); if(ptInRect(x, y, b.x, b.y, b.w, b.h)){ openKousaku(); return true; } }   // 🛠️ は いつも おせる
   return false;
@@ -100,6 +147,7 @@ function katachiDrop(b, x, y){
     blocks = blocks.filter(o => o !== b);
     kst.done = true; kst.fill = { f: 0, to: 1, col, t: now, keep: true };
     kst.msg = 'ぴったり！ ' + Kata.formula(L.s);
+    kMarkClear(katachiIdx);
     for(let i = 0; i < 60; i++) fxParticles.push(new Particle(L.x + L.W/2, L.y + L.H/2));
   } else {
     kst.miss++;
@@ -199,7 +247,9 @@ function drawKatachiFront(ctx, t){
     }
   }
   // なんもんめ・ことば・ヒント
-  kLabel(ctx, KATACHI_LV[s.lv] + '　' + (katachiIdx + 1) + '/' + KATACHI.length, 10, TAB_H + 140, 'left', 'top', '#5a6576', 'bold 12px sans-serif');
+  { const b = kListOpenBtn(), k = KATACHI.slice(0, katachiIdx).filter(q => q.lv === s.lv).length;   // 📋 いちらん を ひらく
+    ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.beginPath(); ctx.roundRect(b.x, b.y, b.w, b.h, 10); ctx.fill();
+    kLabel(ctx, '📋 ' + KATACHI_LV[s.lv] + ' ' + (k + 1) + '/3', b.x + 8, b.y + b.h/2, 'left', 'middle', KATACHI_COLORS[s.lv], 'bold 13px sans-serif'); }
   let ty = L.y + L.H + 28;
   if(kst.hint && !kst.done){
     kLabel(ctx, 'ヒント：' + kst.hint + ' を つくろう', sw/2, ty, 'center', 'top', '#7a5ad0', F); ty += 22;

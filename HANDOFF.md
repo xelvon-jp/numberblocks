@@ -136,7 +136,10 @@
   - `index.html?katachi=1`（🔷 かたち に ぴったり・`katachi.js`）：けいさん の がめん に かたち（9レベル×3もん：ましかく → ながしかく → ちょっかく・えいかく・どんかく さんかく → ひしがた → へいこうしへんけい → だいけい → ふくざつ。どれも マス が みえる 2もん → へん の かず だけ。めもり だけ は わかりにくい ので やめた）。かたち と ひろさ・しき は `kata.js`（こうさくしつ と おなじ）。
     ひろさ と おなじ キャラ を つくって かたち の うえ で はなす。ぴったり → いっぱい に ぬれて しき。ちがう → みず の ように たまって「あと ○ マス」／あふれて「○ マス おおい」、キャラ は した へ もどる。
     🛠️ こうさくしつ（lab-menseki.html の embed を うえ に かさねる）は さいしょ から。2かい ちがう か 45びょう で ゆれる。そこで わかる と「ヒント：4 × 3 の はんぶん を つくろう」。
-    index.html から よぶ のは katachiStart/Stop・katachiTap・katachiDrop・drawKatachi/drawKatachiFront だけ。きろく（おだい）とは べつ、タブ を おすと おわる。
+    ひろさ は ぜんぶ せいすう（.5 なし）で、27もん とも ちがう こたえ（3〜40）。おなじ しき・こたえ は くりかえさない（パパ）。
+    いちらん（📋・`drawKatachiList`）：おだい と おなじ ように レベル × 3もん を えらぶ。はじめ は いちらん から。できた もんだい は ⭐（`nb_katachi`、ひと ごと）。
+    こうさくしつ の かたち には ひろさ の かず を ださない（こたえ が みえる ので）。
+    index.html から よぶ のは katachiStart/Stop・katachiTap・katachiListTap・katachiDrop・drawKatachi/drawKatachiFront/drawKatachiList だけ。きろく（おだい）とは べつ、タブ を おすと おわる。
     iPhone は ボタンを おして `DeviceOrientationEvent.requestPermission()`。センサーが ない ときは ゆびで よこに なぞると かたむく。つまみ（ばね・ねばり・ゆれ）で うごきを ためして、よければ「はんぶん」に いれる
     （そのときは index.html の iframe の allow に accelerometer・gyroscope を たす）。
 - **けんばん**（`kenban.html`。せっていの「けんばん」→ タブの 下に iframe、タブを おすと もどる。`FRAME_PAGES`・`isFrameMode`）：
