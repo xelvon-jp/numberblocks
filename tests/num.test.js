@@ -52,13 +52,16 @@ module.exports = {
       const d7 = canCalc(blocks[0], blocks[1], 'div');
       blocks = []; spawnBlock(0.5); spawnBlock(0.5);
       const rej = [canCalc(blocks[0], blocks[1], 'x'), canCalc(blocks[0], blocks[1], '+'), canScale('half', blocks[0].q), canScale('square', Num.from(1.5)), canScale('square', Num.from(3))];
-      return { keys: keys.slice(0, 2), half, sum, undone, d7, rej };
+      blocks = []; spawnBlock(253); spawnBlock(0.1);
+      const big = [canCalc(blocks[0], blocks[1], '+'), qOk(Num.from(999.9)), qOk(Num.from(1000.1))];
+      return { keys: keys.slice(0, 2), half, sum, undone, d7, rej, big };
     });
     t.eq(r.keys, ['0.1', '0.5'], '0.1・0.5 の キーが ない');
     t.eq(r.half, ['2.5'], '5 を ÷2 で 2.5 に ならない');
     t.eq(r.sum, ['1', '2.5'], '0.3 ＋ 0.7 が 1 に ならない');
     t.eq(r.undone, ['0.3', '0.7', '2.5'], 'もどす で もどらない');
     t.eq(r.d7, true, '7 ÷ 2 ＝ 3.5 が できない');
+    t.eq(r.big, [true, true, false], '253 ＋ 0.1（100 より おおきい しょうすう）が できない／1000 を こえた');
     t.eq(r.rej, [false, true, false, false, true], '0.1 きざみ に ならない もの（0.5×0.5・0.5÷2・1.5 の しかく）を うけた');
   },
 

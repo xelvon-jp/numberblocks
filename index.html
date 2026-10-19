@@ -2069,11 +2069,11 @@ const MERGE_REACH = 28;   // ここまで近づけたら合体できる（体の
 const NEAR_REACH  = 60;   // 通行止めの合図を出しはじめる距離
 
 // ── しょうすう（かずは ぶんすう Num で けいさん）──
-// ゆるす のは ぶんぼ が DEC_DEN の やくすう の かず（10 ＝ 0.1 きざみ）。しょうすう は DEC_MAX まで（101 いじょう は せいすう だけ）。
+// ゆるす のは ぶんぼ が DEC_DEN の やくすう の かず（10 ＝ 0.1 きざみ）。しょうすう も せいすう と おなじ MAX_NUM まで（さいしょ は 100 まで に したが「253.1 が つくれない！」で ひろげた）。
 // × ÷ しかく も こたえが 0.1 きざみ に おさまる とき だけ（パパと きめた。HANDOFF.md 1.5）。
-const DEC_DEN = 10, DEC_MAX = 100;
+const DEC_DEN = 10;
 function qOk(q){
-  return Num.cmp(q, Num.ZERO) > 0 && Num.fits(q, DEC_DEN) && Num.cmp(q, Num.make(Num.isInt(q) ? MAX_NUM : DEC_MAX)) <= 0;
+  return Num.cmp(q, Num.ZERO) > 0 && Num.fits(q, DEC_DEN) && Num.cmp(q, Num.make(MAX_NUM)) <= 0;
 }
 // 2つの かず（Num）と えんざんし から、しき と こたえ（どれも Num）
 function calcQ(a, b, op){
