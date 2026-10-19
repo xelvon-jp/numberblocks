@@ -71,4 +71,29 @@ module.exports = {
     t.eq(r.para, false, 'へいこうしへんけい の まま で できた に なった');
     t.eq(r.tr, [true, '{"w":4,"h":3}'], 'とがった さんかく が できない');
   },
+
+  'めんせき：どんかく さんかく は ● で ちょっかく に しても ひろさ が おなじ（とうせき へんけい）→ かがみ で ながしかく。だいけい は 2つ で へいこうしへんけい → きって ながしかく。ひしがた は たいかくせん で 4つ': async t => {
+    const p = await openLab(t, 'lab-menseki.html');
+    const r = await p.evaluate(() => {
+      const out = {};
+      men.load(5); const [ob] = men.pieces(); men.shear(ob.id, 0);        // てっぺん を ていへん の まうえ へ
+      const sheared = men.pieces()[0]; out.shear = [sheared.area, JSON.stringify(sheared.pts)];
+      const c = men.mirror(ob.id); men.rotate(c); men.moveTo(ob.id, 2, 3); men.moveTo(c, 2, 3);
+      out.ob = [men.done(), JSON.stringify(men.rect())];
+      men.load(7); const [tp] = men.pieces(); const d = men.mirror(tp.id); men.rotate(d);
+      men.moveTo(tp.id, 1, 4); men.moveTo(d, 4, 4); out.para = men.done();
+      men.cut(2, 3, 2, 8); const sm = men.pieces().find(q => Math.abs(q.area - 1.5) < 1e-9 && q.pts.some(v => v[0] === 1));
+      men.moveTo(sm.id, 7, 4); out.trap = [men.done(), JSON.stringify(men.rect())];
+      men.load(6); const [rh] = men.pieces(); const x0 = rh.pts[3][0], y0 = rh.pts[0][1];
+      men.cut(x0 + 2, y0 - 1, x0 + 2, y0 + 5); men.cut(x0 - 1, y0 + 2, x0 + 5, y0 + 2);
+      out.rhom = men.pieces().map(q => q.area);
+      men.load(8); out.comp = men.pieces().reduce((s, q) => s + q.area, 0);
+      return out;
+    });
+    t.eq(r.shear[0], 6, '● を うごかすと ひろさ が かわった');
+    t.eq(r.ob, [true, '{"w":3,"h":4}'], 'どんかく さんかく が ながしかく に ならない');
+    t.eq([r.para, ...r.trap], [false, true, '{"w":6,"h":3}'], 'だいけい が ながしかく に ならない');
+    t.eq(r.rhom, [2, 2, 2, 2], 'ひしがた が 4つ に きれない');
+    t.eq(r.comp, 16, 'ふくざつ な かたち の ひろさ');
+  },
 };

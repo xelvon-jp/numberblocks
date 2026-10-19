@@ -45,6 +45,7 @@
   <button id="hint">💡 ヒント</button>
   <button id="reset">↺ はじめから</button>
 </div>
+<script src="kata.js"></script>
 <script>
 // ── めんせき の ためし ─────────────────────────────────────────────
 // こうしき を おぼえる ので なく、かたち を「きる・うごかす・うつす（かがみ）・まわす」して
@@ -79,32 +80,46 @@ const STAGES = [
     hint:'2つ くっつけると ななめ の かたち（へいこうしへんけい）。そのあと は ステージ3 と おなじ' },
 ];
 const GW = 11, GH = 11;            // ばん の マス（よこ・たて）
-// ゲーム（katachi.js）の 🛠️ こうさくしつ から：?embed=1&kind=rect|para|rtri|tri&w=&h=&o=
+// kata.js の かたち（ゲーム と おなじ）から ステージ を つくる
+function makeStage(sh){
+  const { kind, w, h } = sh, P = Kata.partPts(sh);
+  if(kind === 'sq' || kind === 'rect'){
+    const bar = [[0,0],[w,0],[w,1],[0,1]];
+    return { name: kind === 'sq' ? 'ましかく' : 'ながしかく', color: kind === 'sq' ? '#c08a20' : '#4a9a55', type: kind === 'sq' ? 'square' : 'rect', square: kind === 'sq',
+      say: w + 'マス の ぼう が ' + h + 'ほん。くっつけて ' + (kind === 'sq' ? 'ましかく' : 'ながしかく') + ' に しよう',
+      pieces: Array.from({ length: h }, () => bar), at: Array.from({ length: h }, (_, k) => [k % 2 ? GW - w : 0, Math.round(k*(GH - 1)/h)]),
+      hint: 'ぼう を たて に つみかさねて みよう' };
+  }
+  if(kind === 'para') return { name:'へいこうしへんけい', color:'#3f8fd0', type:'para', pieces:[P], at:[[1, 3]], cut:[[[sh.o,0],[sh.o,h]]],
+    say:'ななめ の かたち。はし を きって うごかすと ながしかく に なるよ',
+    hint:'てっぺん の かど から まっすぐ した へ なぞって きって みよう。きった さんかく を はんたい がわ へ' };
+  if(kind === 'rhom') return { name:'ひしがた', color:'#2a9db0', type:'rhom', d:[w, h], pieces:[P], at:[[1, 3]], cut:[[[w/2,0],[w/2,h]], [[0,h/2],[w,h/2]]],
+    say:'ひしがた。たいかくせん（てんせん）で きって ならべかえると ながしかく に なるよ',
+    hint:'たて と よこ の たいかくせん で きる と さんかく が 4つ。2つ ずつ くっつけると ながしかく' };
+  if(kind === 'trap') return { name:'だいけい', color:'#c0558a', type:'trap', mirror:true, half:true, pieces:[P], at:[[0, GH - h]],
+    say:'だいけい。かがみ で 2つ に して 🔄 まわして くっつけると、ななめ の かたち に なるよ',
+    hint:'2つ くっつけた ななめ の かたち の ていへん は じょうてい ＋ かてい。そのあと は きって うごかす' };
+  if(kind === 'comp') return { name:'ふくざつ な かたち', color:'#7a8a3a', type:'comp', shear:true, pieces: sh.parts.map(Kata.partPts), at: sh.parts.map(() => [1, 2]),
+    say:'いくつか の かたち が くっついて いる。うごかしたり きったり して ながしかく に しよう',
+    hint:'ばらばら に して ならべかえて みよう。さんかく は てっぺん の ● を うごかす と ちょっかく に なる' };
+  const ob = kind === 'otri', rt = kind === 'rtri';
+  return { name: rt ? 'ちょっかく さんかく' : ob ? 'どんかく さんかく' : 'えいかく さんかく', color: rt ? '#c0558a' : ob ? '#d0553f' : '#7a5ad0', type:'tri', mirror:true, half:true, shear:true,
+    pieces:[P], at:[[0, GH - h]],
+    say: rt ? 'さんかく。かがみ に いれて 2つ に して、🔄 まわして くっつけよう'
+            : 'てっぺん の ● を よこ に うごかしても ひろさ は かわらない。ちょっかく さんかく に して から かがみ へ',
+    hint: rt ? 'さんかく を かがみ まで ドラッグ → でてきた ほう を 🔄 → くっつける'
+             : '● を ひだり の はし（ていへん の まうえ）まで うごかすと ちょっかく さんかく。あとは かがみ と 🔄' };
+}
+// ためし の いちらん に だす ぶん（1〜5 は さいしょ に つくった もの）
+STAGES.push(makeStage({ kind:'otri', w:3, h:4, o:5 }), makeStage({ kind:'rhom', w:4, h:4 }), makeStage({ kind:'trap', w:4, h:3, o:1, a:2 }),
+            makeStage({ kind:'comp', parts:[{ kind:'tri', x:0, y:0, w:4, h:2, o:2 }, { kind:'rect', x:0, y:2, w:4, h:3 }] }));
+STAGES[3].shear = STAGES[4].shear = true;
+// ゲーム（katachi.js）の 🛠️ こうさくしつ から：?embed=1&s=（kata.js の かたち を JSON で）
 // その かたち だけ の ステージ に する。できたら ゲーム へ { type:'done', w, h, half }、もどる で { type:'close' }。
 const EMBED = (() => { const q = new URLSearchParams(location.search); if(q.get('embed') !== '1') return null;
-  return { kind: q.get('kind') || 'rect', w: +q.get('w') || 4, h: +q.get('h') || 3, o: +q.get('o') || 0 }; })();
+  try{ return JSON.parse(q.get('s')); }catch(e){ return { kind:'rect', w:4, h:3 }; } })();
 function tellGame(m){ if(!EMBED) return; try{ parent.postMessage(Object.assign({ from:'menseki' }, m), '*'); }catch(e){} }
-if(EMBED){
-  const { kind, w, h, o } = EMBED;
-  if(kind === 'rect'){
-    const bar = [[0,0],[w,0],[w,1],[0,1]];
-    STAGES.splice(0, STAGES.length, { name:'ながしかく', color:'#4a9a55', type: w === h ? 'square' : 'rect',
-      say: w + 'マス の ぼう が ' + h + 'ほん。くっつけて ながしかく に しよう',
-      pieces: Array.from({ length: h }, () => bar), at: Array.from({ length: h }, (_, k) => [k % 2 ? GW - w : 0, Math.round(k*(GH - 1)/h)]),
-      hint: 'ぼう を たて に つみかさねて みよう' });
-  } else if(kind === 'para'){
-    STAGES.splice(0, STAGES.length, { name:'へいこうしへんけい', color:'#3f8fd0', type:'para',
-      say:'ななめ の かたち。はし を きって うごかすと ながしかく に なるよ',
-      pieces:[ [[o,0],[w+o,0],[w,h],[0,h]] ], at:[[1, 3]], cut:[[o,0],[o,h]],
-      hint:'てっぺん の かど から まっすぐ した へ なぞって きって みよう。きった さんかく を はんたい がわ へ' });
-  } else {
-    const pts = kind === 'rtri' ? [[0,0],[0,h],[w,h]] : [[o,0],[w,h],[0,h]];
-    STAGES.splice(0, STAGES.length, { name:'さんかく', color: kind === 'rtri' ? '#c0558a' : '#7a5ad0', mirror:true, half:true, type:'tri',
-      say:'さんかく。かがみ に いれて 2つ に して、🔄 まわして くっつけよう' + (kind === 'tri' ? '。ななめ の かたち に なったら きって うごかす' : ''),
-      pieces:[ pts ], at:[[0, GH - h]],
-      hint:'さんかく を かがみ まで ドラッグ → でてきた ほう を 🔄 → くっつける' });
-  }
-}
+if(EMBED) STAGES.splice(0, STAGES.length, makeStage(EMBED));
 const $ = id => document.getElementById(id);
 const cv = $('c'), ctx = cv.getContext('2d');
 if(EMBED){ $('stages').style.display = 'none'; const bk = document.querySelector('.back'); bk.textContent = '← キャラ に もどる'; bk.href = '#';
@@ -154,7 +169,6 @@ function load(i){
   si = i; const st = STAGES[i]; copies = 0; sel = null; drag = null; cut = null; hintOn = false; doneAt = 0; fx = [];
   pieces = st.pieces.map((pts, k) => ({ id: nextId++, pts: pts.map(p => p.slice()), ox: st.at[k][0], oy: st.at[k][1] }));
   $('say').textContent = st.say; $('say').style.display = ''; $('done').style.display = 'none'; resize();
-  $('rot').style.visibility = st.mirror ? 'visible' : 'hidden';
   renderStages(); updateArea();
 }
 function renderStages(){
@@ -181,6 +195,11 @@ function check(){
   if(ty === 'para') lines.push(`<span class="big">ていへん ${r.w} × たかさ ${r.h} ＝ ${A}</span>`, `<span class="f">きって うごかしても ひろさ は ${A} の まま。<br>へいこうしへんけい の ひろさ ＝ ていへん × たかさ</span>`);
   if(ty === 'tri') lines.push(`ながしかく ${r.w} × ${r.h} ＝ ${A}`, `<span class="big">さんかく は その はんぶん → ${A} ÷ 2 ＝ ${fmt(A/2)}</span>`,
                          `<span class="f">さんかく の ひろさ ＝ ていへん × たかさ ÷ 2</span>`);
+  if(ty === 'trap') lines.push(`ながしかく ${r.w} × ${r.h} ＝ ${A}`, `<span class="big">だいけい は その はんぶん → ${A} ÷ 2 ＝ ${fmt(A/2)}</span>`,
+                         `<span class="f">よこ ${r.w} は じょうてい ＋ かてい。<br>だいけい の ひろさ ＝（じょうてい ＋ かてい）× たかさ ÷ 2</span>`);
+  if(ty === 'rhom') lines.push(`<span class="big">ながしかく ${r.w} × ${r.h} ＝ ${A}</span>`,
+                         `<span class="f">まわり の ながしかく ${st.d[0]} × ${st.d[1]} ＝ ${st.d[0]*st.d[1]} の はんぶん。<br>ひしがた の ひろさ ＝ たいかくせん × たいかくせん ÷ 2</span>`);
+  if(ty === 'comp') lines.push(`<span class="big">ながしかく ${r.w} × ${r.h} ＝ ${A}</span>`, `<span class="f">ばらばら に して ならべかえても ひろさ は ${A} の まま</span>`);
   const d = $('done'); d.innerHTML = '🎉 できた！<br>' + lines.join('<br>') + (EMBED ? '<br><button id="bk">キャラ で つくりに もどる ▶</button>' : si < STAGES.length-1 ? '<br><button id="nx">つぎ へ ▶</button>' : '');
   d.style.display = 'block'; $('say').style.display = 'none'; resize();   // ばん は ちいさく なって、かたち に かぶらない
   const nx = $('nx'); if(nx) nx.onclick = () => load(si + 1);
@@ -193,17 +212,31 @@ function check(){
 // ── そうさ ──
 const toW = (x, y) => [(x - OX)/C, (y - OY)/C];
 function pick(x, y){ const [wx, wy] = toW(x, y); for(let i = pieces.length-1; i >= 0; i--) if(inside(world(pieces[i]), wx, wy)) return pieces[i]; return null; }
+// さんかく の てっぺん（ていへん が よこ の とき）。● を よこ に うごかすと ひろさ は おなじ まま かたち が かわる（とうせき へんけい）
+function apexOf(p){
+  if(p.pts.length !== 3) return -1;
+  for(let i = 0; i < 3; i++){ const a = p.pts[(i+1)%3], b = p.pts[(i+2)%3]; if(Math.abs(a[1] - b[1]) < 1e-9 && Math.abs(p.pts[i][1] - a[1]) > 1e-9) return i; }
+  return -1;
+}
+let shearDrag = null;
 function down(x, y){
   if(doneAt) return;
+  if(STAGES[si].shear){
+    const [wx, wy] = toW(x, y);
+    for(let k = pieces.length - 1; k >= 0; k--){ const q = pieces[k], i = apexOf(q); if(i < 0) continue;
+      if(Math.hypot(q.pts[i][0] + q.ox - wx, q.pts[i][1] + q.oy - wy) < 0.8){ shearDrag = { p: q, i }; sel = q; return; } }
+  }
   const p = pick(x, y);
   if(p){ sel = p; pieces.splice(pieces.indexOf(p), 1); pieces.push(p); const [wx, wy] = toW(x, y); drag = { p, dx: wx - p.ox, dy: wy - p.oy, sx: p.ox, sy: p.oy }; }
   else cut = { x0: x, y0: y, x1: x, y1: y };
 }
 function move(x, y){
+  if(shearDrag){ const [wx] = toW(x, y), q = shearDrag.p; q.pts[shearDrag.i] = [Math.max(-q.ox, Math.min(GW - q.ox, wx - q.ox)), q.pts[shearDrag.i][1]]; return; }
   if(drag){ const [wx, wy] = toW(x, y); drag.p.ox = wx - drag.dx; drag.p.oy = wy - drag.dy; }
   else if(cut){ cut.x1 = x; cut.y1 = y; }
 }
 function up(){
+  if(shearDrag){ const q = shearDrag.p, v = q.pts[shearDrag.i]; q.pts[shearDrag.i] = [Math.round(v[0] + q.ox) - q.ox, v[1]]; shearDrag = null; check(); updateArea(); return; }
   if(drag){
     const p = drag.p, drag0 = drag; drag = null;
     p.ox = Math.round(p.ox); p.oy = Math.round(p.oy);
@@ -306,9 +339,17 @@ function draw(){
     ctx.beginPath(); ctx.roundRect(m.x, m.y, m.w, m.h, m.w/2); ctx.fill(); ctx.strokeStyle = '#9ab0c8'; ctx.lineWidth = 3; ctx.stroke();
     ctx.font = `${C*0.9}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🪞', m.x + m.w/2, m.y + m.h*0.45);
     ctx.font = `900 ${Math.max(10, C*0.32)}px system-ui`; ctx.fillStyle = '#5a6a80'; ctx.fillText(copies ? 'つかった' : 'ここへ', m.x + m.w/2, m.y + m.h*0.82); ctx.restore(); }
-  if(hintOn && st.cut && pieces.length === 1){ const p = pieces[0], [a, b] = st.cut; ctx.save(); ctx.setLineDash([8, 6]); ctx.strokeStyle = '#d0553f'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(OX + (a[0]+p.ox)*C, OY + (a[1]+p.oy - 0.6)*C); ctx.lineTo(OX + (b[0]+p.ox)*C, OY + (b[1]+p.oy + 0.6)*C); ctx.stroke(); ctx.restore(); }
+  if(hintOn && st.cut && pieces.length === st.pieces.length){
+    const p = pieces[0], lines = Array.isArray(st.cut[0][0]) ? st.cut : [st.cut];
+    ctx.save(); ctx.setLineDash([8, 6]); ctx.strokeStyle = '#d0553f'; ctx.lineWidth = 3; ctx.beginPath();
+    for(const [a, b] of lines){ const v = a[0] === b[0] ? [0, 0.6] : [0.6, 0];
+      ctx.moveTo(OX + (a[0]+p.ox - v[0])*C, OY + (a[1]+p.oy - v[1])*C); ctx.lineTo(OX + (b[0]+p.ox + v[0])*C, OY + (b[1]+p.oy + v[1])*C); }
+    ctx.stroke(); ctx.restore(); }
   for(const p of pieces) drawPiece(p, p === sel ? st.color : shade(st.color, 0.92));
+  if(st.shear && !doneAt) for(const p of pieces){ const i = apexOf(p); if(i < 0) continue;   // てっぺん の ●（よこ に うごかせる）
+    const X = OX + (p.pts[i][0] + p.ox)*C, Y = OY + (p.pts[i][1] + p.oy)*C;
+    ctx.save(); ctx.fillStyle = '#f0a020'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(X, Y, Math.max(9, C*0.3), 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.font = `900 ${Math.max(10, C*0.32)}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('↔', X, Y + 1); ctx.restore(); }
   if(cut){ ctx.save(); ctx.strokeStyle = '#d0553f'; ctx.lineWidth = 3; ctx.setLineDash([10, 6]); ctx.beginPath(); ctx.moveTo(cut.x0, cut.y0); ctx.lineTo(cut.x1, cut.y1); ctx.stroke();
     ctx.font = `${C*0.8}px system-ui`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('✂️', cut.x1, cut.y1); ctx.restore(); }
   // きった あと・できた の おいわい
@@ -328,6 +369,7 @@ window.men = {
   moveTo: (id, ox, oy) => { const p = pieces.find(q => q.id === id); p.ox = ox; p.oy = oy; sel = p; check(); updateArea(); },
   mirror: id => { const p = pieces.find(q => q.id === id); copyPiece(p); updateArea(); return sel.id; },
   rotate: id => { sel = pieces.find(q => q.id === id); rotate(); },
+  shear: (id, x) => { const q = pieces.find(p => p.id === id), i = apexOf(q); q.pts[i] = [x - q.ox, q.pts[i][1]]; sel = q; check(); updateArea(); },
 };
 resize(); load(0); requestAnimationFrame(draw);
 </script>
