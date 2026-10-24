@@ -42,8 +42,9 @@
 </script>
 <script>
 // ─── 三角形の面積（ずけい を「とく」から「あそんで まなぶ」へ の サンプル。2026-10-24）─────────────────
-// ・したの かず で「底辺」と「高さ」の キャラを えらぶ と、その さんかく が マス目 の うえに でる。
-//   底辺 は その キャラの いろ の キューブ が よこに ならび、高さ は たてに ならぶ（キャラ が へん に なる）。
+// ・したの かず で「底辺」と「高さ」を えらぶ と、その さんかく が マス目 の うえに でる。
+//   底辺 は その かず の キャラの いろ の キューブ が よこに ならび、高さ は たてに ならぶ。ながさ の かず も かく。
+//   底辺・高さ の キャラ（ひと）は ださない（パパ）。うごかせる ●（てっぺん・底辺 の みぎはし）は ゆっくり てんめつ。
 // ・ことば と しき は しょうがっこう の かきかた に あわせ、かんじ に ルビ（パパ）：
 //     三角形の面積
 //     ＝底辺×高さ÷2
@@ -75,7 +76,7 @@ function resize(){
 const FS = 20, LH = FS*1.95;                  // しき の もじ の 大きさ・ぎょう の たかさ（ルビ こみ）
 const panelH = () => 4*LH + 12;               // しき（4ぎょう）の ぶん うえ を あける
 function fitView(now){
-  const l = Math.min(0, tri.px) - 2.2, r = Math.max(tri.b, tri.px) + 4.2, top = tri.h + 1.2, bottom = 2.6, Hc = H - panelH();
+  const l = Math.min(0, tri.px) - 1, r = Math.max(tri.b, tri.px) + 3.6, top = tri.h + 1.2, bottom = 2.4, Hc = H - panelH();
   const c = Math.max(12, Math.min(64, W/(r - l), Hc/(top + bottom)));
   view = { C: c, OX: (W - (r - l)*c)/2 - l*c, OY: H - bottom*c - Math.max(0, (Hc - (top + bottom)*c)/2) };
   if(now){ C = view.C; OX = view.OX; OY = view.OY; }
@@ -150,14 +151,16 @@ function draw(now){
   const hx = sx(Math.max(b, px) + 1);
   cubeRun(h, hx, A[1] - C, 0, -1);
   ctx.save(); ctx.setLineDash([3, 4]); ctx.strokeStyle = 'rgba(200,60,60,0.6)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(P[0], P[1]); ctx.lineTo(hx, P[1]); ctx.stroke(); ctx.restore();
-  // キャラ（ていへん は ひだりした、たかさ は キューブ の みぎ）
-  const cbs = Math.max(6, C*0.55);
-  drawChar(b, sx(Math.min(0, px) - 1.2), A[1] + C*2.3, cbs, now);
-  drawChar(h, hx + C*2.2, A[1], cbs, now);
-  // ●（うごかせる ところ）
+  // ながさ の かず（底辺 は キューブ の した、高さ は キューブ の みぎ）
+  lenLabel(b, (A[0] + B[0])/2, A[1] + C*1.75, mainColorOf(b));
+  lenLabel(h, hx + C*1.55, A[1] - h*C/2 + C*0.35, mainColorOf(h));
+  // ●（うごかせる ところ）：ゆっくり てんめつ（1.8びょう で ひとまわり。うごかして いる あいだ は オレンジ）
+  const pulse = 0.5 + 0.5*Math.sin(now/1800*Math.PI*2);
   for(const [q, on] of [[P, drag && drag.k === 'p'], [B, drag && drag.k === 'b']]){
-    ctx.fillStyle = on ? '#f0a020' : '#fff'; ctx.strokeStyle = '#2b5a8a'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(q[0], q[1], Math.max(8, C*0.38), 0, Math.PI*2); ctx.fill(); ctx.stroke(); }
+    const r0 = Math.max(8, C*0.38);
+    if(!on){ ctx.fillStyle = 'rgba(240,160,32,' + (0.15 + 0.3*pulse) + ')'; ctx.beginPath(); ctx.arc(q[0], q[1], r0*(1.35 + 0.45*pulse), 0, Math.PI*2); ctx.fill(); }
+    ctx.fillStyle = on ? '#f0a020' : 'rgb(255,' + Math.round(255 - 70*pulse) + ',' + Math.round(255 - 190*pulse) + ')'; ctx.strokeStyle = '#2b5a8a'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(q[0], q[1], r0, 0, Math.PI*2); ctx.fill(); ctx.stroke(); }
   // しき（がめん の うえ）
   drawFormula(ph);
   // ひろさ の キャラ（さいご の 3わり で とびだす）
@@ -171,6 +174,11 @@ function draw(now){
   // きらきら
   fx = fx.filter(p => (p.life -= 0.02) > 0);
   for(const p of fx){ p.x += p.vx; p.y += p.vy; p.vy += 0.12; ctx.fillStyle = 'hsla(' + p.hue + ',90%,60%,' + p.life + ')'; ctx.fillRect(p.x, p.y, 4, 4); }
+}
+// ながさ の かず（へん の キューブ の よこ）
+function lenLabel(n, x, y, col){
+  ctx.save(); ctx.font = '900 ' + Math.round(Math.max(16, Math.min(30, C*0.9))) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = 5; ctx.strokeStyle = '#fff'; ctx.strokeText(n, x, y); ctx.fillStyle = rgb(darken(col, 0.35)); ctx.fillText(n, x, y); ctx.restore();
 }
 // ルビ つき の 1ぎょう を かく（x：align が left なら ひだりはし、center なら まんなか。y：もじ の したの せん）。はば を かえす
 function rubyText(s, x, y, size, color, align){
