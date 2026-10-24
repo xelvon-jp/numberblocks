@@ -14,6 +14,9 @@
   body { display:flex; flex-direction:column; }
   header { flex:none; display:flex; align-items:center; gap:8px; padding:8px 10px 4px; }
   header h1 { flex:1; font-size:17px; font-weight:900; }
+  #odai { border:0; border-radius:10px; padding:7px 10px; font-size:13px; font-weight:900; background:#fff; color:#2b3a52; }
+  #odai.on { background:#f0a020; color:#fff; }
+  #say.goal { background:#fff6d8; border-radius:12px; margin:2px 10px; padding:4px 10px; }
   .back { text-decoration:none; background:#fff; color:#2b3a52; font-weight:800; font-size:13px; padding:7px 10px; border-radius:10px; }
   #say { flex:none; font-size:15px; font-weight:800; padding:2px 12px; min-height:24px; line-height:1.9; }
   rt { font-size:0.55em; font-weight:700; }
@@ -28,7 +31,7 @@
 </style>
 </head>
 <body>
-<header><h1>📐 <ruby>三角形<rt>さんかくけい</rt></ruby>の<ruby>面積<rt>めんせき</rt></ruby></h1><a class="back" href="lab.html">← ためし</a></header>
+<header><h1>📐 <ruby>三角形<rt>さんかくけい</rt></ruby>の<ruby>面積<rt>めんせき</rt></ruby></h1><button id="odai">🎯 おだい</button><a class="back" href="lab.html">← ためし</a></header>
 <div id="say"></div>
 <div id="stage"><canvas id="c"></canvas></div>
 <div id="slots"><button id="sb" class="on"></button><button id="sh"></button></div>
@@ -48,8 +51,9 @@
 // ・ことば と しき は しょうがっこう の かきかた に あわせ、かんじ に ルビ（パパ）：
 //     三角形の面積
 //     ＝底辺×高さ÷2
-//     ＝3×5÷2
-//     ＝7.5        ← さんかく を タップ した とき だけ
+//     ＝7×6÷2
+//     ＝42÷2       ← さんかく を タップ した とき だけ（長方形 が でた ところ）
+//     ＝21         ← （長方形 の はんぶん に なった ところ）
 //   タップ：長方形（底辺×高さ）が てんせん で でて → その はんぶん → 面積 の キャラ が とびだす。もう いちど で もどる。
 // ・てっぺん（●）は じゆうに うごかせる（よこ：高さ は おなじ なので 面積 も おなじ ＝ とうせき へんけい。たて：高さ が かわる）。
 //   底辺 の みぎはし（●）も よこに うごかせる。「ひろさ おなじ」の ことば や まえ の かたち の てんせん は ださない（パパ）。
@@ -73,8 +77,8 @@ function resize(){
 }
 // いまの さんかく が ちょうど はいる ように（ひだり：ていへん の キャラ、みぎ：たかさ の キューブ と キャラ、うえ：しき）。
 // うごかして いる あいだ は かえない（マス が ずれない ように）。はなすと ゆっくり ズーム
-const FS = 20, LH = FS*1.95;                  // しき の もじ の 大きさ・ぎょう の たかさ（ルビ こみ）
-const panelH = () => 4*LH + 12;               // しき（4ぎょう）の ぶん うえ を あける
+const FS = 19, LH = FS*1.9;                   // しき の もじ の 大きさ・ぎょう の たかさ（ルビ こみ）
+const panelH = () => 5*LH + 12;               // しき（5ぎょう）の ぶん うえ を あける
 function fitView(now){
   const l = Math.min(0, tri.px) - 1, r = Math.max(tri.b, tri.px) + 3.6, top = tri.h + 1.2, bottom = 2.4, Hc = H - panelH();
   const c = Math.max(12, Math.min(64, W/(r - l), Hc/(top + bottom)));
@@ -140,7 +144,10 @@ function draw(now){
   // さんかく
   const col = mainColorOf(Math.max(1, Math.min(100, Math.round(area()))));
   ctx.fillStyle = rgba(ph > 0.6 ? col : [90, 160, 230], 0.28 + 0.25*hk); ctx.strokeStyle = '#2b5a8a'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+  const sk = (now - shakeT)/450, dx = sk < 1 ? Math.sin(sk*40)*C*0.15*(1 - sk) : 0;   // おだい と ちがう とき ぷるぷる
+  ctx.save(); ctx.translate(dx, 0);
   ctx.beginPath(); ctx.moveTo(...A); ctx.lineTo(...B); ctx.lineTo(...P); ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.restore();
   // たかさ の せん（てっぺん から まっすぐ した。そと に でたら ていへん を のばす）
   ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(200,60,60,0.8)'; ctx.lineWidth = 2; ctx.beginPath();
   ctx.moveTo(P[0], P[1]); ctx.lineTo(P[0], A[1]);
@@ -199,17 +206,19 @@ function rubyText(s, x, y, size, color, align){
   });
   ctx.restore(); return tot;
 }
-// しき（しょうがっこう の かきかた）：
+// しき（しょうがっこう の かきかた。パパ）：
 //   三角形の面積
 //   ＝底辺×高さ÷2
-//   ＝3×5÷2
-//   ＝7.5（タップ した とき。長方形 の はんぶん に なった ところ で でる）
+//   ＝7×6÷2
+//   ＝42÷2（タップ した とき。長方形 7×6 が でた ところ で でる）
+//   ＝21  （長方形 の はんぶん に なった ところ で でる）
 function drawFormula(ph){
   const { b, h } = tri, x = 14, y0 = 10 + LH*0.95;
   const lines = [[T.tri + 'の' + T.area, '#16233a'], ['＝' + T.base + '×' + T.hgt + '÷2', '#16233a'], ['＝' + b + '×' + h + '÷2', '#2b5a8a']];
   lines.forEach(([s, c], i) => rubyText(s, x, y0 + i*LH, FS, c));
-  const k4 = ease((ph - 0.6)/0.15);
-  if(k4 > 0){ ctx.save(); ctx.globalAlpha = k4; rubyText('＝' + fmt(area()), x, y0 + 3*LH, FS + 4, '#c0398a'); ctx.restore(); }
+  const k4 = ease((ph - 0.25)/0.15), k5 = ease((ph - 0.6)/0.15);
+  if(k4 > 0){ ctx.save(); ctx.globalAlpha = k4; rubyText('＝' + b*h + '÷2', x, y0 + 3*LH, FS, '#a86a00'); ctx.restore(); }
+  if(k5 > 0){ ctx.save(); ctx.globalAlpha = k5; rubyText('＝' + fmt(area()), x, y0 + 4*LH, FS + 4, '#c0398a'); ctx.restore(); }
 }
 
 // ── さわる ──
@@ -244,20 +253,47 @@ cv.addEventListener('pointermove', e => {
 });
 function endDrag(e){
   if(drag && e.pointerId === drag.id){ drag = null; fitView(); }
-  else if(down && down.k === 'in' && Math.hypot(local(e)[0] - down.x, local(e)[1] - down.y) < 12) toggle();
+  else if(down && down.k === 'in' && Math.hypot(local(e)[0] - down.x, local(e)[1] - down.y) < 12) tapShape();
   down = null;
 }
 cv.addEventListener('pointerup', endDrag);
 cv.addEventListener('pointercancel', e => { drag = null; down = null; });
 
+// ── おだい（おだい に いれる とき の ためし。パパ の あん）──────────────────────────
+// 「底辺が7、高さが7の三角形の面積を調べよう！ できたら、図形をタップしてね」。かたち は じぶん で つくる（ボタン・●）。
+// つくれて いない ときに タップ すると、どこ が ちがう か だけ いう（面積 は ださない）。
+// できたら いつも の アニメ（長方形 → はんぶん → 面積）と「できた！」。もう いちど タップ で つぎ の おだい。
+let goal = null, cleared = false;
+const odaiBtn = document.getElementById('odai');
+const goalText = g => '{底辺|ていへん}が' + g.b + '、{高|たか}さが' + g.h + 'の' + T.tri + 'の' + T.area + 'を{調|しら}べよう！　できたら、{図形|ずけい}をタップしてね';
+function newGoal(){
+  let b, h; do { b = 1 + Math.floor(Math.random()*MAXN); h = 1 + Math.floor(Math.random()*MAXN); } while(b === tri.b && h === tri.h);
+  goal = { b, h }; cleared = false; changed();
+}
+odaiBtn.addEventListener('click', () => { if(goal){ goal = null; } else newGoal(); odaiBtn.classList.toggle('on', !!goal); if(mode === 'calc'){ mode = 'shape'; anim = null; } changed(); });
+function tapShape(){
+  if(goal && mode === 'shape'){
+    if(tri.b !== goal.b || tri.h !== goal.h){
+      say((tri.b !== goal.b ? T.base + 'が ' + goal.b + ' に なって いないよ（いま ' + tri.b + '）' : '')
+        + (tri.b !== goal.b && tri.h !== goal.h ? '。' : '') + (tri.h !== goal.h ? T.hgt + 'が ' + goal.h + ' に なって いないよ（いま ' + tri.h + '）' : ''));
+      shakeT = performance.now(); return;
+    }
+    cleared = true; toggle(); return;
+  }
+  if(goal && cleared && mode === 'calc'){ mode = 'shape'; anim = null; newGoal(); return; }
+  toggle();
+}
+let shakeT = -1e9;
 function changed(){
   updSlots();
-  say(T.base + ' ' + tri.b + '・' + T.hgt + ' ' + tri.h + '。' + T.tri + ' を タップ すると ' + T.area + ' が わかるよ');
+  sayEl.classList.toggle('goal', !!goal);
+  if(goal) say(goalText(goal));
+  else say(T.base + ' ' + tri.b + '・' + T.hgt + ' ' + tri.h + '。' + T.tri + ' を タップ すると ' + T.area + ' が わかるよ');
 }
 function toggle(){
   mode = mode === 'calc' ? 'shape' : 'calc'; anim = { t0: performance.now(), dur: mode === 'calc' ? 2600 : 700 };
   if(mode === 'calc'){ setTimeout(() => { if(mode === 'calc') sparkle(sx((tri.b + tri.px)/3), sy(tri.h/3), 30); }, 2000);
-    say(T.rect + '（' + tri.b + '×' + tri.h + '＝' + tri.b*tri.h + '）の はんぶん。' + T.area + ' は ' + fmt(area())); }
+    say((cleared ? 'できた！ ' : '') + T.rect + '（' + tri.b + '×' + tri.h + '＝' + tri.b*tri.h + '）の はんぶん。' + T.area + ' は ' + fmt(area()) + (cleared ? '。タップ で つぎ の おだい' : '')); }
   else changed();
 }
 function sparkle(x, y, n){ for(let i = 0; i < (n || 12); i++) fx.push({ x, y, vx: (Math.random() - 0.5)*5, vy: -Math.random()*4 - 1, life: 1, hue: Math.random()*360 }); }
@@ -286,7 +322,7 @@ for(let v = 1; v <= MAXN; v++){
 resize(); updSlots(); changed();
 (function loop(now){ draw(now); requestAnimationFrame(loop); })(performance.now());
 // テスト・しらべ よう
-window.sankaku = { tri, area, mode: () => mode, toggle, hit, set: (b, h, px) => { tri.b = b; tri.h = h; tri.px = px; changed(); fitView(true); },
+window.sankaku = { tri, area, mode: () => mode, toggle, tapShape, hit, goal: () => goal, setGoal: (b, h) => { goal = { b, h }; cleared = false; changed(); }, set: (b, h, px) => { tri.b = b; tri.h = h; tri.px = px; changed(); fitView(true); },
                    at: () => ({ P: [sx(tri.px), sy(tri.h)], B: [sx(tri.b), sy(0)], C }) };
 </script>
 </body>

@@ -102,6 +102,11 @@ module.exports = {
     t.eq(await p.evaluate(() => [sankaku.tri.h, sankaku.area()]), [3, 9], 'たてに うごかしても たかさ が かわらない');
     await p.evaluate(() => sankaku.toggle());
     t.eq(await p.evaluate(() => sankaku.mode()), 'calc', 'タップ で ひろさ に ならない');
+    // おだい：底辺・高さ が ちがう うちは タップ しても 面積 を ださない。あって いれば 面積
+    await p.evaluate(() => sankaku.toggle());
+    const g = await p.evaluate(() => { sankaku.setGoal(7, 7); sankaku.set(6, 7, 2); sankaku.tapShape(); const a = sankaku.mode();
+      sankaku.set(7, 7, 2); sankaku.tapShape(); return [a, sankaku.mode()]; });
+    t.eq(g, ['shape', 'calc'], 'おだい：ちがう かたち で 面積 が でる／あって いる のに でない');
     t.eq(t.errors, [], 'ページで エラー');
   },
 };
