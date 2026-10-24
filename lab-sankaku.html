@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" type="image/png" href="icon-512.png">
-<title>ためし：さんかくの ひろさ</title>
+<title>ためし：三角形の面積</title>
 <style>
   * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html, body { width:100%; height:100%; overflow:hidden; background:#f3f7ea; color:#2b3a52; font-family:-apple-system, system-ui, sans-serif;
@@ -15,7 +15,8 @@
   header { flex:none; display:flex; align-items:center; gap:8px; padding:8px 10px 4px; }
   header h1 { flex:1; font-size:17px; font-weight:900; }
   .back { text-decoration:none; background:#fff; color:#2b3a52; font-weight:800; font-size:13px; padding:7px 10px; border-radius:10px; }
-  #say { flex:none; font-size:15px; font-weight:800; padding:2px 12px; min-height:24px; line-height:1.4; }
+  #say { flex:none; font-size:15px; font-weight:800; padding:2px 12px; min-height:24px; line-height:1.9; }
+  rt { font-size:0.55em; font-weight:700; }
   #stage { flex:1; position:relative; min-height:0; }
   canvas { display:block; position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
   #slots { flex:none; display:flex; gap:8px; padding:4px 10px; }
@@ -27,10 +28,10 @@
 </style>
 </head>
 <body>
-<header><h1>📐 さんかくの ひろさ</h1><a class="back" href="lab.html">← ためし</a></header>
+<header><h1>📐 <ruby>三角形<rt>さんかくけい</rt></ruby>の<ruby>面積<rt>めんせき</rt></ruby></h1><a class="back" href="lab.html">← ためし</a></header>
 <div id="say"></div>
 <div id="stage"><canvas id="c"></canvas></div>
-<div id="slots"><button id="sb" class="on">ていへん</button><button id="sh">たかさ</button></div>
+<div id="slots"><button id="sb" class="on"></button><button id="sh"></button></div>
 <div id="nums"></div>
 <script>
 // ページと いっしょに 新しい スクリプトを 読む（古い キャッシュと まざらないように。index.html と おなじ しくみ）
@@ -40,22 +41,28 @@
 })();
 </script>
 <script>
-// ─── さんかくの ひろさ（ずけい を「とく」から「あそんで まなぶ」へ の サンプル。2026-10-24）─────────────────
-// ・したの かず で「ていへん」と「たかさ」の キャラを えらぶ と、その さんかく が マス目 の うえに でる。
-//   ていへん は その キャラの いろ の キューブ が よこに ならび、たかさ は たてに ならぶ（キャラ が へん に なる）。
-// ・さんかく を タップ する たびに「ていへん × たかさ ÷ 2」⇄「ひろさ」の アニメ：
-//   ながしかく（ていへん × たかさ）が でて → その はんぶん → ひろさ の キャラ が とびだす。もう いちど で もどる。
-// ・てっぺん（●）は じゆうに うごかせる：よこに うごかしても たかさ は おなじ なので ひろさ も おなじ（とうせき へんけい）。
-//   うごかす まえ の さんかく が てんせん で のこり「ひろさ おなじ！」。たてに うごかすと たかさ（と キャラ）が かわる。
-//   ていへん の みぎはし（●）も よこに うごかせる。
+// ─── 三角形の面積（ずけい を「とく」から「あそんで まなぶ」へ の サンプル。2026-10-24）─────────────────
+// ・したの かず で「底辺」と「高さ」の キャラを えらぶ と、その さんかく が マス目 の うえに でる。
+//   底辺 は その キャラの いろ の キューブ が よこに ならび、高さ は たてに ならぶ（キャラ が へん に なる）。
+// ・ことば と しき は しょうがっこう の かきかた に あわせ、かんじ に ルビ（パパ）：
+//     三角形の面積
+//     ＝底辺×高さ÷2
+//     ＝3×5÷2
+//     ＝7.5        ← さんかく を タップ した とき だけ
+//   タップ：長方形（底辺×高さ）が てんせん で でて → その はんぶん → 面積 の キャラ が とびだす。もう いちど で もどる。
+// ・てっぺん（●）は じゆうに うごかせる（よこ：高さ は おなじ なので 面積 も おなじ ＝ とうせき へんけい。たて：高さ が かわる）。
+//   底辺 の みぎはし（●）も よこに うごかせる。「ひろさ おなじ」の ことば や まえ の かたち の てんせん は ださない（パパ）。
 // ・きろく は のこさない（ためし）。
 const MAXN = 10, XMIN = -4, XMAX = 14;        // てっぺん が いける はんい（マス）
 const cv = document.getElementById('c'), ctx = cv.getContext('2d'), stageEl = document.getElementById('stage'), sayEl = document.getElementById('say');
 let W = 0, H = 0, C = 20, OX = 0, OY = 0;      // 1マス の ピクセル と、ていへん の ひだりはし（0,0）の ばしょ
 let VL = -3, VR = 12, view = null;             // いま みせて いる よこ の はんい（マス）。view：めざす C・OX・OY（さんかく に あわせて ズーム）
 const tri = { b: 6, h: 4, px: 2 };            // ていへん・たかさ・てっぺん の よこ の ばしょ（マス）
-let slot = 'b', mode = 'shape', anim = null, drag = null, ghost = null, fx = [];
-const say = s => { sayEl.textContent = s; };
+let slot = 'b', mode = 'shape', anim = null, drag = null, fx = [];
+// ルビ：「{三角形|さんかくけい}」→ かんじ の うえ に よみ（HTML は <ruby>、キャンバス は rubyText）
+const rubyHTML = s => s.replace(/\{([^|}]+)\|([^}]+)\}/g, '<ruby>$1<rt>$2</rt></ruby>');
+const say = s => { sayEl.innerHTML = rubyHTML(s); };
+const T = { tri: '{三角形|さんかくけい}', area: '{面積|めんせき}', base: '{底辺|ていへん}', hgt: '{高|たか}さ', rect: '{長方形|ちょうほうけい}' };
 
 function resize(){
   const dpr = Math.min(3, window.devicePixelRatio || 1);
@@ -65,10 +72,12 @@ function resize(){
 }
 // いまの さんかく が ちょうど はいる ように（ひだり：ていへん の キャラ、みぎ：たかさ の キューブ と キャラ、うえ：しき）。
 // うごかして いる あいだ は かえない（マス が ずれない ように）。はなすと ゆっくり ズーム
+const FS = 20, LH = FS*1.95;                  // しき の もじ の 大きさ・ぎょう の たかさ（ルビ こみ）
+const panelH = () => 4*LH + 12;               // しき（4ぎょう）の ぶん うえ を あける
 function fitView(now){
-  const l = Math.min(0, tri.px) - 2.2, r = Math.max(tri.b, tri.px) + 4.2, top = tri.h + 2.4, bottom = 2.6;
-  const c = Math.max(12, Math.min(64, W/(r - l), H/(top + bottom)));
-  view = { C: c, OX: (W - (r - l)*c)/2 - l*c, OY: H - bottom*c - Math.max(0, (H - (top + bottom)*c)/2) };
+  const l = Math.min(0, tri.px) - 2.2, r = Math.max(tri.b, tri.px) + 4.2, top = tri.h + 1.2, bottom = 2.6, Hc = H - panelH();
+  const c = Math.max(12, Math.min(64, W/(r - l), Hc/(top + bottom)));
+  view = { C: c, OX: (W - (r - l)*c)/2 - l*c, OY: H - bottom*c - Math.max(0, (Hc - (top + bottom)*c)/2) };
   if(now){ C = view.C; OX = view.OX; OY = view.OY; }
 }
 window.addEventListener('resize', resize);
@@ -117,16 +126,16 @@ function draw(now){
   const { b, h, px } = tri, A = [sx(0), sy(0)], B = [sx(b), sy(0)], P = [sx(px), sy(h)];
   const k = anim ? ease((now - anim.t0)/anim.dur) : 1, toCalc = mode === 'calc';
   const ph = toCalc ? k : 1 - k;             // 0：かたち 〜 1：ひろさ
-  // ながしかく（ていへん × たかさ）：はじめ の 3わり で でて、つぎ の 3わり で はんぶん が うすく なる
+  // 長方形（底辺 × 高さ）：はじめ の 3わり で でて、つぎ の 3わり で はんぶん が うすく なる
   const rk = ease(ph/0.35), hk = ease((ph - 0.35)/0.3);
   if(rk > 0){
     ctx.save(); ctx.globalAlpha = rk;
     ctx.fillStyle = 'rgba(255,214,90,' + (0.35*(1 - hk*0.6)) + ')'; ctx.fillRect(A[0], P[1], B[0] - A[0], A[1] - P[1]);
-    ctx.setLineDash([6, 5]); ctx.strokeStyle = '#d69500'; ctx.lineWidth = 2.5; ctx.strokeRect(A[0], P[1], B[0] - A[0], A[1] - P[1]); ctx.restore();
+    ctx.setLineDash([6, 5]); ctx.strokeStyle = '#d69500'; ctx.lineWidth = 2.5; ctx.strokeRect(A[0], P[1], B[0] - A[0], A[1] - P[1]);
+    ctx.setLineDash([]); ctx.globalAlpha = rk*(1 - ease((ph - 0.72)/0.2));
+    rubyText(T.rect + ' ' + b + '×' + h + '＝' + b*h, (A[0] + B[0])/2, P[1] - Math.max(8, C*0.38) - 6, 15, '#a86a00', 'center');   // てっぺん の ● の うえ
+    ctx.restore();
   }
-  // うごかす まえ の さんかく（てんせん）
-  if(ghost){ ctx.save(); ctx.setLineDash([5, 5]); ctx.strokeStyle = 'rgba(60,80,110,0.55)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(sx(0), sy(0)); ctx.lineTo(sx(ghost.b), sy(0)); ctx.lineTo(sx(ghost.px), sy(ghost.h)); ctx.closePath(); ctx.stroke(); ctx.restore(); }
   // さんかく
   const col = mainColorOf(Math.max(1, Math.min(100, Math.round(area()))));
   ctx.fillStyle = rgba(ph > 0.6 ? col : [90, 160, 230], 0.28 + 0.25*hk); ctx.strokeStyle = '#2b5a8a'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
@@ -149,8 +158,8 @@ function draw(now){
   for(const [q, on] of [[P, drag && drag.k === 'p'], [B, drag && drag.k === 'b']]){
     ctx.fillStyle = on ? '#f0a020' : '#fff'; ctx.strokeStyle = '#2b5a8a'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(q[0], q[1], Math.max(8, C*0.38), 0, Math.PI*2); ctx.fill(); ctx.stroke(); }
-  // しき（さんかく の うえ）
-  drawFormula(ph, now);
+  // しき（がめん の うえ）
+  drawFormula(ph);
   // ひろさ の キャラ（さいご の 3わり で とびだす）
   const ck = ease((ph - 0.7)/0.3);
   if(ck > 0){
@@ -159,24 +168,37 @@ function draw(now){
     ctx.save(); ctx.translate(cx, foot); const s = 0.4 + 0.6*ck + 0.12*Math.sin(Math.PI*ck); ctx.scale(s, s); ctx.globalAlpha = ck; ctx.translate(-cx, -foot);
     drawChar(v, cx, foot, bs, now); ctx.restore();
   }
-  // ひろさ おなじ！
-  if(ghost && ghost.same){ ctx.save(); ctx.font = '900 ' + Math.round(C*0.85) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#c0398a';
-    ctx.fillText('ひろさ おなじ！ ' + fmt(area()), W/2, Math.max(C*0.9, sy(tri.h + 2.1))); ctx.restore(); }
   // きらきら
   fx = fx.filter(p => (p.life -= 0.02) > 0);
   for(const p of fx){ p.x += p.vx; p.y += p.vy; p.vy += 0.12; ctx.fillStyle = 'hsla(' + p.hue + ',90%,60%,' + p.life + ')'; ctx.fillRect(p.x, p.y, 4, 4); }
 }
-// しき：「6 × 4 ÷ 2」→「6 × 4 ＝ 24」→「24 ÷ 2 ＝ 12」→「ひろさ 12」
-function drawFormula(ph, now){
-  const { b, h } = tri, r = b*h, y = sy(Math.max(tri.h, 1) + 1.2), x = sx(b/2);
-  let s, c = '#16233a';
-  if(ph < 0.05) s = 'ていへん ' + b + ' × たかさ ' + h + ' ÷ 2';
-  else if(ph < 0.4) s = b + ' × ' + h + ' ＝ ' + r + '（ながしかく）';
-  else if(ph < 0.72) s = r + ' ÷ 2 ＝ ' + fmt(area()) + '（はんぶん）';
-  else { s = 'ひろさ ' + fmt(area()); c = '#c0398a'; }
-  ctx.save(); ctx.font = '900 ' + Math.round(Math.min(26, C*1.0)) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  const w = ctx.measureText(s).width, xx = Math.max(w/2 + 8, Math.min(W - w/2 - 8, x));
-  ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.strokeText(s, xx, y); ctx.fillStyle = c; ctx.fillText(s, xx, y); ctx.restore();
+// ルビ つき の 1ぎょう を かく（x：align が left なら ひだりはし、center なら まんなか。y：もじ の したの せん）。はば を かえす
+function rubyText(s, x, y, size, color, align){
+  const parts = []; let m, last = 0; const re = /\{([^|}]+)\|([^}]+)\}/g;
+  while((m = re.exec(s))){ if(m.index > last) parts.push([s.slice(last, m.index)]); parts.push([m[1], m[2]]); last = re.lastIndex; }
+  if(last < s.length) parts.push([s.slice(last)]);
+  ctx.save(); ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  const big = '900 ' + size + 'px sans-serif', small = '700 ' + Math.round(size*0.5) + 'px sans-serif';
+  ctx.font = big; const ws = parts.map(p => ctx.measureText(p[0]).width), tot = ws.reduce((a, b) => a + b, 0);
+  let xx = align === 'center' ? x - tot/2 : x;
+  parts.forEach((p, i) => {
+    ctx.font = big; ctx.lineWidth = 5; ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.strokeText(p[0], xx, y); ctx.fillStyle = color; ctx.fillText(p[0], xx, y);
+    if(p[1]){ ctx.font = small; ctx.textAlign = 'center'; ctx.lineWidth = 3; ctx.strokeText(p[1], xx + ws[i]/2, y - size*1.02); ctx.fillText(p[1], xx + ws[i]/2, y - size*1.02); ctx.textAlign = 'left'; }
+    xx += ws[i];
+  });
+  ctx.restore(); return tot;
+}
+// しき（しょうがっこう の かきかた）：
+//   三角形の面積
+//   ＝底辺×高さ÷2
+//   ＝3×5÷2
+//   ＝7.5（タップ した とき。長方形 の はんぶん に なった ところ で でる）
+function drawFormula(ph){
+  const { b, h } = tri, x = 14, y0 = 10 + LH*0.95;
+  const lines = [[T.tri + 'の' + T.area, '#16233a'], ['＝' + T.base + '×' + T.hgt + '÷2', '#16233a'], ['＝' + b + '×' + h + '÷2', '#2b5a8a']];
+  lines.forEach(([s, c], i) => rubyText(s, x, y0 + i*LH, FS, c));
+  const k4 = ease((ph - 0.6)/0.15);
+  if(k4 > 0){ ctx.save(); ctx.globalAlpha = k4; rubyText('＝' + fmt(area()), x, y0 + 3*LH, FS + 4, '#c0398a'); ctx.restore(); }
 }
 
 // ── さわる ──
@@ -194,7 +216,7 @@ function local(e){ const r = cv.getBoundingClientRect(); return [e.clientX - r.l
 let down = null;
 cv.addEventListener('pointerdown', e => {
   const [x, y] = local(e), k = hit(x, y); down = { x, y, k, t: performance.now() };
-  if(k === 'p' || k === 'b'){ drag = { k, id: e.pointerId }; ghost = { b: tri.b, h: tri.h, px: tri.px, a: area(), same: false };
+  if(k === 'p' || k === 'b'){ drag = { k, id: e.pointerId };
     if(mode === 'calc') toggle(); cv.setPointerCapture(e.pointerId); }
 });
 cv.addEventListener('pointermove', e => {
@@ -210,7 +232,7 @@ cv.addEventListener('pointermove', e => {
   }
 });
 function endDrag(e){
-  if(drag && e.pointerId === drag.id){ drag = null; if(ghost && !ghost.same) ghost = null; fitView(); }
+  if(drag && e.pointerId === drag.id){ drag = null; fitView(); }
   else if(down && down.k === 'in' && Math.hypot(local(e)[0] - down.x, local(e)[1] - down.y) < 12) toggle();
   down = null;
 }
@@ -218,23 +240,20 @@ cv.addEventListener('pointerup', endDrag);
 cv.addEventListener('pointercancel', e => { drag = null; down = null; });
 
 function changed(){
-  const moved = ghost && (ghost.b !== tri.b || ghost.h !== tri.h || ghost.px !== tri.px);
-  if(ghost) ghost.same = moved && area() === ghost.a;
   updSlots();
-  if(ghost && ghost.same) say('よこに うごかしても たかさ は ' + tri.h + ' の まま。ひろさ は おなじ ' + fmt(area()) + '！');
-  else say('ていへん ' + tri.b + '・たかさ ' + tri.h + '。さんかく を タップ すると ひろさ が わかるよ');
+  say(T.base + ' ' + tri.b + '・' + T.hgt + ' ' + tri.h + '。' + T.tri + ' を タップ すると ' + T.area + ' が わかるよ');
 }
 function toggle(){
   mode = mode === 'calc' ? 'shape' : 'calc'; anim = { t0: performance.now(), dur: mode === 'calc' ? 2600 : 700 };
   if(mode === 'calc'){ setTimeout(() => { if(mode === 'calc') sparkle(sx((tri.b + tri.px)/3), sy(tri.h/3), 30); }, 2000);
-    say(tri.b + ' × ' + tri.h + ' の ながしかく の はんぶん … ひろさ は ' + fmt(area())); }
+    say(T.rect + '（' + tri.b + '×' + tri.h + '＝' + tri.b*tri.h + '）の はんぶん。' + T.area + ' は ' + fmt(area())); }
   else changed();
 }
 function sparkle(x, y, n){ for(let i = 0; i < (n || 12); i++) fx.push({ x, y, vx: (Math.random() - 0.5)*5, vy: -Math.random()*4 - 1, life: 1, hue: Math.random()*360 }); }
 
 // ── したの ボタン ──
 const sb = document.getElementById('sb'), sh = document.getElementById('sh');
-function updSlots(){ sb.textContent = 'ていへん ' + tri.b; sh.textContent = 'たかさ ' + tri.h;
+function updSlots(){ sb.innerHTML = rubyHTML(T.base + ' ' + tri.b); sh.innerHTML = rubyHTML(T.hgt + ' ' + tri.h);
   sb.classList.toggle('on', slot === 'b'); sh.classList.toggle('on', slot === 'h'); }
 sb.addEventListener('click', () => { slot = 'b'; updSlots(); });
 sh.addEventListener('click', () => { slot = 'h'; updSlots(); });
@@ -246,7 +265,6 @@ for(let v = 1; v <= MAXN; v++){
   b.style.setProperty('--b', rgb(v === 10 ? [229, 36, 42] : v === 7 ? [150, 110, 190] : darken(col, 0.15)));
   b.addEventListener('click', () => {
     if(mode === 'calc'){ mode = 'shape'; anim = null; }
-    ghost = null;
     if(slot === 'b'){ tri.px = Math.round(tri.px*v/tri.b); tri.b = v; slot = 'h'; sparkle(sx(v/2), sy(0)); }
     else { tri.h = v; slot = 'b'; sparkle(sx(tri.px), sy(v)); }
     changed(); fitView();
@@ -257,7 +275,7 @@ for(let v = 1; v <= MAXN; v++){
 resize(); updSlots(); changed();
 (function loop(now){ draw(now); requestAnimationFrame(loop); })(performance.now());
 // テスト・しらべ よう
-window.sankaku = { tri, area, mode: () => mode, ghost: () => ghost, toggle, hit, set: (b, h, px) => { tri.b = b; tri.h = h; tri.px = px; ghost = null; changed(); fitView(true); },
+window.sankaku = { tri, area, mode: () => mode, toggle, hit, set: (b, h, px) => { tri.b = b; tri.h = h; tri.px = px; changed(); fitView(true); },
                    at: () => ({ P: [sx(tri.px), sy(tri.h)], B: [sx(tri.b), sy(0)], C }) };
 </script>
 </body>

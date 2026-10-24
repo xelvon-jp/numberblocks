@@ -87,7 +87,7 @@ module.exports = {
     t.eq(r.comp, 16, 'ふくざつ な かたち の ひろさ');
     t.eq(r.off, [6, 6], 'たて に なぞって も マス の せん で きれない');
   },
-  'さんかくの ひろさ：てっぺん を よこに うごかしても ひろさ は おなじ（ひろさ おなじ！）、たてに うごかすと たかさ が かわる。タップ で ひろさ': async t => {
+  '三角形の面積：てっぺん を よこに うごかしても 面積 は おなじ、たてに うごかすと 高さ が かわる。タップ で 面積': async t => {
     const p = await openLab(t, 'lab-sankaku.html');
     const box = await p.evaluate(() => { const r = document.getElementById('c').getBoundingClientRect(); return [r.left, r.top]; });
     const dragP = async (dx, dy) => { const a = await p.evaluate(() => sankaku.at());
@@ -95,8 +95,8 @@ module.exports = {
       await p.mouse.move(box[0] + a.P[0] + a.C*dx, box[1] + a.P[1] - a.C*dy, { steps: 6 }); await p.mouse.up(); };
     await p.evaluate(() => sankaku.set(6, 4, 2));
     await dragP(2, 0);
-    const a = await p.evaluate(() => ({ px: sankaku.tri.px, h: sankaku.tri.h, area: sankaku.area(), same: !!(sankaku.ghost() && sankaku.ghost().same) }));
-    t.eq(a, { px:4, h:4, area:12, same:true }, 'よこに うごかすと ひろさ が かわる／おなじ と いわない');
+    const a = await p.evaluate(() => ({ px: sankaku.tri.px, h: sankaku.tri.h, area: sankaku.area() }));
+    t.eq(a, { px:4, h:4, area:12 }, 'よこに うごかすと 面積 が かわる');
     await p.evaluate(() => sankaku.set(6, 4, 2));
     await dragP(0, -1);
     t.eq(await p.evaluate(() => [sankaku.tri.h, sankaku.area()]), [3, 9], 'たてに うごかしても たかさ が かわらない');
