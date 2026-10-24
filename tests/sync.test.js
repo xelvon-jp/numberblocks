@@ -41,7 +41,30 @@ module.exports = {
     t.eq(r, { sameObj:true, cleared:['0','1'], log0:2, log1:1, rb:true, idx:3, clock:3, hissan:3, k78:2, k67:5, stage:1, spd:[1000, 5000], papa:true, ink:2 }, 'あわせかた');
   },
 
+  'あわせかた：1もんずつ の きろく（hist）は りょうほう（おなじ ときは 1つ・あたらしい 6こ）、ずけい の ⭐ も りょうほう': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      const a = { hinata: { idx:0, cleared:{}, logs:{}, rainbow:{}, hist:{ 3:[{ t:10 }, { t:30, ok:1 }] } } };
+      const b = { hinata: { idx:0, cleared:{}, logs:{}, rainbow:{}, hist:{ 3:[{ t:10, ok:1, ms:5000 }, { t:20 }, { t:40 }, { t:50 }, { t:60 }, { t:70 }] } } };
+      NBMerge.mergeTaskStore(a, b);
+      const k = NBMerge.mergeKatachi({ hinata:[0, 2] }, { hinata:[2, 5], papa:[1] });
+      return { ts: a.hinata.hist[3].map(e => e.t), ok30: a.hinata.hist[3].find(e => e.t === 30).ok, kat: k };
+    });
+    t.eq(r, { ts:[20, 30, 40, 50, 60, 70], ok30:1, kat:{ hinata:[0, 2, 5], papa:[1] } }, 'あわせかた');
+  },
+
+  'ずけい の ⭐ も どうき で もう1だいに とどく': async t => {
+    const worker = fakeWorker();
+    const A = await phone(t, worker), B = await phone(t, worker);
+    await A.evaluate(() => localStorage.setItem('nb_katachi', JSON.stringify({ hinata:[0, 4] })));
+    t.eq(await syncNow(A), 'ok', 'A が おくれない');
+    await B.evaluate(() => localStorage.setItem('nb_katachi', JSON.stringify({ hinata:[7] })));
+    t.eq(await syncNow(B), 'ok', 'B が おくれない');
+    t.eq(await B.evaluate(() => JSON.parse(localStorage.getItem('nb_katachi')).hinata.sort((a, b) => a - b)), [0, 4, 7], 'B に A の ⭐ が こない');
+  },
+
   '2だいで あそんでも 上書きせず あわさる（さきに おくられて いても 409 で あわせなおす）': async t => {
+
     const worker = fakeWorker();
     const A = await phone(t, worker), B = await phone(t, worker);
     await A.evaluate(() => { const r = curRec(); r.cleared[0] = true; taskCleared = r.cleared; kake().f['7x8'] = { c:1, s:1, m:false, g:false, w:0, due:0, last:Date.now() }; saveTask(); });

@@ -142,18 +142,18 @@ module.exports = {
   },
 
   // ── まぜまぜ ──
-  'まぜまぜ：けいさん1問ごとに かけざん・とけい・かけざん・とけい・かけざん・ひっさん を はさむ。けいさんは できて いない おだい 2もん・おさらい 1もん': async t => {
+  'まぜまぜ：けいさん1問ごとに かけざん・あそび・とけい・かけざん・あそび・とけい・ひっさん を はさむ。けいさんは できて いない おだい 2もん・おさらい 1もん': async t => {
     const p = await t.open();
     const seq = await p.evaluate(() => {
       taskOn = true; startTask(0);
       const out = [];
-      for(let k=0;k<12;k++){
+      for(let k=0;k<14;k++){
         if(hissanTask){                                     // ひっさん・かけざん：できた ことに する
           out.push(hissanTask.kind === 'mul' ? 'か' : 'ひ'); onHissanMessage({ from:'hissan', type:'done', ans:51, miss:0 });
           if(paradeBreak) endParadeBreak(); continue;
         }
         const c = currentTask();
-        out.push(isClockTask(c) ? 'と' : 'け' + taskIdx);
+        out.push(isClockTask(c) ? 'と' : isPlayTask(c) ? 'あ' : 'け' + taskIdx);
         if(isPickTask(c)){
           const h = Math.floor(c.c.goal/60);
           drumSet(c.c.h24 ? h : (h % 12) || 12, c.c.goal % 60); drumAnswer();
@@ -165,8 +165,8 @@ module.exports = {
       }
       return out.join(',');
     });
-    // け0 の あと：できて いない 1・2 → おさらい（できた 0・1 の うち まえに 出した 0）→ 3・4
-    t.eq(seq, 'け0,か,け1,と,け2,か,け0,と,け3,か,け4,ひ', 'まぜまぜの じゅんばんが ちがう');
+    // け0 の あと：できて いない 1・2 → おさらい（できた 0・1 の うち まえに 出した 0）→ 3・4 → おさらい 1
+    t.eq(seq, 'け0,か,け1,あ,け2,と,け0,か,け3,あ,け4,と,け1,ひ', 'まぜまぜの じゅんばんが ちがう');
   },
 
   'つぎの けいさん：できて いない おだいの さいしょの 3つから、まえに 出した ものを さける。しょうすうは 出さない': async t => {
@@ -177,7 +177,7 @@ module.exports = {
       curRec().rainbow = {}; for(let i=0;i<50;i++) curRec().rainbow[i] = true;
       startTask(50); calcPicks = 0;
       const got = [];
-      for(let k=0;k<6;k++){ const i = nextCalcIdx(); got.push(i); startTask(i); curRec().seen[i] = Date.now() + k; }
+      for(let k=0;k<6;k++){ const i = nextCalcIdx(); got.push(i); startTask(i); const h = curRec().hist[i]; h[h.length - 1].t = Date.now() + 1000 + k; }
       for(let i=50;i<60;i++) taskCleared[i] = true;                  // ぜんぶ できた（しょうすう は のぞく）
       calcPicks = 0; const all = [nextCalcIdx(), nextCalcIdx()];
       return { got, all, dec: all.some(i => isDecTask(TASKS[i])) };

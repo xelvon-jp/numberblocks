@@ -72,7 +72,7 @@ module.exports = {
     t.eq(m, [[30], true], 'こうさくしつ で ながしかく から さんかく を きりだせない');
     await p.waitForTimeout(200);
     t.eq(await p.evaluate(() => kst.hint), '6 × 5 の はんぶん', 'さんかく の ヒント が ちがう');
-    await p.evaluate(() => { drawTabsAndUI(ctx); const b = tabBtns.find(x => x.val === 'calc'); handleStart(b.x + b.w/2, b.y + b.h/2, 's'); });
+    await p.evaluate(() => { drawTabsAndUI(ctx); const b = tabBtns.find(x => x.val === 'task'); handleStart(b.x + b.w/2, b.y + b.h/2, 's'); });
     t.eq(await p.evaluate(() => [katachiOn, !!kousakuFrame]), [false, false], 'タブ で おわらない');
   },
 

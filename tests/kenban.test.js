@@ -34,7 +34,7 @@ module.exports = {
     const { p } = await openKenban(t);
     t.eq([await p.evaluate(() => [mode, setOpen]), await vis(p)], [['kenban', false], 'visible'], 'ひらかない');
     t.ok(await p.evaluate(() => document.querySelector('iframe[src^="kenban.html"]').getBoundingClientRect().top === TAB_H), 'タブの 下から はじまらない');
-    await p.evaluate(() => { const b = tabBtns.find(x => x.val === 'calc'); handleStart(b.x + b.w/2, b.y + b.h/2, 'm'); handleEnd(b.x + b.w/2, b.y + b.h/2, 'm'); });
+    await p.evaluate(() => { const b = tabBtns.find(x => x.val === 'task'); handleStart(b.x + b.w/2, b.y + b.h/2, 'm'); handleEnd(b.x + b.w/2, b.y + b.h/2, 'm'); });
     await p.waitForTimeout(100);
     t.eq(await vis(p), 'hidden', 'タブで もどらない');
   },

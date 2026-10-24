@@ -526,7 +526,8 @@ function buildClockTask(t){
 function isClockTask(t){ return !!(t && (t.k === 'clock' || t.k === 'pick')); }
 function isPickTask(t){ return !!(t && t.k === 'pick'); }
 function taskGoalLabel(t){ return isClockTask(t) ? fmtT(t.c.goal) : String(t.n); }
-let taskOn = false, taskIdx = 0, taskDone = false;
+// ひらいたら いつも おだい（2026-10-24。タブは おだい だけ に した。けいさん・はんぶん・ずけい は ためし から）
+let taskOn = true, taskIdx = 0, taskDone = false;
 let taskCleared = {};   // どのおだいをクリアしたか（idx → true）
 let taskLogs    = {};   // クリアしたときの手順（idx → [step,...]）
 let taskLog     = [];   // いま解いている途中の手順
@@ -548,7 +549,7 @@ const HINT_AFTER_MOVES = 4;
 function hintReady(){
   if(!taskActive() || taskDone) return false;
   const t = currentTask();
-  if(isClockTask(t)) return false; // とけいは ヒントなし（自分で よむ・あわせる れんしゅう）
+  if(isClockTask(t) || isPlayTask(t)) return false; // とけい・ちいさな ゴールは ヒントなし
   if(hintShownAt) return true;   // 一度出したら、そのおだいのあいだは引っこめない
   if(taskLog.length >= (t.best||0) + HINT_AFTER_MOVES) return true;
   return taskStartT > 0 && (Date.now() - taskStartT) > HINT_AFTER_MS;
@@ -563,7 +564,7 @@ const PROFILES = [
 ];
 let profileIdx = 0;
 function profile(){ return PROFILES[profileIdx]; }
-function emptyRec(){ return { idx:0, cleared:{}, logs:{}, rainbow:{}, seen:{} }; }
+function emptyRec(){ return { idx:0, cleared:{}, logs:{}, rainbow:{}, hist:{} }; }
 
 let taskStore = {};
 for(const pr of PROFILES) taskStore[pr.id] = emptyRec();
@@ -572,7 +573,7 @@ try{
   const raw = localStorage.getItem(TASK_KEY);
   if(raw){
     const v = JSON.parse(raw);
-    taskOn = !!v.on;
+
     if(v.v === 2 && v.p){
       for(const pr of PROFILES){
         const r = v.p[pr.id];
@@ -588,7 +589,7 @@ try{
                                                                : { lv:1, hist:[], v:2 },
                              kake: (r.kake && r.kake.f) ? r.kake : null,
                              spd: (r.spd && typeof r.spd === 'object') ? r.spd : {},
-                             seen: (r.seen && typeof r.seen === 'object') ? r.seen : {},
+                             hist: (r.hist && typeof r.hist === 'object') ? r.hist : {},
                              // ビギナー（2026-10-24 に なくした）の きろく。つかわないが、どうきで きえない ように のこす
                              beg: { idx:b.idx|0, cleared:b.cleared||{}, logs:b.logs||{}, rainbow:b.rainbow||{} } };
       }
@@ -783,12 +784,12 @@ function levelSize(lv){ return TASKS.filter(t=>t.lv===lv).length; }
 // レベルごとに消す／ぜんぶ消す／もうひとりへ移す。
 // 消すのは取り返しがつかないので、かならず一度たずねてから実行する。
 
-function resetRec(r){ r.idx = 0; r.cleared = {}; r.logs = {}; r.rainbow = {}; r.seen = {}; }
+function resetRec(r){ r.idx = 0; r.cleared = {}; r.logs = {}; r.rainbow = {}; r.hist = {}; }
 function clearLevelRecords(id, lv){
   if(!taskStore[id]) return;
   const r = recOf(id);
   TASKS.forEach((t,i)=>{
-    if(t.lv===lv){ delete r.cleared[i]; delete r.logs[i]; if(r.rainbow) delete r.rainbow[i]; }
+    if(t.lv===lv){ delete r.cleared[i]; delete r.logs[i]; if(r.rainbow) delete r.rainbow[i]; if(r.hist) delete r.hist[i]; }
   });
   afterRecordEdit();
 }
@@ -853,7 +854,7 @@ function resetTaskState(){
   drumReset(currentTask());
   taskDone = false; taskLog = []; winFx = null;
   clearedAt = 0; autoNextOff = false; lastLevelUp = 0; setMiss = 0; setShake = 0; boltExtra = 0;
-  lastRainbow = false;
+  lastRainbow = false; hintUsed = false;
   hintOn = false; hintShownAt = 0; taskStartT = Date.now();
   blocks = []; puzzle = null; clearUndo();
   stageOpen = false; stageDetail = -1;
@@ -862,7 +863,7 @@ function resetTaskState(){
 function startTask(i){
   taskIdx = Math.max(0, Math.min(TASKS.length-1, i));
   genTask = null;
-  const r = curRec(); (r.seen || (r.seen = {}))[taskIdx] = Date.now();   // いつ 出したか（nextCalcIdx）
+  noteTry(taskIdx);
   if(!isCalcMode()) setMode('calc');
   resetTaskState();
   saveTask(); updateTargets();
@@ -903,17 +904,31 @@ function endParadeBreak(){
 // しょうすう の おだい（レベル7〜）は まぜまぜ には まだ いれない（パパと きめた）
 const DEC_LV = 6;
 const isDecTask = t => t && t.lv >= DEC_LV;          // レベル7〜12
+// ── 1もんずつ の きろく（2026-10-24）──────────────────────────────────
+// おだい ごとに さいきん 6かい ぶん：{ t: 出した とき, ok: できた, ms: かかった じかん, mv: 手数, h: ヒントを 見た }。
+// とちゅうで ほかへ いった（できなかった）ものは ok なし。つぎの おだいを えらぶ ときや、できぐあいを みる ときに つかう。
+const HIST_MAX = 6;
+let hintUsed = false;     // いまの おだいで ヒントを 見たか
+function noteTry(i){
+  const r = curRec(), H = r.hist || (r.hist = {}), h = H[i] || (H[i] = []);
+  h.push({ t: Date.now() }); if(h.length > HIST_MAX) h.splice(0, h.length - HIST_MAX);
+}
+function noteSolved(i, ms, mv){
+  const h = (curRec().hist || {})[i]; if(!h || !h.length) return;
+  Object.assign(h[h.length - 1], { ok:1, ms: Math.round(ms), mv }, hintUsed ? { h:1 } : {});
+}
+function lastSeen(i){ const h = (curRec().hist || {})[i]; return h && h.length ? h[h.length - 1].t : 0; }
 // つぎの けいさんの おだいを えらぶ（2026-10-24。まえは 0番から じゅんに まわって、できた おだいを くりかえして いた）
 //   3もんに 2もんは まだ できて いない おだい の さいしょの 3つ から（1つに つまっても ほかへ すすめる）
 //   3もんに 1もんは おさらい：できた けど 🌈 で ない おだい（なければ できた おだい）
-//   どちらも いちばん まえに 出した もの（seen）から。つづけて おなじ おだい は ださない
+//   どちらも いちばん まえに 出した もの（lastSeen）から。つづけて おなじ おだい は ださない
 const PICK_FRONT = 3, PICK_REVIEW = 3;
 let calcPicks = 0;
 function nextCalcIdx(){
-  const r = curRec(), seen = r.seen || {}, rb = r.rainbow || {};
+  const rb = curRec().rainbow || {};
   const pool = [];
   TASKS.forEach((t, i) => { if(!isDecTask(t) && i !== taskIdx) pool.push(i); });
-  const oldest = list => list.slice().sort((a, b) => (seen[a] || 0) - (seen[b] || 0) || a - b)[0];
+  const oldest = list => list.slice().sort((a, b) => lastSeen(a) - lastSeen(b) || a - b)[0];
   const fresh = pool.filter(i => !taskCleared[i]).slice(0, PICK_FRONT);
   calcPicks++;
   if(fresh.length && calcPicks % PICK_REVIEW !== 0) return oldest(fresh);
@@ -927,7 +942,7 @@ function advanceTask(){
   if(++sinceClock >= MIX_CALC){
     sinceClock = 0;
     const sp = MIX_SPECIALS[nextSpecial % MIX_SPECIALS.length]; nextSpecial = (nextSpecial + 1) % MIX_SPECIALS.length;
-    if(sp === 'hissan') startHissanTask(); else if(sp === 'kake') startKakeTask(); else startClockTask();
+    if(sp === 'hissan') startHissanTask(); else if(sp === 'kake') startKakeTask(); else if(sp === 'play') startPlayTask(); else startClockTask();
     return;
   }
   startTask(nextCalcIdx());
@@ -1072,7 +1087,8 @@ function drawGameBolt(ctx){
 const KAKE_MAX = 5, KAKE_RB = 8000, KAKE_NEW = 2, KAKE_UNLOCK = 0.8;
 const KAKE_DEF = { A:4000, B:6000, C:10000, D:15000 };   // ⚡ はじめの めあて（グループごと）
 // ひっさんは くりかえし 出ると いやがる（パパ 2026-10-24）ので 12もんに 1かい（まえは 8もんに 1かい）
-const MIX_SPECIALS = ['kake', 'clock', 'kake', 'clock', 'kake', 'hissan'];
+// ちいさな ゴール（play）も はさむ：14もんで かけざん 2・あそび 2・とけい 2・ひっさん 1
+const MIX_SPECIALS = ['kake', 'play', 'clock', 'kake', 'play', 'clock', 'hissan'];
 function kakeGroup(a, b){
   if(a <= 10 && b <= 10){
     const easy = a === b || [2, 5, 10].includes(a) || [2, 5, 10].includes(b);
@@ -1150,6 +1166,48 @@ function startKakeTask(){
   showHissan(true);
   updateTargets();
 }
+// ── ちいさな ゴール（まぜまぜ。2026-10-24）──────────────────────────────────
+// 「けいさん」「はんぶん」の じゆうあそび（くっつける・はんぶんこ・×2・ミラー）を、おだいの あいだに 1もんずつ。
+// はじめから キャラを おいて おき、1〜2て で できる ゴールを ことばで だす（「3 と 4 を くっつけよう」）。
+// キーは おいた キャラの かず だけ（やりなおし よう）。ヒント・いなずま・てじゅん は なし。
+// じゅんに まわす（人ごと。r.play.i）。けいさんの ステージの きろく には つけない。
+const PLAY_GOALS = [
+  { n:7,   start:[3, 4],     say:'3 と 4 を くっつけよう' },
+  { n:2,   start:[4],        say:'4 を はんぶんこ しよう' },          // ゆび 2ほんで ひろげる（÷2 でも よい）
+  { n:10,  start:[6, 4],     say:'6 と 4 で 10 に しよう' },
+  { n:2.5, start:[5],        say:'5 を はんぶんこ しよう' },
+  { n:8,   start:[4],        say:'4 を ×2 に しよう' },
+  { n:1,   start:[0.5, 0.5], say:'0.5 と 0.5 を くっつけよう' },
+  { n:12,  start:[6],        say:'6 を ふやして くっつけよう' },      // ミラー
+  { n:0.5, start:[1],        say:'1 を はんぶんこ しよう' },
+  { n:9,   start:[2, 3, 4],  say:'ぜんぶ くっつけよう' },
+  { n:5,   start:[2.5, 2.5], say:'2.5 と 2.5 を くっつけよう' },
+  { n:1.5, start:[3],        say:'3 を はんぶんこ しよう' },
+  { n:16,  start:[4],        say:'4 を ×2、×2 に しよう' },
+  { n:3,   start:[1.5, 1.5], say:'1.5 と 1.5 を くっつけよう' },
+  { n:20,  start:[5],        say:'5 を ふやして 20 に しよう' },
+];
+function isPlayTask(t){ return !!(t && t.k === 'play'); }
+function playOf(id){
+  const r = taskStore[id] || (taskStore[id] = emptyRec());
+  return r.play || (r.play = { i:0 });
+}
+// spec を わたせば その ゴール（テスト用）。わたさなければ つぎの ゴール
+function startPlayTask(spec){
+  closeHissan();
+  let g = spec;
+  if(!g){ const P = playOf(profile().id); g = PLAY_GOALS[(P.i|0) % PLAY_GOALS.length]; P.i = ((P.i|0) + 1) % PLAY_GOALS.length; }
+  genTask = { k:'play', n:g.n, use:[...new Set(g.start)], best:1, ref:1, say:g.say, hint:'' };
+  setMode('+');
+  resetTaskState();
+  const y = targetRowY() + 70;
+  g.start.forEach((v, i) => {
+    const b = new NumberBlock(v, 0, y);
+    b.x = playLeft() + (sw - playLeft())*(i + 1)/(g.start.length + 1) - b.width/2; b.targetX = b.x;
+    blocks.push(b);
+  });
+  saveTask(); updateTargets();
+}
 function noteHissanAnswer(ok){
   const t = hissanTask; if(!t) return;
   const st = hissanStats();
@@ -1200,6 +1258,7 @@ function noteClockAnswer(ok){
   saveTask();
 }
 
+const PLAY_COLOR = '#2a9db0';   // ちいさな ゴール の いろ（カードの ボタン）
 // ── てじゅんの記録 ────────────────────────────────────────────────
 // 「どうやって作ったか」を1手ずつ残しておき、あとから見られるようにする。
 const STEP_MAX = 60;
@@ -1231,13 +1290,13 @@ let lastOp = '+';   // けいさんタブに戻ったときに選び直す演算
 // 「おだい」は ひとつの タブ。中の画面（キャラ／文字盤）は おだいに合わせて かわるが、
 // 上のタブは「おだい」のまま。ほかのタブは おだいなしの じゆうあそび。
 // 因数・ドリル・とけい・わけっこ・ひっさん・けんばん は ためし（lab.html）から index.html?mode=○○ で ひらく（パパ）。
+// 2026-10-24：タブは おだい だけ。けいさん・はんぶん（じゆうあそび）は ちいさな ゴールとして おだいに まぜ、
+// じゆうに あそぶ ときは ためし から（index.html?mode=calc・?mode=hanbun）。ずけい も ためし から（?katachi=1）。
 const TAB_DEFS = [
   {label:'おだい', val:'task'},
-  {label:'けいさん', val:'calc'},
-  {label:'はんぶん', val:'hanbun'}, // ピンチアウトで はんぶんこ・かさねて くっつく（0.5。hanbun.html を 下に かさねる）
-  {label:'ずけい', val:'zukei'}     // かたち に ぴったり（めんせき。katachi.js）
 ];
-const LAB_MODES = ['factor', 'quiz', 'clock', 'waru', 'kenban'];   // ためし から ひらく がめん
+const LAB_MODES = ['calc', 'hanbun', 'factor', 'quiz', 'clock', 'waru', 'kenban'];   // ためし から ひらく がめん
+
 let tabBtns = [], opBarBtns = [];
 
 // ─── もどす（アンドゥ）────────────────────────────────────────────
@@ -3739,7 +3798,7 @@ function drawTaskCard(ctx, t){
   const pulse = 0.5+0.5*Math.sin(t*0.006);
   if(!taskStartT) taskStartT = Date.now();   // 開き直したときの数えはじめ
   const lv = TASK_LEVELS[task.lv||0];
-  if(!taskDone && !paradeBreak && taskActive()) drawSpeedBar(ctx, r.x + 22, r.y + r.h + 3, r.w - 30, 1 - (Date.now() - taskStartT)/taskSpeed().target);
+  if(!taskDone && !paradeBreak && taskActive() && !isPlayTask(task)) drawSpeedBar(ctx, r.x + 22, r.y + r.h + 3, r.w - 30, 1 - (Date.now() - taskStartT)/taskSpeed().target);
 
   ctx.save();
   ctx.fillStyle = taskDone ? 'rgba(255,205,70,0.96)' : 'rgba(255,255,255,0.9)';
@@ -3791,11 +3850,11 @@ function drawTaskCard(ctx, t){
     const bh=36, by=r.y+7;
     const bw=64, bx=r.x+r.w-bw-10;
     // とけいの おだいは「とけい3」のように、とけいの レベルを出す
-    ctx.fillStyle = genTask ? CLOCK_LEVELS[genTask.clv-1].color : lv.color;
+    ctx.fillStyle = isPlayTask(genTask) ? PLAY_COLOR : genTask ? CLOCK_LEVELS[genTask.clv-1].color : lv.color;
     ctx.beginPath(); ctx.roundRect(bx,by,bw,bh,9); ctx.fill();
     ctx.fillStyle='#fff'; ctx.textAlign='center';
     ctx.font='bold 14px sans-serif';
-    ctx.fillText(genTask ? 'とけい' + genTask.clv : stageLabel(taskIdx), bx+bw/2, by+13);
+    ctx.fillText(isPlayTask(genTask) ? 'あそび' : genTask ? 'とけい' + genTask.clv : stageLabel(taskIdx), bx+bw/2, by+13);
     ctx.font='bold 10px sans-serif';
     ctx.fillText('いちらん', bx+bw/2, by+27);
     taskBtns.push({x:bx,y:by,w:bw,h:bh,val:'stages'});
@@ -3842,6 +3901,7 @@ function drawTaskCard(ctx, t){
     // 右のボタンにぶつかりそうなら、ひと回り小さくして収める。
     let big = String(task.n), tail = ' を つくろう！';
     if(isClockTask(task)){ big = task.c.title; tail = task.c.tail; }
+    if(isPlayTask(task)){ big = task.say; tail = ' 🎈'; }
     const titleMax = nx - r.x - 22;
     ctx.textAlign='left'; ctx.textBaseline='alphabetic';
     let f1 = 28, f2 = 18;
@@ -4575,6 +4635,16 @@ function checkTask(){
   if(blocks.some(b=>b.num===t.n)){
     taskDone = true;
     clearedAt = Date.now(); autoNextOff = false;
+    if(isPlayTask(t)){
+      // ちいさな ゴール：きろく・虹・いなずま なし。「できた！」と パレードの かず だけ
+      lastRainbow = false; boltExtra = 0;
+      notePrize(t.n); saveTask();
+      const win = blocks.find(b=>b.num===t.n);
+      winFx = { block:win, num:t.n, t:0, praise:null, moves:taskLog.length, bolt:false, arc:null, stampAt: stampPlace(),
+                landedAt: null, life: fxLife(false, false) };
+      if(win){ win.vy = -9; win.onGround = false; for(let i=0;i<50;i++) fxParticles.push(new Particle(win.cx, win.y + win.height*0.35)); }
+      return;
+    }
     taskCleared[taskIdx] = true;
     const kept = taskLogs[taskIdx];
     const prevOwn = kept ? kept.length : null;
@@ -4582,6 +4652,7 @@ function checkTask(){
     // レインボー：おてほんの 手数いないで 作れたら
     const rainbow = moves <= (t.ref || t.best);
     const bolt = noteSpeed();                         // いなずま：めあての じかん いない
+    noteSolved(taskIdx, Date.now() - (taskStartT || Date.now()), moves);
     const praise = clearPraise(rainbow, bolt) || judgeClear(taskIdx, moves, prevOwn);
     lastRainbow = rainbow;
     if(rainbow){ const cr = curRec(); cr.rainbow = cr.rainbow || {}; cr.rainbow[taskIdx] = true; }
@@ -4844,13 +4915,13 @@ function handleStart(x,y,pid){
     if(tb.val==='settings'){ setOpen = true; stageOpen = false; }
     // おだいに入るときは、かならず「だれが あそぶ？」を聞く（setTaskOn）
     else if(tb.val==='task'){ if(!taskOn) setTaskOn(true); }
-    else if(tb.val==='zukei'){ if(taskOn) setTaskOn(false); setMode('x'); katachiStart(katachiIdx); kList = true; }   // はじめ は いちらん
     else { if(taskOn) setTaskOn(false); setMode(tb.val); }
     return;
   }
   for(const tb of taskBtns){
     if(!ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)) continue;
-    if(tb.val==='hint')        hintOn = !hintOn;
+    if(tb.val==='hint'){       hintOn = !hintOn; if(hintOn) hintUsed = true; }
+
     else if(tb.val==='next')   nextTask();
     else if(tb.val==='stages'){ openStages(); }
     else if(tb.val==='steps'){  openStages(taskIdx); autoNextOff=true; }
@@ -5453,6 +5524,9 @@ const play = (() => {
     if(typeof hissanTask !== 'undefined' && hissanTask && hissanTask.frame) return true;
     try{ return taskActive() && !taskDone; }catch(e){ return false; }
   }
+  // ひらいた ときに もう じかんが ない なら、といている もんだいを またずに すぐ とめる
+  // （ひらくと いつも おだい なので、まつと ひらきなおす たびに 1もん あそべて しまう）
+  let hadTime = false;
   function update(){
     const t = Date.now();
     const dt = Math.min(5000, Math.max(0, t - tick)); tick = t;
@@ -5460,6 +5534,7 @@ const play = (() => {
       if(stopped()) restIfAway();        // とまって 1じかん たったら また あそべる
       else if(counting()){
         const before = remain();
+        if(before > 0) hadTime = true;
         st.used += dt; st.last = t;
         const r = remain();
         for(const m of PLAY_WARN) if(before > m*60000 && r <= m*60000){ left.textContent = 'あと ' + m + 'ぷん'; blinkUntil = t + 10000; }
@@ -5474,7 +5549,7 @@ const play = (() => {
       fill.style.background = r <= 60000 ? '#e0403f' : r <= 180000 ? '#f0a020' : '#3fbf5a';
     }
     left.classList.toggle('blink', t < blinkUntil && !stopped());
-    if(counting() && r <= 0 && !stopped() && !pop.classList.contains('on') && !pin.classList.contains('on') && !busy()){
+    if(counting() && r <= 0 && !stopped() && !pop.classList.contains('on') && !pin.classList.contains('on') && !(hadTime && busy())){
       if(st.mode === 'lock') lock.classList.add('on');
       else if(t >= nagAt) pop.classList.add('on');
     }
@@ -5562,13 +5637,17 @@ const sync = (() => {
   const url = () => ls.get(URL_KEY) || SYNC_URL;   // テストや ためしに URL を かえられる
   const code = () => ls.get(CODE_KEY) || '';
   const on = () => !!(url() && code());
-  function snapshot(){ saveTask(); let ink = []; try{ ink = JSON.parse(ls.get('nb_ink_samples') || '[]'); }catch(e){} return { p: taskStore, ink }; }
+  // ずけい の ⭐（nb_katachi）も おくる（2026-10-24。まえは この スマホ だけ）
+  const kat = () => { try{ const v = JSON.parse(ls.get('nb_katachi') || '{}'); return v && typeof v === 'object' ? v : {}; }catch(e){ return {}; } };
+  function snapshot(){ saveTask(); let ink = []; try{ ink = JSON.parse(ls.get('nb_ink_samples') || '[]'); }catch(e){} return { p: taskStore, ink, kat: kat() }; }
   function absorb(data){
     if(!data) return;
     if(data.p) NBMerge.mergeTaskStore(taskStore, data.p);
     const r = curRec(); taskCleared = r.cleared || (r.cleared = {}); taskLogs = r.logs || (r.logs = {});
     if(data.ink){ let mine = []; try{ mine = JSON.parse(ls.get('nb_ink_samples') || '[]'); }catch(e){}
       const ink = NBMerge.mergeInk(mine, data.ink); if(ink.length !== mine.length) ls.set('nb_ink_samples', JSON.stringify(ink)); }
+    if(data.kat){ const mine = kat(), before = JSON.stringify(mine); NBMerge.mergeKatachi(mine, data.kat); if(JSON.stringify(mine) !== before) ls.set('nb_katachi', JSON.stringify(mine)); }
+
     saveTask();
   }
   async function call(method, body){

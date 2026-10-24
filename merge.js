@@ -3,12 +3,13 @@
    どちらかを まるごと 上書きは しない。きまりは：
      クリアした おだい・レインボー …… どちらかで できていれば できた
      てじゅん（いちばん すくない 手数）…… すくない ほう
-     おだいを さいごに 出した とき（seen）…… あたらしい ほう
+     1もんずつ の きろく（hist）…… りょうほう（おなじ とき の ものは 1つ、あたらしい 6こ）
      とけい・ひっさんの レベル …… たかい ほう（おなじなら こちら）
      かけざん …… もんだいごとに さいごに こたえた ほう（last）。だんかいは たかい ほう
      はやさ（spd）…… しゅるいごとに さいごに きろくした ほう（_t）
      いまの おだいの ばしょ・まぜまぜ・ごほうびの かず …… この スマホの まま
      手がきの お手本 …… りょうほう（おなじ ものは 1つ、80こ まで）
+     ずけい の ⭐（nb_katachi。人ごとの できた もんだい）…… りょうほう
    local を その まま かきかえる（ゲームが もっている オブジェクトを とりかえないため）。
    ブラウザでは window.NBMerge、node では require('./merge.js')。
    ===================================================================== */
@@ -30,7 +31,15 @@
     a.cleared = mergeMarks(a.cleared, b.cleared);
     a.logs = mergeLogs(a.logs, b.logs);
     a.rainbow = mergeMarks(a.rainbow, b.rainbow);
-    if(b.seen){ a.seen = a.seen || {}; for(const k in b.seen) if((b.seen[k] || 0) > (a.seen[k] || 0)) a.seen[k] = b.seen[k]; }
+    if(b.hist){
+      a.hist = a.hist || {};
+      for(const k in b.hist){
+        if(!Array.isArray(b.hist[k])) continue;
+        const m = new Map(); for(const e of (a.hist[k] || []).concat(b.hist[k])) if(e && e.t) m.set(e.t, Object.assign(m.get(e.t) || {}, e));
+        a.hist[k] = [...m.values()].sort((x, y) => x.t - y.t).slice(-6);
+      }
+    }
+
     return a;
   }
   function mergeLevel(a, b){            // { lv, hist, … }。たかい ほう
@@ -84,7 +93,18 @@
     for(const s of remote) if(s && !seen.has(inkKey(s))){ seen.add(inkKey(s)); out.push(s); }
     return out.slice(-INK_MAX);
   }
-  const api = { mergeTaskStore, mergeProfile, mergeInk, mergeSpd, mergeKake };
+  // ずけい の ⭐（{ 人: [もんだい ばんごう] }）
+  function mergeKatachi(local, remote){
+    if(!remote || typeof remote !== 'object') return local;
+    for(const id in remote){
+      if(!Array.isArray(remote[id])) continue;
+      const a = Array.isArray(local[id]) ? local[id] : (local[id] = []);
+      for(const i of remote[id]) if(!a.includes(i)) a.push(i);
+    }
+    return local;
+  }
+  const api = { mergeTaskStore, mergeProfile, mergeInk, mergeSpd, mergeKake, mergeKatachi };
+
   if(typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NBMerge = api;
 })(typeof window !== 'undefined' ? window : this);

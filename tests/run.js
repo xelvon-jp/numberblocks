@@ -90,6 +90,8 @@ function makeT(browser, baseUrl){
           const i = PROFILES.findIndex(p => p.id === who);
           if(i >= 0) setProfile(i);
           setQuizOn(false);
+          if(taskOn) setTaskOn(false);      // ひらくと おだい（2026-10-24〜）。テストは じゆうあそび から はじめて、おだい は taskOn = true で いれる
+          whoOpen = false;
         }, o.who || 'hinata');
         await sleep(80);
       }
