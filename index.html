@@ -310,7 +310,9 @@ const TASK_LEVELS = [
   { name:'0.1を あつめる', color:'#3f9a7a' },
   { name:'てん5を つくる', color:'#5a8fd8' },
   { name:'はんぶん いろいろ', color:'#2a8fa0' },
-  { name:'ひいて しょうすう', color:'#8a6ad0' }
+  { name:'ひいて しょうすう', color:'#8a6ad0' },
+  { name:'はんぶんの はんぶん', color:'#2f8fb8' },   // ここから 0.01 の くらい（2026-10-24。0.5 → 0.25）
+  { name:'0.01を つかう', color:'#4a7fb0' }
 ];
 const TASKS = [
   // レベル1：つみかさねる
@@ -432,7 +434,25 @@ const TASKS = [
   { lv:11, n:4.5, use:[5,0.5], best:3, ref:6, way:[], hint:'5から 0.5を ひく' },
   { lv:11, n:1.9, use:[2,0.1], best:3, ref:9, way:[], hint:'2から 0.1を ひく' },
   { lv:11, n:5.5, use:[6,0.5], best:3, ref:7, way:[], hint:'6から 0.5を ひく' },
-  { lv:11, n:7.9, use:[8,0.1], best:3, ref:12, way:[], hint:'8から 0.1を ひく' }
+  { lv:11, n:7.9, use:[8,0.1], best:3, ref:12, way:[], hint:'8から 0.1を ひく' },
+  // レベル13：はんぶんの はんぶん（0.01 の くらい）
+  { lv:12, n:0.25, use:[0.5], best:2, ref:2, way:[], hint:'0.5を はんぶんこ' },
+  { lv:12, n:0.25, use:[1], best:3, ref:3, way:[0.5], hint:'1の はんぶんの はんぶん' },
+  { lv:12, n:0.75, use:[3], best:3, ref:3, way:[1.5], hint:'3の はんぶんの はんぶん' },
+  { lv:12, n:1.25, use:[5], best:3, ref:3, way:[2.5], hint:'5の はんぶんの はんぶん' },
+  { lv:12, n:2.25, use:[9], best:3, ref:3, way:[4.5], hint:'9の はんぶんの はんぶん' },
+  { lv:12, n:0.75, use:[0.5], best:4, ref:4, way:[0.25], hint:'0.5と 0.25' },
+  { lv:12, n:0.05, use:[0.1], best:2, ref:2, way:[], hint:'0.1を はんぶんこ' },
+  { lv:12, n:3.75, use:[10,5], best:5, ref:5, way:[2.5,7.5], hint:'15の はんぶんの はんぶん' },
+  // レベル14：0.01を つかう
+  { lv:13, n:0.02, use:[0.01], best:2, ref:2, way:[], hint:'0.01を 2こ' },
+  { lv:13, n:0.04, use:[0.01], best:3, ref:3, way:[0.02], hint:'0.01を ×2、×2' },
+  { lv:13, n:0.03, use:[0.01], best:4, ref:4, way:[0.02], hint:'0.01を 3こ' },
+  { lv:13, n:0.08, use:[0.01], best:4, ref:4, way:[0.02,0.04], hint:'×2を 3かい' },
+  { lv:13, n:0.11, use:[0.1,0.01], best:3, ref:3, way:[], hint:'0.1と 0.01' },
+  { lv:13, n:1.01, use:[1,0.01], best:3, ref:3, way:[], hint:'1と 0.01' },
+  { lv:13, n:0.55, use:[0.5,0.1], best:4, ref:4, way:[0.05], hint:'0.5と 0.05' },
+  { lv:13, n:0.99, use:[1,0.01], best:3, ref:12, way:[], hint:'1から 0.01を ひく' }
 ];
 const TASK_KEY = 'nbg.task.v1';
 // おだいの ならびの版。60番より うしろを 入れかえたら 1つ上げる（読みこむときに 古い記録を けす）
@@ -3966,9 +3986,10 @@ function stageGrid(){
   const rows = Math.ceil(nLv / lvCols);
   const colW = (sw - pad*2 - colGap*(lvCols-1)) / lvCols;
   const cw = (colW - cgap*(cols-1)) / cols;
-  const rowH = Math.min(74, Math.max(38, (sh - y0 - 8) / rows));
+  // 14レベル（0.01 の おだい を たした）で よこむき の ひくい 画面 でも 入る ように、ぎりぎり の ときは 32 まで ちぢめ、みだし と マス を つめる
+  const rowH = Math.min(74, Math.max(32, (sh - y0 - 8) / rows)), top = rowH < 38 ? 13 : 16;
   return { pad:pad, cols:cols, cgap:cgap, cw:cw, y0:y0, rowH:rowH, lvCols, rows, colW, colGap,
-           ch:Math.max(22, Math.min(46, rowH-24)) };
+           top, ch:Math.max(18, Math.min(46, rowH - top - 8)) };
 }
 
 function drawStageSelect(ctx, t){
@@ -4053,7 +4074,7 @@ function drawStageSelect(ctx, t){
     const idxs = [];
     for(let i=0;i<TASKS.length;i++) if(TASKS[i].lv===lv) idxs.push(i);
     idxs.forEach((idx,c)=>{
-      const x = rx + c*(g.cw+g.cgap), y = ry+16, w = g.cw, h = g.ch;
+      const x = rx + c*(g.cw+g.cgap), y = ry+g.top, w = g.cw, h = g.ch;
       const done = !!taskCleared[idx], cur = (idx===taskIdx);
       ctx.fillStyle = done ? L.color : 'rgba(255,255,255,0.14)';
       ctx.beginPath(); ctx.roundRect(x,y,w,h,7); ctx.fill();

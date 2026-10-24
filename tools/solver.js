@@ -6,6 +6,8 @@
 // 1手 ＝ 数を出す／コピー／×2／÷2／しかく（2じょう）／2体を合体／ピンチアウト（はんぶんこ。÷2 と おなじ 1て）。
 // しょうすう（0.1 きざみ。ゲーム では 1000 まで、ここ では 100 まで で さがす）も あつかう：なかでは「0.1 が なんこ」（T）で けいさん する。
 //   ゲームと おなじ きまり：× ÷ ÷2 しかく は こたえが 0.1 きざみ に おさまる とき だけ（5 ÷ 2 ＝ 2.5、5 を ÷2 → 2.5）。
+//   0.01 の くらい の おだい（ねらい か つかえる かず に 0.01 の くらい が ある）は「0.01 が なんこ」で さがす（20 まで の しょうすう）。
+//   ゲームは 2026-10-24 から 0.01 きざみ だが、0.1 の おだい は まえ と おなじ 0.1 きざみ で さがす（はやさ の ため。こたえ は かわらなかった）。
 // ゲームの「じょうず！」は ref＋2 手いない、が基準（index.html の REF_SLACK）。
 //
 // つかいかた（リポジトリの一番上で）:
@@ -15,10 +17,15 @@
 
 const MAX = 1000;   // ゲームで出せるいちばん大きい数
 const INF = 99;
-const TEN = 10, TMAX = MAX*TEN;     // T（0.1 が なんこ）
+let TEN = 10, TMAX = MAX*TEN;       // T（0.1 が なんこ。0.01 の おだい では 0.01 が なんこ：useTen）
 // ゲーム では しょうすう も 1000 まで つくれる が、ここ では はやさ の ため 100 まで の しょうすう で さがす
 // （1000 まで に すると --check が 4びょう → 2ふん。いまの おだい の best/ref/way は どちらでも おなじ だった）。
-const DEC_TMAX = 100*TEN;
+let DEC_TMAX = 100*TEN;
+// その おだい の きざみ に する（0.01 の くらい が あれば 100）
+function useTen(n, use){
+  const hund = [n].concat(use).some(v => Math.abs(v*10 - Math.round(v*10)) > 1e-9);
+  TEN = hund ? 100 : 10; TMAX = MAX*TEN; DEC_TMAX = (hund ? 20 : 100)*TEN;
+}
 const okT = T => Number.isInteger(T) && T >= 1 && T <= TMAX && (T % TEN === 0 || T <= DEC_TMAX);
 const toT = v => Math.round(v*TEN), fromT = T => T/TEN;
 
@@ -29,7 +36,7 @@ function costs(use, plain){ return search(use, plain).cost; }
 // cost[T] … T を作る最短手数 / how[T] … そのときの最後の1手 [しゅるい, a, b]（a, b も T）
 const _cache = new Map();
 function search(use, plain){
-  const key = use.join(',') + (plain ? '/p' : '/f');
+  const key = use.join(',') + (plain ? '/p' : '/f') + '/' + TEN;
   if(_cache.has(key)) return _cache.get(key);
   const cost = new Array(TMAX+1).fill(INF);
   const how  = new Array(TMAX+1).fill(null);
@@ -81,6 +88,7 @@ function search(use, plain){
 // 作るとちゅうで できる数（みちしるべ）を、できる順にならべる。
 // 数字キーで出すだけの数と、さいごの答えは入れない。
 function waypoints(n, use){
+  useTen(n, use);
   n = toT(n);
   let r = search(use, true);                      // まずは ＋×÷2×2 のすなおな道
   if(r.cost[n] >= INF) r = search(use, false);    // だめなら うら技も使う道
@@ -106,6 +114,7 @@ function waypoints(n, use){
 
 // 1問ぶん。作れないときは best が null。
 function solveTask(n, use){
+  useTen(n, use);
   const full = costs(use, false)[toT(n)];
   if(full >= INF) return { best:null, ref:null };
   const plain = costs(use, true)[toT(n)];
@@ -151,6 +160,8 @@ const WAY_FIX = {
   '0.9/1,0.1': [],                            // 1から 0.1を ひく
   // レベル12（ひいて しょうすう）：ひく のが みち。おてほん の まわりみち は みせない
   '9.5/10,0.5': [], '4.9/5,0.1': [], '9.9/10,0.1': [], '2.9/3,0.1': [], '4.5/5,0.5': [], '1.9/2,0.1': [], '5.5/6,0.5': [], '7.9/8,0.1': [],
+  // レベル14：ひく のが みち
+  '0.99/1,0.01': [],
 };
 function wayFor(n, use){
   const k = n + '/' + use.join(',');
@@ -181,6 +192,7 @@ function checkHtml(html){
     if(r.best !== t.best || r.ref !== t.ref || JSON.stringify(way) !== JSON.stringify(t.way))
       bad.push({ ...t, want:{ ...r, way } });
     // みちしるべの数は、その おだいの数字だけで作れて、答えより先に来ること
+    useTen(t.n, t.use);
     const reach = search(t.use, false).cost;
     for(const v of way){
       if(!okT(toT(v)) || reach[toT(v)] >= INF || v === t.n)

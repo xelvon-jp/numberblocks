@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-512.png">
+<title>ためし：さんかくの ひろさ</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#f3f7ea; color:#2b3a52; font-family:-apple-system, system-ui, sans-serif;
+               overscroll-behavior:none; touch-action:none; user-select:none; -webkit-user-select:none; }
+  body { display:flex; flex-direction:column; }
+  header { flex:none; display:flex; align-items:center; gap:8px; padding:8px 10px 4px; }
+  header h1 { flex:1; font-size:17px; font-weight:900; }
+  .back { text-decoration:none; background:#fff; color:#2b3a52; font-weight:800; font-size:13px; padding:7px 10px; border-radius:10px; }
+  #say { flex:none; font-size:15px; font-weight:800; padding:2px 12px; min-height:24px; line-height:1.4; }
+  #stage { flex:1; position:relative; min-height:0; }
+  canvas { display:block; position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
+  #slots { flex:none; display:flex; gap:8px; padding:4px 10px; }
+  #slots button { flex:1; border:3px solid transparent; border-radius:14px; padding:6px 0; font-size:15px; font-weight:900; background:#fff; color:#2b3a52;
+                  box-shadow:0 1px 3px rgba(40,60,90,0.15); }
+  #slots button.on { border-color:#3f8fd0; }
+  #nums { flex:none; display:grid; grid-template-columns:repeat(10, 1fr); gap:4px; padding:4px 10px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  #nums button { border:0; border-radius:10px; padding:10px 0; font-size:16px; font-weight:900; color:#2b3a52; background:var(--f); box-shadow:inset 0 -3px 0 var(--b); }
+</style>
+</head>
+<body>
+<header><h1>📐 さんかくの ひろさ</h1><a class="back" href="lab.html">← ためし</a></header>
+<div id="say"></div>
+<div id="stage"><canvas id="c"></canvas></div>
+<div id="slots"><button id="sb" class="on">ていへん</button><button id="sh">たかさ</button></div>
+<div id="nums"></div>
+<script>
+// ページと いっしょに 新しい スクリプトを 読む（古い キャッシュと まざらないように。index.html と おなじ しくみ）
+(function(){
+  var v = encodeURIComponent(document.lastModified);
+  ['overrides.js', 'engine.js'].forEach(function(f){ document.write('<script src="' + f + '?v=' + v + '"><\/script>'); });
+})();
+</script>
+<script>
+// ─── さんかくの ひろさ（ずけい を「とく」から「あそんで まなぶ」へ の サンプル。2026-10-24）─────────────────
+// ・したの かず で「ていへん」と「たかさ」の キャラを えらぶ と、その さんかく が マス目 の うえに でる。
+//   ていへん は その キャラの いろ の キューブ が よこに ならび、たかさ は たてに ならぶ（キャラ が へん に なる）。
+// ・さんかく を タップ する たびに「ていへん × たかさ ÷ 2」⇄「ひろさ」の アニメ：
+//   ながしかく（ていへん × たかさ）が でて → その はんぶん → ひろさ の キャラ が とびだす。もう いちど で もどる。
+// ・てっぺん（●）は じゆうに うごかせる：よこに うごかしても たかさ は おなじ なので ひろさ も おなじ（とうせき へんけい）。
+//   うごかす まえ の さんかく が てんせん で のこり「ひろさ おなじ！」。たてに うごかすと たかさ（と キャラ）が かわる。
+//   ていへん の みぎはし（●）も よこに うごかせる。
+// ・きろく は のこさない（ためし）。
+const MAXN = 10, XMIN = -4, XMAX = 14;        // てっぺん が いける はんい（マス）
+const cv = document.getElementById('c'), ctx = cv.getContext('2d'), stageEl = document.getElementById('stage'), sayEl = document.getElementById('say');
+let W = 0, H = 0, C = 20, OX = 0, OY = 0;      // 1マス の ピクセル と、ていへん の ひだりはし（0,0）の ばしょ
+let VL = -3, VR = 12, view = null;             // いま みせて いる よこ の はんい（マス）。view：めざす C・OX・OY（さんかく に あわせて ズーム）
+const tri = { b: 6, h: 4, px: 2 };            // ていへん・たかさ・てっぺん の よこ の ばしょ（マス）
+let slot = 'b', mode = 'shape', anim = null, drag = null, ghost = null, fx = [];
+const say = s => { sayEl.textContent = s; };
+
+function resize(){
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  W = stageEl.clientWidth; H = stageEl.clientHeight;
+  cv.width = Math.round(W*dpr); cv.height = Math.round(H*dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  fitView(true);
+}
+// いまの さんかく が ちょうど はいる ように（ひだり：ていへん の キャラ、みぎ：たかさ の キューブ と キャラ、うえ：しき）。
+// うごかして いる あいだ は かえない（マス が ずれない ように）。はなすと ゆっくり ズーム
+function fitView(now){
+  const l = Math.min(0, tri.px) - 2.2, r = Math.max(tri.b, tri.px) + 4.2, top = tri.h + 2.4, bottom = 2.6;
+  const c = Math.max(12, Math.min(64, W/(r - l), H/(top + bottom)));
+  view = { C: c, OX: (W - (r - l)*c)/2 - l*c, OY: H - bottom*c - Math.max(0, (H - (top + bottom)*c)/2) };
+  if(now){ C = view.C; OX = view.OX; OY = view.OY; }
+}
+window.addEventListener('resize', resize);
+const sx = x => OX + x*C, sy = y => OY - y*C;
+const area = () => tri.b*tri.h/2;
+const fmt = v => Number.isInteger(v) ? String(v) : v.toFixed(1);
+const ease = k => k < 0 ? 0 : k > 1 ? 1 : k*k*(3 - 2*k);
+
+// ── かず の キャラ（2.5 など は ガラス を のせる。けいさん と おなじ かきかた）──
+function charDims(v){ const k = Math.floor(v), s = blockSpec(Math.max(1, k));
+  if(Number.isInteger(v)) return { cols: s.cols, rows: s.rows };
+  if(k === 0) return { cols: 1, rows: 1 };
+  const g = glassPlace(k); return g.side ? { cols: s.cols + 1, rows: s.rows } : { cols: s.cols, rows: s.rows + 1 }; }
+function drawChar(v, cx, foot, bs, t){
+  const d = charDims(v), x = cx - d.cols*bs/2, y = foot - d.rows*bs, k = Math.floor(v), f = v - k;
+  if(Number.isInteger(v)) drawNumberblock(ctx, v, x, y, bs, { t, animate: true, numberling: false });
+  else if(k === 0) drawGlassFigure(ctx, glassDigit(f), cx, foot, bs, null, f);
+  else { const g = glassPlace(k), oy = g.side ? 0 : bs;
+    drawNumberblock(ctx, k, x, y + oy, bs, { t, animate: true, numberling: false });
+    drawGlassCube(ctx, x + g.gx*bs, y + oy + g.gy*bs, bs, f, glassLiqColor(glassDigit(f))); }
+  ctx.save(); ctx.font = '900 ' + Math.max(11, Math.round(bs*0.7)) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+  ctx.lineWidth = 4; ctx.strokeStyle = '#fff'; ctx.strokeText(fmt(v), cx, y - 2); ctx.fillStyle = '#16233a'; ctx.fillText(fmt(v), cx, y - 2); ctx.restore();
+}
+// その かず の キャラ の キューブ の いろ（へん に ならべる）
+function cellColors(n){ const s = blockSpec(n); return s.cells.slice().sort((a, b) => b.gy - a.gy || a.gx - b.gx).map(c => c.colorRGB || mainColorOf(n)); }
+function cubeRun(n, x0, y0, dx, dy){        // (x0,y0) から dx,dy（マス）むき に n こ。x0,y0 は キューブ の ひだりうえ（ピクセル）
+  const cols = cellColors(n);
+  for(let i = 0; i < n; i++){ const x = x0 + dx*i*C, y = y0 + dy*i*C, col = cols[i % cols.length];
+    ctx.fillStyle = rgb(col); ctx.strokeStyle = rgb(darken(col, 0.3)); ctx.lineWidth = Math.max(1, C*0.06);
+    ctx.beginPath(); ctx.roundRect(x + 1, y + 1, C - 2, C - 2, C*0.12); ctx.fill(); ctx.stroke(); }
+}
+
+// ── えがく ──
+function draw(now){
+  if(view && !drag){ const k = 0.15; C += (view.C - C)*k; OX += (view.OX - OX)*k; OY += (view.OY - OY)*k; }
+  VL = (0 - OX)/C; VR = (W - OX)/C;
+  const XMIN = Math.floor(VL), XMAX = Math.ceil(VR), YTOP = Math.ceil(OY/C);
+  ctx.clearRect(0, 0, W, H);
+  // マス目
+  ctx.strokeStyle = 'rgba(80,110,140,0.13)'; ctx.lineWidth = 1; ctx.beginPath();
+  for(let x = XMIN; x <= XMAX; x++){ ctx.moveTo(sx(x), sy(YTOP)); ctx.lineTo(sx(x), sy(-0.6)); }
+  for(let y = 0; y <= YTOP; y++){ ctx.moveTo(sx(XMIN), sy(y)); ctx.lineTo(sx(XMAX), sy(y)); }
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(60,80,110,0.5)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(sx(XMIN - 1), sy(0)); ctx.lineTo(sx(XMAX + 1), sy(0)); ctx.stroke();
+
+  const { b, h, px } = tri, A = [sx(0), sy(0)], B = [sx(b), sy(0)], P = [sx(px), sy(h)];
+  const k = anim ? ease((now - anim.t0)/anim.dur) : 1, toCalc = mode === 'calc';
+  const ph = toCalc ? k : 1 - k;             // 0：かたち 〜 1：ひろさ
+  // ながしかく（ていへん × たかさ）：はじめ の 3わり で でて、つぎ の 3わり で はんぶん が うすく なる
+  const rk = ease(ph/0.35), hk = ease((ph - 0.35)/0.3);
+  if(rk > 0){
+    ctx.save(); ctx.globalAlpha = rk;
+    ctx.fillStyle = 'rgba(255,214,90,' + (0.35*(1 - hk*0.6)) + ')'; ctx.fillRect(A[0], P[1], B[0] - A[0], A[1] - P[1]);
+    ctx.setLineDash([6, 5]); ctx.strokeStyle = '#d69500'; ctx.lineWidth = 2.5; ctx.strokeRect(A[0], P[1], B[0] - A[0], A[1] - P[1]); ctx.restore();
+  }
+  // うごかす まえ の さんかく（てんせん）
+  if(ghost){ ctx.save(); ctx.setLineDash([5, 5]); ctx.strokeStyle = 'rgba(60,80,110,0.55)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(sx(0), sy(0)); ctx.lineTo(sx(ghost.b), sy(0)); ctx.lineTo(sx(ghost.px), sy(ghost.h)); ctx.closePath(); ctx.stroke(); ctx.restore(); }
+  // さんかく
+  const col = mainColorOf(Math.max(1, Math.min(100, Math.round(area()))));
+  ctx.fillStyle = rgba(ph > 0.6 ? col : [90, 160, 230], 0.28 + 0.25*hk); ctx.strokeStyle = '#2b5a8a'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+  ctx.beginPath(); ctx.moveTo(...A); ctx.lineTo(...B); ctx.lineTo(...P); ctx.closePath(); ctx.fill(); ctx.stroke();
+  // たかさ の せん（てっぺん から まっすぐ した。そと に でたら ていへん を のばす）
+  ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(200,60,60,0.8)'; ctx.lineWidth = 2; ctx.beginPath();
+  ctx.moveTo(P[0], P[1]); ctx.lineTo(P[0], A[1]);
+  if(px < 0 || px > b){ ctx.moveTo(P[0], A[1]); ctx.lineTo(px < 0 ? A[0] : B[0], A[1]); }
+  ctx.stroke(); ctx.restore();
+  // ていへん：キャラ の いろ の キューブ が よこに。たかさ：さんかく の みぎ に たてに（てっぺん から てんせん）
+  cubeRun(b, A[0], A[1] + 2, 1, 0);
+  const hx = sx(Math.max(b, px) + 1);
+  cubeRun(h, hx, A[1] - C, 0, -1);
+  ctx.save(); ctx.setLineDash([3, 4]); ctx.strokeStyle = 'rgba(200,60,60,0.6)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(P[0], P[1]); ctx.lineTo(hx, P[1]); ctx.stroke(); ctx.restore();
+  // キャラ（ていへん は ひだりした、たかさ は キューブ の みぎ）
+  const cbs = Math.max(6, C*0.55);
+  drawChar(b, sx(Math.min(0, px) - 1.2), A[1] + C*2.3, cbs, now);
+  drawChar(h, hx + C*2.2, A[1], cbs, now);
+  // ●（うごかせる ところ）
+  for(const [q, on] of [[P, drag && drag.k === 'p'], [B, drag && drag.k === 'b']]){
+    ctx.fillStyle = on ? '#f0a020' : '#fff'; ctx.strokeStyle = '#2b5a8a'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(q[0], q[1], Math.max(8, C*0.38), 0, Math.PI*2); ctx.fill(); ctx.stroke(); }
+  // しき（さんかく の うえ）
+  drawFormula(ph, now);
+  // ひろさ の キャラ（さいご の 3わり で とびだす）
+  const ck = ease((ph - 0.7)/0.3);
+  if(ck > 0){
+    const v = area(), d = charDims(v), cx = (A[0] + B[0] + P[0])/3, foot = A[1] - C*0.15;
+    const bs = Math.max(5, Math.min(C*0.9, (A[1] - P[1])*0.7/d.rows, Math.abs(B[0] - A[0])*0.6/d.cols));
+    ctx.save(); ctx.translate(cx, foot); const s = 0.4 + 0.6*ck + 0.12*Math.sin(Math.PI*ck); ctx.scale(s, s); ctx.globalAlpha = ck; ctx.translate(-cx, -foot);
+    drawChar(v, cx, foot, bs, now); ctx.restore();
+  }
+  // ひろさ おなじ！
+  if(ghost && ghost.same){ ctx.save(); ctx.font = '900 ' + Math.round(C*0.85) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = '#c0398a';
+    ctx.fillText('ひろさ おなじ！ ' + fmt(area()), W/2, Math.max(C*0.9, sy(tri.h + 2.1))); ctx.restore(); }
+  // きらきら
+  fx = fx.filter(p => (p.life -= 0.02) > 0);
+  for(const p of fx){ p.x += p.vx; p.y += p.vy; p.vy += 0.12; ctx.fillStyle = 'hsla(' + p.hue + ',90%,60%,' + p.life + ')'; ctx.fillRect(p.x, p.y, 4, 4); }
+}
+// しき：「6 × 4 ÷ 2」→「6 × 4 ＝ 24」→「24 ÷ 2 ＝ 12」→「ひろさ 12」
+function drawFormula(ph, now){
+  const { b, h } = tri, r = b*h, y = sy(Math.max(tri.h, 1) + 1.2), x = sx(b/2);
+  let s, c = '#16233a';
+  if(ph < 0.05) s = 'ていへん ' + b + ' × たかさ ' + h + ' ÷ 2';
+  else if(ph < 0.4) s = b + ' × ' + h + ' ＝ ' + r + '（ながしかく）';
+  else if(ph < 0.72) s = r + ' ÷ 2 ＝ ' + fmt(area()) + '（はんぶん）';
+  else { s = 'ひろさ ' + fmt(area()); c = '#c0398a'; }
+  ctx.save(); ctx.font = '900 ' + Math.round(Math.min(26, C*1.0)) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const w = ctx.measureText(s).width, xx = Math.max(w/2 + 8, Math.min(W - w/2 - 8, x));
+  ctx.lineWidth = 6; ctx.strokeStyle = 'rgba(255,255,255,0.95)'; ctx.strokeText(s, xx, y); ctx.fillStyle = c; ctx.fillText(s, xx, y); ctx.restore();
+}
+
+// ── さわる ──
+function hit(x, y){
+  const r = Math.max(22, C*0.8), P = [sx(tri.px), sy(tri.h)], B = [sx(tri.b), sy(0)];
+  if(Math.hypot(x - P[0], y - P[1]) < r) return 'p';
+  if(Math.hypot(x - B[0], y - B[1]) < r) return 'b';
+  // さんかく の なか（ていへん の した の キューブ も ふくめて すこし ひろめ）
+  const area2 = (a, b2, c) => Math.abs((b2[0] - a[0])*(c[1] - a[1]) - (c[0] - a[0])*(b2[1] - a[1]));
+  const A = [sx(0), sy(0)], T = area2(A, B, P), Q = [x, y];
+  if(Math.abs(area2(Q, A, B) + area2(Q, B, P) + area2(Q, P, A) - T) < T*0.02 + 1) return 'in';
+  return null;
+}
+function local(e){ const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+let down = null;
+cv.addEventListener('pointerdown', e => {
+  const [x, y] = local(e), k = hit(x, y); down = { x, y, k, t: performance.now() };
+  if(k === 'p' || k === 'b'){ drag = { k, id: e.pointerId }; ghost = { b: tri.b, h: tri.h, px: tri.px, a: area(), same: false };
+    if(mode === 'calc') toggle(); cv.setPointerCapture(e.pointerId); }
+});
+cv.addEventListener('pointermove', e => {
+  if(!drag || e.pointerId !== drag.id) return;
+  const [x, y] = local(e), gx = Math.round((x - OX)/C), gy = Math.round((OY - y)/C);
+  if(drag.k === 'p'){
+    // がめん の そと には いかない（はなすと ズーム が かわって また ひろく うごける）
+    const npx = Math.max(XMIN, Math.ceil(VL), Math.min(XMAX, Math.floor(VR), gx)), nh = Math.max(1, Math.min(MAXN, Math.floor(OY/C - 0.3), gy));
+    if(npx !== tri.px || nh !== tri.h){ tri.px = npx; if(nh !== tri.h){ tri.h = nh; sparkle(sx(tri.px), sy(tri.h)); } changed(); }
+  } else {
+    const nb = Math.max(1, Math.min(MAXN, gx));
+    if(nb !== tri.b){ tri.b = nb; changed(); }
+  }
+});
+function endDrag(e){
+  if(drag && e.pointerId === drag.id){ drag = null; if(ghost && !ghost.same) ghost = null; fitView(); }
+  else if(down && down.k === 'in' && Math.hypot(local(e)[0] - down.x, local(e)[1] - down.y) < 12) toggle();
+  down = null;
+}
+cv.addEventListener('pointerup', endDrag);
+cv.addEventListener('pointercancel', e => { drag = null; down = null; });
+
+function changed(){
+  const moved = ghost && (ghost.b !== tri.b || ghost.h !== tri.h || ghost.px !== tri.px);
+  if(ghost) ghost.same = moved && area() === ghost.a;
+  updSlots();
+  if(ghost && ghost.same) say('よこに うごかしても たかさ は ' + tri.h + ' の まま。ひろさ は おなじ ' + fmt(area()) + '！');
+  else say('ていへん ' + tri.b + '・たかさ ' + tri.h + '。さんかく を タップ すると ひろさ が わかるよ');
+}
+function toggle(){
+  mode = mode === 'calc' ? 'shape' : 'calc'; anim = { t0: performance.now(), dur: mode === 'calc' ? 2600 : 700 };
+  if(mode === 'calc'){ setTimeout(() => { if(mode === 'calc') sparkle(sx((tri.b + tri.px)/3), sy(tri.h/3), 30); }, 2000);
+    say(tri.b + ' × ' + tri.h + ' の ながしかく の はんぶん … ひろさ は ' + fmt(area())); }
+  else changed();
+}
+function sparkle(x, y, n){ for(let i = 0; i < (n || 12); i++) fx.push({ x, y, vx: (Math.random() - 0.5)*5, vy: -Math.random()*4 - 1, life: 1, hue: Math.random()*360 }); }
+
+// ── したの ボタン ──
+const sb = document.getElementById('sb'), sh = document.getElementById('sh');
+function updSlots(){ sb.textContent = 'ていへん ' + tri.b; sh.textContent = 'たかさ ' + tri.h;
+  sb.classList.toggle('on', slot === 'b'); sh.classList.toggle('on', slot === 'h'); }
+sb.addEventListener('click', () => { slot = 'b'; updSlots(); });
+sh.addEventListener('click', () => { slot = 'h'; updSlots(); });
+const numsEl = document.getElementById('nums');
+for(let v = 1; v <= MAXN; v++){
+  const b = document.createElement('button'), col = mainColorOf(v);
+  b.textContent = v;
+  b.style.setProperty('--f', v === 7 ? 'linear-gradient(90deg,#fbb,#fdc,#ffe9a8,#c8efc0,#bdeefa,#c7c4f0,#e3c6f2)' : rgb(mixWhite(col, 0.6)));
+  b.style.setProperty('--b', rgb(v === 10 ? [229, 36, 42] : v === 7 ? [150, 110, 190] : darken(col, 0.15)));
+  b.addEventListener('click', () => {
+    if(mode === 'calc'){ mode = 'shape'; anim = null; }
+    ghost = null;
+    if(slot === 'b'){ tri.px = Math.round(tri.px*v/tri.b); tri.b = v; slot = 'h'; sparkle(sx(v/2), sy(0)); }
+    else { tri.h = v; slot = 'b'; sparkle(sx(tri.px), sy(v)); }
+    changed(); fitView();
+  });
+  numsEl.appendChild(b);
+}
+
+resize(); updSlots(); changed();
+(function loop(now){ draw(now); requestAnimationFrame(loop); })(performance.now());
+// テスト・しらべ よう
+window.sankaku = { tri, area, mode: () => mode, ghost: () => ghost, toggle, hit, set: (b, h, px) => { tri.b = b; tri.h = h; tri.px = px; ghost = null; changed(); fitView(true); },
+                   at: () => ({ P: [sx(tri.px), sy(tri.h)], B: [sx(tri.b), sy(0)], C }) };
+</script>
+</body>
+</html>

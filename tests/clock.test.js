@@ -211,7 +211,7 @@ module.exports = {
       return { label: got.includes('まぜまぜ（とけい4・ひっさん1）'), btns: stageBtns.filter(b => b.val === 'mix' || b.val === 'mode').length,
                beg: got.some(s => /ビギナー/.test(s)), cells: stageBtns.filter(b => b.val === 'go').length };
     });
-    t.eq(r, { label:true, btns:0, beg:false, cells:108 }, 'いちらんの 見出しが おかしい');
+    t.eq(r, { label:true, btns:0, beg:false, cells:124 }, 'いちらんの 見出しが おかしい');
   },
 
   'まぜまぜ と とけいの レベルは 人ごとに のこり、開きなおしても きえない。きろくで 1に もどせる': async t => {
