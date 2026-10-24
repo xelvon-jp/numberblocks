@@ -110,12 +110,13 @@ module.exports = {
       const done = taskDone, steps = taskLog.length;
       const last = TASKS.length - 1;
       const lastIsDec = isDecTask(TASKS[last]), firstDec = TASKS.findIndex(isDecTask);
-      // まぜまぜ：しょうすう の ひとつ まえ から つぎへ → はじめ（0）に もどる
-      taskIdx = firstDec - 1; const nMix = (setMix(true), nextCalcIdx()); setMix(false); const nPlain = nextCalcIdx();
-      return { keys, done: !!done, steps, lastIsDec, nMix, nPlain, firstDec };
+      // まぜまぜ：しょうすう の ひとつ まえ まで ぜんぶ できても、つぎに しょうすう は 出ない
+      for(let k=0;k<firstDec;k++) taskCleared[k] = true;
+      taskIdx = firstDec - 1; const picks = [nextCalcIdx(), nextCalcIdx(), nextCalcIdx()];
+      return { keys, done: !!done, steps, lastIsDec, noDec: !picks.some(k => isDecTask(TASKS[k])) };
     });
     t.eq(r.keys, ['5', 'CLR'], 'つかえる キーが ちがう');
     t.eq([r.done, r.steps], [true, 2], '5 を ÷2 で 2.5 が クリア に ならない（2て）');
-    t.eq([r.lastIsDec, r.nMix, r.nPlain === r.firstDec], [true, 0, true], 'まぜまぜ で しょうすう を とばさない');
+    t.eq([r.lastIsDec, r.noDec], [true, true], 'まぜまぜ で しょうすう を とばさない');
   },
 };

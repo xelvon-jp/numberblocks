@@ -62,6 +62,8 @@ function makeT(browser, baseUrl){
       const ctx = await browser.newContext({
         viewport: { width:o.width||393, height:o.height||780 },
         deviceScaleFactor:1, isMobile:true, hasTouch:true });
+      // かたむき（みず）：Chromium 153 から iPhone と おなじ ように ゆるしを きく（requestPermission）。テストでは ゆるして おく
+      await ctx.grantPermissions(['accelerometer', 'gyroscope']).catch(() => {});
       contexts.push(ctx);
       const page = await ctx.newPage();
       // テストは いっしゅんで とくので、いなずま⚡は ふだん とめておく（たしかめる テストだけ window.__speedOff = false）

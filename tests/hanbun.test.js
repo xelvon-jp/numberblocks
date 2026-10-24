@@ -11,6 +11,7 @@ async function openHanbun(t, chars){
   await f.waitForTimeout(400);      // あしもとに おりる
   return { p, f };
 }
+const sh0 = p => p.viewportSize().height;
 const vis = p => p.evaluate(() => { const f = document.querySelector('iframe[src^="hanbun.html"]'); return f ? f.style.visibility : 'none'; });
 const vals = f => f.evaluate(() => hanbun.chars());
 // ゆびの イベント（id ごと）
@@ -88,6 +89,11 @@ module.exports = {
 
   'みず：スマホを かたむけると ガラスの みずが すいへいを たもつ（センサーは はじめから オン）。ためし で しまった せってい が すぐ きく': async t => {
     const { p, f } = await openHanbun(t, [0.5, 2.3]);
+    // ゆるしが いる ブラウザ（iPhone・Chromium 153〜）では さいしょに さわった とき に きく
+    if(await f.evaluate(() => typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function')){
+      await p.mouse.click(20, sh0(p) - 20);
+      await f.waitForFunction(() => Mizu.sens.on, null, { timeout: 3000 }).catch(() => {});
+    }
     t.ok(await f.evaluate(() => Mizu.sens.on && Mizu.opt.sensor), 'センサーが オンに ならない');
     t.ok((await p.evaluate(() => document.querySelector('iframe[src^="hanbun.html"]').allow)).includes('accelerometer'), 'iframe で センサーが つかえない');
     await f.evaluate(() => { const a = 25*Math.PI/180; Mizu.grav(-Math.sin(a)*9.8, Math.cos(a)*9.8); });

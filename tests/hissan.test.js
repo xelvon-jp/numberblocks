@@ -416,7 +416,7 @@ module.exports = {
     const r = await p.evaluate(() => {
       const out = {};
       const said = []; const real = drawLevelUpBanner; drawLevelUpBanner = (c, lu, age, ms) => { said.push(lu.what + lu.lv + lu.name); real(c, lu, age, ms); };
-      taskOn = true; setMix(true); startTask(4);
+      taskOn = true; startTask(4);
       const st = hissanStats(); st.lv = 2; st.hist = [true,true,true,true,true,true,true];
       startHissanTask(); onHissanMessage({ from:'hissan', type:'done', ans:51, miss:0 });
       out.parade = [paradeBreak, cast.some(a => a.kind === 'parade')];
@@ -440,7 +440,7 @@ module.exports = {
   'まぜまぜ：ひっさんを 画面いっぱいに かさねて 出し、できたら つぎの けいさんへ。8問 まちがえずに できたら レベルが 上がる': async t => {
     const p = await t.open();
     const r = await p.evaluate(async () => {
-      taskOn = true; setMix(true); startTask(4);
+      taskOn = true; startTask(4);
       const wait = ms => new Promise(r => setTimeout(r, ms));
       const until = async f => { for(let i=0;i<100;i++){ try{ if(f()) return true; }catch(e){} await wait(50); } return false; };
       const out = {};
@@ -468,7 +468,7 @@ module.exports = {
       saveTask(); out.saved = JSON.parse(localStorage.getItem(TASK_KEY)).p[profile().id].hissan.lv;
       return out;
     });
-    t.eq(r, { frame:true, loaded:true, inner:['add', true, '+'], done:true, after:[false, false, 5, true, 'true'], lv:2, kind2:true,
+    t.eq(r, { frame:true, loaded:true, inner:['add', true, '+'], done:true, after:[false, false, 0, true, 'true'], lv:2, kind2:true,
               one:true, reused:['sub1', true, false], saved:2 }, 'まぜまぜの ひっさんが おかしい');
   },
 

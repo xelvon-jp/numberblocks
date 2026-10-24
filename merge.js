@@ -3,6 +3,7 @@
    どちらかを まるごと 上書きは しない。きまりは：
      クリアした おだい・レインボー …… どちらかで できていれば できた
      てじゅん（いちばん すくない 手数）…… すくない ほう
+     おだいを さいごに 出した とき（seen）…… あたらしい ほう
      とけい・ひっさんの レベル …… たかい ほう（おなじなら こちら）
      かけざん …… もんだいごとに さいごに こたえた ほう（last）。だんかいは たかい ほう
      はやさ（spd）…… しゅるいごとに さいごに きろくした ほう（_t）
@@ -29,6 +30,7 @@
     a.cleared = mergeMarks(a.cleared, b.cleared);
     a.logs = mergeLogs(a.logs, b.logs);
     a.rainbow = mergeMarks(a.rainbow, b.rainbow);
+    if(b.seen){ a.seen = a.seen || {}; for(const k in b.seen) if((b.seen[k] || 0) > (a.seen[k] || 0)) a.seen[k] = b.seen[k]; }
     return a;
   }
   function mergeLevel(a, b){            // { lv, hist, … }。たかい ほう

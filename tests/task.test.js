@@ -117,7 +117,7 @@ module.exports = {
     await t.sleep(1500);
     t.eq(await p.evaluate(() => [taskIdx, taskDone]), [TEN, true], '演出の途中で進んでしまった');
     await t.sleep(2000);
-    t.eq(await p.evaluate(() => [taskIdx, taskDone]), [TEN + 1, false], '3秒すぎても つぎへ進まない');
+    t.eq(await p.evaluate(i => [taskIdx !== i || !!hissanTask || !!genTask, taskDone], TEN), [true, false], '3秒すぎても つぎへ進まない');
     t.eq(await p.evaluate(i => !!taskCleared[i], TEN), true, '進んだら まえのクリア印が消えた');
   },
 
@@ -153,7 +153,7 @@ module.exports = {
       const b = taskBtns.find(x => x.val === 'next');
       handleStart(b.x + b.w/2, b.y + b.h/2, 'n');
     });
-    t.eq(await p.evaluate(() => [taskIdx, taskDone]), [TEN + 1, false], 'つぎを押しても進まない');
+    t.eq(await p.evaluate(i => [taskIdx !== i || !!hissanTask || !!genTask, taskDone], TEN), [true, false], 'つぎを押しても進まない');
   },
 
   '「できた！」は キャラのうしろに、動かない場所に出る': async t => {
