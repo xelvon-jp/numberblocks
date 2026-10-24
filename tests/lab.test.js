@@ -1,6 +1,14 @@
 // ためし（lab.html）：ほんたいに いれる まえに ためす ページの いちらん。せっていの「ためし」から ひらく。
 const openLab = async (t, file) => { const p = await t.open(); await p.goto(new URL(file, p.url()).href); await p.waitForTimeout(400); return p; };
 
+// 図形の面積：i ばんめ の ● を dx, dy マス ドラッグ（おだい の カード で キャンバス が うごく ので まいかい はかる）
+async function dragH(p, i, dx, dy){
+  const a = await p.evaluate(i => ({ h: zukei.handles()[i], C: zukei.C() }), i);
+  const box = await p.evaluate(() => { const r = document.getElementById('c').getBoundingClientRect(); return [r.left, r.top]; });
+  await p.mouse.move(box[0] + a.h[0], box[1] + a.h[1]); await p.mouse.down();
+  await p.mouse.move(box[0] + a.h[0] + a.C*dx, box[1] + a.h[1] - a.C*dy, { steps: 6 }); await p.mouse.up();
+}
+
 module.exports = {
   'せっていの「ためし」で いちらんが ひらき、ためしの ページへ いける': async t => {
     const p = await t.open();
@@ -87,34 +95,42 @@ module.exports = {
     t.eq(r.comp, 16, 'ふくざつ な かたち の ひろさ');
     t.eq(r.off, [6, 6], 'たて に なぞって も マス の せん で きれない');
   },
-  '三角形の面積：てっぺん を よこに うごかしても 面積 は おなじ、たてに うごかすと 高さ が かわる。タップ で 面積': async t => {
-    const p = await openLab(t, 'lab-sankaku.html');
-    const dragP = async (dx, dy) => { const a = await p.evaluate(() => sankaku.at());
-      const box = await p.evaluate(() => { const r = document.getElementById('c').getBoundingClientRect(); return [r.left, r.top]; });   // おだい の カード で うごく
-      await p.mouse.move(box[0] + a.P[0], box[1] + a.P[1]); await p.mouse.down();
-      await p.mouse.move(box[0] + a.P[0] + a.C*dx, box[1] + a.P[1] - a.C*dy, { steps: 6 }); await p.mouse.up(); };
-    await p.evaluate(() => sankaku.set(6, 4, 2));
-    await dragP(2, 0);
-    const a = await p.evaluate(() => ({ px: sankaku.tri.px, h: sankaku.tri.h, area: sankaku.area() }));
-    t.eq(a, { px:4, h:4, area:12 }, 'よこに うごかすと 面積 が かわる');
-    await p.evaluate(() => sankaku.set(6, 4, 2));
-    await dragP(0, -1);
-    t.eq(await p.evaluate(() => [sankaku.tri.h, sankaku.area()]), [3, 9], 'たてに うごかしても たかさ が かわらない');
-    await p.evaluate(() => sankaku.toggle());
-    t.eq(await p.evaluate(() => sankaku.mode()), 'calc', 'タップ で ひろさ に ならない');
-    // おだい：底辺・高さ が ちがう うちは タップ しても 面積 を ださない。あって いれば 面積
-    await p.evaluate(() => sankaku.toggle());
-    // おだい の カード が でて がめん の たかさ が かわっても ● を ゆびで うごかせる（えが つぶれない）
-    await p.evaluate(() => { document.getElementById('odai').click(); sankaku.setGoal(7, 7); sankaku.set(6, 7, 2); });
+  '図形の面積：6つ の 図形 の 面積（こうしき）。三角形 の てっぺん を よこ は 面積 おなじ・たて は 高さ が かわる。タップ で 面積': async t => {
+    const p = await openLab(t, 'lab-zukei.html');
+    const ar = await p.evaluate(() => [['tri', { b:7, h:6 }], ['rect', { w:6, h:4 }], ['sq', { a:5 }], ['para', { b:6, h:4 }], ['trap', { a:3, b:6, h:4 }], ['rhom', { d1:6, d2:4 }]]
+      .map(([k, o]) => { zukei.setShape(k); zukei.set(o); return zukei.area(); }));
+    t.eq(ar, [21, 24, 25, 24, 18, 12], '面積 が ちがう');
+    await p.evaluate(() => { zukei.setShape('tri'); zukei.set({ b:6, h:4, px:2 }); });
+    await dragH(p, 0, 2, 0);
+    t.eq(await p.evaluate(() => [zukei.st().px, zukei.st().h, zukei.area()]), [4, 4, 12], 'よこに うごかすと 面積 が かわる');
+    await p.evaluate(() => zukei.set({ b:6, h:4, px:2 }));
+    await dragH(p, 0, 0, -1);
+    t.eq(await p.evaluate(() => [zukei.st().h, zukei.area()]), [3, 9], 'たてに うごかしても 高さ が かわらない');
+    await p.evaluate(() => zukei.toggle());
+    t.eq(await p.evaluate(() => zukei.mode()), 'calc', 'タップ で 面積 に ならない');
+    await p.evaluate(() => zukei.toggle());
+    t.eq(t.errors, [], 'ページで エラー');
+  },
+
+  '図形の面積：おだい。カード で えが つぶれず ● を うごかせる。ちがう うちは 面積 を ださない。せいかい の あと「つぎ」まで は 等積変形 だけ': async t => {
+    const p = await openLab(t, 'lab-zukei.html');
+    await p.evaluate(() => { zukei.setShape('trap'); zukei.setGoal({ a:3, b:6, h:4 }); zukei.set({ a:2, b:6, h:4, off:1 }); });
     await p.waitForTimeout(400);
     const fit = await p.evaluate(() => { const c = document.getElementById('c'); return Math.abs(c.height/devicePixelRatio - c.clientHeight) < 2; });
     t.eq(fit, true, 'おだい の カード で えが たてに つぶれる');
-    await dragP(1, 0);
-    t.eq(await p.evaluate(() => sankaku.tri.px), 3, 'おだい の とき ● を うごかせない');
-    // ちがう うちは「できた！」でも 面積 を ださない。図形 の タップ でも ださない。あって いれば 面積
-    const g = await p.evaluate(() => { sankaku.pressDone(); const a = sankaku.mode(); sankaku.tapShape(); const b = sankaku.mode();
-      sankaku.set(7, 7, 2); sankaku.pressDone(); return [a, b, sankaku.mode(), document.getElementById('done').textContent]; });
-    t.eq(g, ['shape', 'shape', 'calc', 'つぎ ▶'], 'おだい：ちがう かたち で 面積 が でる／あって いる のに でない');
+    await dragH(p, 1, 1, 0);                                    // うえ の みぎ の かど → 上底 3
+    t.eq(await p.evaluate(() => zukei.st().a), 3, 'おだい の とき ● を うごかせない');
+    await p.evaluate(() => zukei.set({ a:3, b:5 }));
+    const g = await p.evaluate(() => { zukei.pressDone(); const a = zukei.mode(); zukei.tapShape(); const b = zukei.mode();
+      zukei.set({ b:6 }); zukei.pressDone(); return [a, b, zukei.mode(), zukei.locked(), document.getElementById('done').textContent]; });
+    t.eq(g, ['shape', 'shape', 'calc', true, 'つぎ ▶'], 'おだい：ちがう かたち で 面積 が でる／あって いる のに でない');
+    // せいかい の あと：うえ の ひだり の かど は よこ だけ（高さ そのまま）、ほか の ● と かず は きかない。面積 は でた まま
+    await dragH(p, 0, 2, 2);
+    await dragH(p, 2, 2, 0);
+    await p.evaluate(() => document.querySelector('#nums button').click());
+    t.eq(await p.evaluate(() => [zukei.st().off, zukei.st().h, zukei.st().b, zukei.st().a, zukei.area(), zukei.mode()]), [3, 4, 6, 3, 18, 'calc'], 'せいかい の あと に 面積 が かわる うごき が できる');
+    await p.evaluate(() => zukei.pressDone());
+    t.eq(await p.evaluate(() => zukei.locked()), false, '「つぎ」で もどらない');
     t.eq(t.errors, [], 'ページで エラー');
   },
 };
