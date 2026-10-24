@@ -89,8 +89,8 @@ module.exports = {
   },
   '三角形の面積：てっぺん を よこに うごかしても 面積 は おなじ、たてに うごかすと 高さ が かわる。タップ で 面積': async t => {
     const p = await openLab(t, 'lab-sankaku.html');
-    const box = await p.evaluate(() => { const r = document.getElementById('c').getBoundingClientRect(); return [r.left, r.top]; });
     const dragP = async (dx, dy) => { const a = await p.evaluate(() => sankaku.at());
+      const box = await p.evaluate(() => { const r = document.getElementById('c').getBoundingClientRect(); return [r.left, r.top]; });   // おだい の カード で うごく
       await p.mouse.move(box[0] + a.P[0], box[1] + a.P[1]); await p.mouse.down();
       await p.mouse.move(box[0] + a.P[0] + a.C*dx, box[1] + a.P[1] - a.C*dy, { steps: 6 }); await p.mouse.up(); };
     await p.evaluate(() => sankaku.set(6, 4, 2));
@@ -104,9 +104,17 @@ module.exports = {
     t.eq(await p.evaluate(() => sankaku.mode()), 'calc', 'タップ で ひろさ に ならない');
     // おだい：底辺・高さ が ちがう うちは タップ しても 面積 を ださない。あって いれば 面積
     await p.evaluate(() => sankaku.toggle());
-    const g = await p.evaluate(() => { sankaku.setGoal(7, 7); sankaku.set(6, 7, 2); sankaku.tapShape(); const a = sankaku.mode();
-      sankaku.set(7, 7, 2); sankaku.tapShape(); return [a, sankaku.mode()]; });
-    t.eq(g, ['shape', 'calc'], 'おだい：ちがう かたち で 面積 が でる／あって いる のに でない');
+    // おだい の カード が でて がめん の たかさ が かわっても ● を ゆびで うごかせる（えが つぶれない）
+    await p.evaluate(() => { document.getElementById('odai').click(); sankaku.setGoal(7, 7); sankaku.set(6, 7, 2); });
+    await p.waitForTimeout(400);
+    const fit = await p.evaluate(() => { const c = document.getElementById('c'); return Math.abs(c.height/devicePixelRatio - c.clientHeight) < 2; });
+    t.eq(fit, true, 'おだい の カード で えが たてに つぶれる');
+    await dragP(1, 0);
+    t.eq(await p.evaluate(() => sankaku.tri.px), 3, 'おだい の とき ● を うごかせない');
+    // ちがう うちは「できた！」でも 面積 を ださない。図形 の タップ でも ださない。あって いれば 面積
+    const g = await p.evaluate(() => { sankaku.pressDone(); const a = sankaku.mode(); sankaku.tapShape(); const b = sankaku.mode();
+      sankaku.set(7, 7, 2); sankaku.pressDone(); return [a, b, sankaku.mode(), document.getElementById('done').textContent]; });
+    t.eq(g, ['shape', 'shape', 'calc', 'つぎ ▶'], 'おだい：ちがう かたち で 面積 が でる／あって いる のに でない');
     t.eq(t.errors, [], 'ページで エラー');
   },
 };
