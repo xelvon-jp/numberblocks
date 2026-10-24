@@ -15,6 +15,9 @@
   header { flex:none; display:flex; align-items:center; gap:8px; padding:8px 10px 2px; }
   header h1 { flex:1; font-size:17px; font-weight:900; }
   rt { font-size:0.55em; font-weight:700; }
+  body.embed #shapes, body.embed .back { display:none; }
+  #skip { display:none; border:0; border-radius:10px; padding:7px 10px; font-size:13px; font-weight:800; background:#fff; color:#5a6576; }
+  body.embed #skip { display:block; }
   .back { text-decoration:none; background:#fff; color:#2b3a52; font-weight:800; font-size:13px; padding:7px 10px; border-radius:10px; }
   #shapes { flex:none; display:grid; grid-template-columns:repeat(6, auto); gap:4px; padding:2px 8px 4px; }
   #shapes button { border:0; border-radius:10px; padding:2px 2px 4px; font-size:min(13px, 3.3vw); font-weight:900; background:#e3eaf2; color:#2b3a52; line-height:1.9; white-space:nowrap; }
@@ -40,7 +43,7 @@
 </style>
 </head>
 <body>
-<header><h1>📐 <ruby>図形<rt>ずけい</rt></ruby>の<ruby>面積<rt>めんせき</rt></ruby></h1><a class="back" href="lab.html">← ためし</a></header>
+<header><h1>📐 <ruby>図形<rt>ずけい</rt></ruby>の<ruby>面積<rt>めんせき</rt></ruby></h1><button id="skip">もどる</button><a class="back" href="lab.html">← ためし</a></header>
 <div id="shapes"></div>
 <div id="goal"><div class="t"></div><button id="done">できた！</button></div>
 <div id="say"></div>
@@ -74,6 +77,12 @@
 //   あって いれば アニメ → 面積 の キャラ が まんなか に とびだして 2びょう ほど はねて よろこぶ（celebrate）→「つぎ ▶」。
 //   こたえ が でる まで は タップ で 面積 を ださない。せいかい の あと「つぎ ▶」まで は 等積変形 だけ。
 // ・「ひろさ おなじ」の ことば や まえ の かたち の てんせん は ださない（パパ）。きろく は のこさない（ためし）。
+// ・ゲーム の まぜまぜ から（index.html が iframe で かさねる。?embed=1&s=図形）：図形 の ボタン と「← ためし」を かくし、
+//   1もん だけ。せいかい の あと「つぎ ▶」で ゲーム に { from:'zukei', type:'done', area } を しらせる。「もどる」は skip。
+const EMBED = /[?&]embed=1/.test(location.search);
+if(EMBED) document.body.classList.add('embed');
+function tellGame(m){ try{ if(window.parent && window.parent !== window) window.parent.postMessage(Object.assign({ from:'zukei' }, m), '*'); }catch(e){} }
+document.getElementById('skip').addEventListener('click', () => tellGame({ type:'skip' }));
 const MAXN = 10, XMIN = -4, XMAX = 16;
 const cv = document.getElementById('c'), ctx = cv.getContext('2d'), stageEl = document.getElementById('stage'), sayEl = document.getElementById('say');
 let W = 0, H = 0, C = 20, OX = 0, OY = 0, VL = -3, VR = 12, view = null;
@@ -423,7 +432,7 @@ function newGoal(){
 }
 function pressDone(){
   if(!goal) return;
-  if(cleared){ newGoal(); return; }
+  if(cleared){ if(EMBED){ tellGame({ type:'done', area: area() }); return; } newGoal(); return; }
   if(!matches()){
     say(S().p.filter(([k]) => st()[k] !== goal[k]).map(([k, nm]) => nm + 'が ' + goal[k] + ' に なって いないよ（いま ' + st()[k] + '）').join('。'));
     shakeT = performance.now(); return;

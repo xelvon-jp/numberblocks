@@ -444,6 +444,8 @@ module.exports = {
       const wait = ms => new Promise(r => setTimeout(r, ms));
       const until = async f => { for(let i=0;i<100;i++){ try{ if(f()) return true; }catch(e){} await wait(50); } return false; };
       const out = {};
+      // ひっさん の つぎ は いつも けいさん 0（ならび に かけざん・ずけい が はいって iframe が ふえない ように）
+      makeItem = () => ({ k:'calc', idx:0 }); queue = [{ k:'hissan' }, { k:'calc', idx:0 }];
       startHissanTask();
       const f = hissanTask.frame;
       out.frame = !!f && f.parentNode === document.body && /embed=1&kind=add&big=0/.test(f.src);

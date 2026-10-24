@@ -142,12 +142,13 @@ module.exports = {
   },
 
   // ── まぜまぜ ──
-  'まぜまぜ：けいさん1問ごとに かけざん・あそび・とけい・かけざん・あそび・とけい・ひっさん を はさむ。けいさんは できて いない おだい 2もん・おさらい 1もん': async t => {
+  'まぜまぜ：けいさん1問ごとに かけざん・あそび・とけい・かけざん・ずけい・とけい・ひっさん を はさむ。けいさんは できて いない おだい 2もん・おさらい 1もん': async t => {
     const p = await t.open();
     const seq = await p.evaluate(() => {
       taskOn = true; startTask(0);
       const out = [];
       for(let k=0;k<14;k++){
+        if(zukeiTask){ out.push('ず'); zukeiTask.frame.remove(); zukeiTask.frame = null; nextTask(); if(paradeBreak) endParadeBreak(); continue; }   // 図形の面積：できた ことに する
         if(hissanTask){                                     // ひっさん・かけざん：できた ことに する
           out.push(hissanTask.kind === 'mul' ? 'か' : 'ひ'); onHissanMessage({ from:'hissan', type:'done', ans:51, miss:0 });
           if(paradeBreak) endParadeBreak(); continue;
@@ -165,8 +166,8 @@ module.exports = {
       }
       return out.join(',');
     });
-    // け0 の あと：できて いない 1・2 → おさらい（できた 0・1 の うち まえに 出した 0）→ 3・4 → おさらい 1
-    t.eq(seq, 'け0,か,け1,あ,け2,と,け0,か,け3,あ,け4,と,け1,ひ', 'まぜまぜの じゅんばんが ちがう');
+    // けいさん は ならべる とき に きめる（これから の おだい を さき に 5こ みせる ため）：できて いない 1・2・3 → おさらい 0 → 4・5
+    t.eq(seq, 'け0,か,け1,あ,け2,と,け3,か,け0,ず,け4,と,け5,ひ', 'まぜまぜの じゅんばんが ちがう');
   },
 
   'つぎの けいさん：できて いない おだいの さいしょの 3つから、まえに 出した ものを さける。しょうすうは 出さない': async t => {
@@ -355,13 +356,13 @@ module.exports = {
 
   'とけいで クリアしても 止まらず、演出のあと つぎの けいさんへ 進む': async t => {
     const p = await t.open();
-    await p.evaluate(() => { taskOn = true; startTask(7); });
+    await p.evaluate(() => { taskOn = true; startTask(7); queue = [{ k:'clock' }, { k:'calc', idx:0 }]; });   // とけい の つぎ は けいさん 0
     await start(p, { k:'clock', to:'3:47' });
     await setHands(p, 3*60 + 47);
     await t.sleep(400);
     t.ok(await p.evaluate(() => winFx && winFx.center && rainbowTime() >= 0), 'とけいの演出が出ていない');
     await t.sleep(3000);
-    t.eq(await p.evaluate(() => [taskIdx, !!genTask, isCalcMode(), taskDone]), [0, false, true, false], 'つぎの けいさんへ 進まない（できて いない さいしょの おだい）');
+    t.eq(await p.evaluate(() => [taskIdx, !!genTask, isCalcMode(), taskDone]), [0, false, true, false], 'つぎの けいさんへ 進まない');
   },
 
   // ── よんで えらぶ（ドラムロール）──
@@ -681,7 +682,7 @@ module.exports = {
     const r = await p.evaluate(() => {
       taskOn = true; prize().n = 4; prize().made = [5, 6, 8, 9];
       startTask(4); spawnBlock(TASKS[4].n); checkTask();
-      sinceClock = -1;                                     // パレードの あとは けいさん（かけざん などを はさまない）
+      queue = [{ k:'calc', idx: taskIdx }, { k:'calc', idx: nextCalcIdx() }];   // パレードの あとは けいさん（かけざん などを はさまない）
       const full = prizeFull, idx = taskIdx;
       nextTask();                                          // 「つぎ」
       const during = { brk: paradeBreak, blocks: blocks.length, same: taskIdx === idx, winFx: winFx };
@@ -702,7 +703,7 @@ module.exports = {
     const p = await t.open({ who:'hinata' });
     const r = await p.evaluate(() => {
       taskOn = true; prize().n = 4; prize().made = [1, 2, 3, 4];
-      startTask(7); spawnBlock(TASKS[7].n); checkTask(); sinceClock = -1; nextTask();
+      startTask(7); spawnBlock(TASKS[7].n); checkTask(); queue = [{ k:'calc', idx: taskIdx }, { k:'calc', idx: nextCalcIdx() }]; nextTask();
       taskBtns = []; drawFrame(performance.now());
       const card = taskBtns.length;
       handleStart(sw/2, sh/2, 'm'); handleEnd(sw/2, sh/2, 'm');          // ちょん

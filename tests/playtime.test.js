@@ -110,7 +110,7 @@ module.exports = {
 
   'ひっさんを といている あいだは まつ。1じかん やすんだら いっぱいに もどる': async t => {
     const p = await t.open();
-    await p.evaluate(MIN => { play._raw({ limit:20, set:true, mode:'soft' }); taskOn = true; startTask(0); taskDone = true; startHissanTask(); play._set(21*MIN); play.update(); }, MIN);
+    await p.evaluate(MIN => { play._raw({ limit:20, set:true, mode:'soft' }); taskOn = true; startTask(0); queue = [{ k:'hissan' }, { k:'calc', idx:1 }]; taskDone = true; startHissanTask(); play._set(21*MIN); play.update(); }, MIN);
     t.eq((await state(p)).pop, false, 'ひっさんの とちゅうで 出てしまう');
     await p.evaluate(() => { onHissanMessage({ from:'hissan', type:'done', ans:51, miss:0 }); if(paradeBreak) endParadeBreak(); taskDone = true; play.update(); });
     t.eq((await state(p)).pop, true, 'ひっさんが おわっても 出ない');

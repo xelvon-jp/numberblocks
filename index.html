@@ -478,7 +478,6 @@ const CLOCK_LEVELS = [
   { name:'ごごの 1ぷん',  color:'#d0553f' }    // 14:37
 ];
 const CLOCK_MAX = CLOCK_LEVELS.length;
-const MIX_CALC = 1;             // まぜまぜ：けいさん 1問ごとに MIX_SPECIALS の 1つを はさむ
 const CLOCK_WINDOW = 10;        // 正答率は そのレベルの 直近10問で見る
 const CLOCK_UP = 8;             // 10問中 8問 1かいめで あたれば レベルアップ
 const CLOCK_TRY = 6;            // 6問から つぎの レベルを おためしで まぜる
@@ -655,10 +654,11 @@ function clockStatsOf(id){
 }
 function clockStats(){ return clockStatsOf(profile().id); }
 let genTask = null;       // いま出している とけいの おだい（なければ けいさん）
+let queue = [], qCalcNext = true;   // これから の おだい（[0] が いま。ensureQueue）
+let zukeiTask = null;     // いま出している 図形の面積 の おだい { frame, shape }（lab-zukei.html を かさねる）
 let hissanTask = null;    // いま出している ひっさんの おだい { lv, frame }（ひっさんの 画面を 上に かさねて 出す）
 let hissanFrame = null, hissanReady = false, hissanPending = null;   // かくして つかいまわす ひっさんの 画面（startHissanTask）
-let nextSpecial = 0;      // まぜまぜで つぎに はさむのは MIX_SPECIALS の なんばんめか
-let sinceClock = 0;       // まえの とけいから けいさんを 何問 すすめたか
+let nextSpecial = 0;      // まぜまぜで つぎに はさむのは MIX_SPECIALS の なんばんめか（ならべる とき に すすむ）
 let lastClockGoal = -1;   // つづけて同じ時こくにしないため
 let lastLevelUp = 0;      // この とけいの おだいで レベルが上がったら そのレベル
 let pendingParade = null; // つぎへ いくときに 出す パレード（数の ならび。nextTask を見る）
@@ -667,7 +667,7 @@ let paradeHold = null;    // パレードを とばす ながおし {pid, t0, x,
 const PARADE_HOLD_MS = 1200;
 
 function loadProfileState(){
-  closeHissan();
+  closeHissan(); closeZukei(); resetQueue();
   genTask = null; paradeBreak = false; pendingParade = null; levelUpInfo = null;
   const r = curRec();
   taskIdx = Math.min(TASKS.length-1, r.idx|0);
@@ -882,7 +882,8 @@ function resetTaskState(){
 // けいさんの おだい i を はじめる
 function startTask(i){
   taskIdx = Math.max(0, Math.min(TASKS.length-1, i));
-  genTask = null;
+  genTask = null; closeZukei();
+  if(queue.length && queue[0].k === 'calc') queue[0].idx = taskIdx;   // いちらん から えらんだ とき も ならび の あたま に
   noteTry(taskIdx);
   if(!isCalcMode()) setMode('calc');
   resetTaskState();
@@ -944,10 +945,10 @@ function lastSeen(i){ const h = (curRec().hist || {})[i]; return h && h.length ?
 //   どちらも いちばん まえに 出した もの（lastSeen）から。つづけて おなじ おだい は ださない
 const PICK_FRONT = 3, PICK_REVIEW = 3;
 let calcPicks = 0;
-function nextCalcIdx(){
+function nextCalcIdx(skip){                          // skip：ならんで いる（これから 出す）おだい の ばんごう
   const rb = curRec().rainbow || {};
   const pool = [];
-  TASKS.forEach((t, i) => { if(!isDecTask(t) && i !== taskIdx) pool.push(i); });
+  TASKS.forEach((t, i) => { if(!isDecTask(t) && i !== taskIdx && !(skip && skip.has(i))) pool.push(i); });
   const oldest = list => list.slice().sort((a, b) => lastSeen(a) - lastSeen(b) || a - b)[0];
   const fresh = pool.filter(i => !taskCleared[i]).slice(0, PICK_FRONT);
   calcPicks++;
@@ -957,15 +958,42 @@ function nextCalcIdx(){
   if(review.length) return oldest(review);
   return fresh.length ? oldest(fresh) : 0;
 }
+// ── これから の おだい（2026-10-24）────────────────────────────────────
+// まぜまぜ の じゅんばん を さきに きめて ならべて おき、うえ の「おだい」の ところ に アイコン で 5こ みせる（つぎ に なに が でるか わくわく。パパ）。
+// [0] が いま の おだい。とけたら ひだり へ ずれて、みぎ に 1こ ふえる。アイコン を ながおし すると その おだい まで とぶ（しらべ よう）。
+// ならび：けいさん → MIX_SPECIALS の 1つ → けいさん → …。けいさん の ばんごう は ならべる とき に nextCalcIdx で きめる（ならんで いる もの と かぶらない）。
+// だれが あそぶか・きろく を かえたら つくりなおす（queue = []）。
+const QUEUE_N = 5;
+function makeItem(){
+  if(qCalcNext){ qCalcNext = false; return { k:'calc', idx: nextCalcIdx(new Set(queue.filter(q => q.k === 'calc').map(q => q.idx))) }; }
+  qCalcNext = true;
+  const sp = MIX_SPECIALS[nextSpecial % MIX_SPECIALS.length]; nextSpecial = (nextSpecial + 1) % MIX_SPECIALS.length;
+  return { k: sp };
+}
+function ensureQueue(){
+  if(!queue.length){ queue = [{ k:'calc', idx: taskIdx }]; qCalcNext = false; }
+  while(queue.length < QUEUE_N) queue.push(makeItem());
+}
+function resetQueue(){ queue = []; nextSpecial = 0; }
+function startItem(q){
+  if(q.k === 'calc') startTask(q.idx);
+  else if(q.k === 'kake') startKakeTask();
+  else if(q.k === 'hissan') startHissanTask();
+  else if(q.k === 'play') startPlayTask();
+  else if(q.k === 'zukei') startZukeiTask();
+  else startClockTask();
+}
 function advanceTask(){
-  if(genTask || hissanTask){ closeHissan(); startTask(nextCalcIdx()); return; }
-  if(++sinceClock >= MIX_CALC){
-    sinceClock = 0;
-    const sp = MIX_SPECIALS[nextSpecial % MIX_SPECIALS.length]; nextSpecial = (nextSpecial + 1) % MIX_SPECIALS.length;
-    if(sp === 'hissan') startHissanTask(); else if(sp === 'kake') startKakeTask(); else if(sp === 'play') startPlayTask(); else startClockTask();
-    return;
-  }
-  startTask(nextCalcIdx());
+  closeHissan(); closeZukei();
+  ensureQueue(); queue.shift(); ensureQueue();
+  startItem(queue[0]);
+}
+// ながおし で i ばんめ の おだい まで とぶ（しらべ よう）
+function skipTo(i){
+  ensureQueue(); if(i <= 0 || i >= queue.length) return;
+  closeHissan(); closeZukei();
+  paradeBreak = false; pendingParade = null; levelUpInfo = null; cast = cast.filter(a => a.kind !== 'parade');
+  queue.splice(0, i); ensureQueue(); startItem(queue[0]);
 }
 
 // ── まぜまぜの ひっさん ─────────────────────────────────────────
@@ -996,7 +1024,8 @@ function hissanFrameEl(){
   hissanReady = false;
   const f = document.createElement('iframe');
   f.src = 'hissan.html?embed=1&kind=' + m.kind + '&big=' + (m.big ? 1 : 0) + '&label=' + encodeURIComponent(m.label) + '&v=' + Date.now();
-  f.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;border:0;z-index:50;background:#bfe8f0;visibility:hidden;pointer-events:none';
+  // タブ（これから の おだい の アイコン）の した に かさねる
+  f.style.cssText = 'position:fixed;left:0;top:' + TAB_H + 'px;width:100%;height:calc(100% - ' + TAB_H + 'px);border:0;z-index:50;background:#bfe8f0;visibility:hidden;pointer-events:none';
   document.body.appendChild(f);
   return (hissanFrame = f);
 }
@@ -1048,6 +1077,44 @@ function closeHissan(){
   if(hissanTask && hissanTask.frame) showHissan(false);
   hissanTask = null; hissanPending = null;
 }
+// ── まぜまぜ の 図形の面積（lab-zukei.html を タブ の した に かさねる）──────────────────
+// 「底辺が7、高さが6の三角形の面積を調べよう！」→ かたち を つくって「できた！」→ せいかい の おいわい →「つぎ ▶」で ゲーム に しらせる（done）。
+// 図形 は 人ごと に じゅんに（長方形 → 正方形 → 三角形 → 平行四辺形 → ひし形 → 台形。かぞえやすい もの から）。
+// 「もどる」（skip）は きろく せず つぎ へ。できた 面積 は ごほうび の パレード に かぞえる（せいすう に して）。
+const ZUKEI_ORDER = ['rect', 'sq', 'tri', 'para', 'rhom', 'trap'];
+function zukeiOf(id){ const r = taskStore[id] || (taskStore[id] = emptyRec()); return r.zukei || (r.zukei = { i:0 }); }
+function startZukeiTask(){
+  closeHissan(); closeZukei();
+  if(!isCalcMode()) setMode('calc');
+  resetTaskState();
+  const z = zukeiOf(profile().id), shape = ZUKEI_ORDER[(z.i|0) % ZUKEI_ORDER.length]; z.i = ((z.i|0) + 1) % ZUKEI_ORDER.length; saveTask();
+  const f = document.createElement('iframe');
+  f.src = 'lab-zukei.html?embed=1&s=' + shape + '&v=' + Date.now();      // キャッシュ の ふるい 版 を ひらかない
+  f.style.cssText = 'position:fixed;left:0;right:0;bottom:0;width:100%;border:0;z-index:50;background:#f3f7ea';
+  f.style.top = TAB_H + 'px'; f.style.height = 'calc(100% - ' + TAB_H + 'px)';
+  document.body.appendChild(f);
+  zukeiTask = { frame: f, shape };
+  updateTargets();
+}
+function closeZukei(){
+  if(zukeiTask && zukeiTask.frame) zukeiTask.frame.remove();
+  zukeiTask = null;
+}
+// せってい・だれが あそぶ？・いちらん・パレード の あいだ は かくす（キャンバス に かく ので）
+function zukeiSync(){
+  if(!zukeiTask || !zukeiTask.frame) return;
+  const on = taskOn && !paradeBreak && !setOpen && !whoOpen && !recOpen && !stageOpen, vis = on ? 'visible' : 'hidden';
+  if(zukeiTask.frame.style.visibility !== vis){ zukeiTask.frame.style.visibility = vis; zukeiTask.frame.style.pointerEvents = on ? 'auto' : 'none'; }
+}
+window.addEventListener('message', e => {
+  const d = e.data;
+  if(!d || d.from !== 'zukei' || !zukeiTask || !zukeiTask.frame || e.source !== zukeiTask.frame.contentWindow) return;
+  if(d.type === 'done' || d.type === 'skip'){
+    if(d.type === 'done' && d.area > 0) notePrize(Math.max(1, Math.floor(d.area)));
+    zukeiTask.frame.remove(); zukeiTask.frame = null;    // zukeiTask は のこす（つぎへ で けいさん に もどる）
+    nextTask();
+  }
+});
 // ── いなずま⚡（はやく とけた）─────────────────────────────────────
 // どの もんだいも、もんだいの しゅるい・むずかしさごとに「めあての じかん」を もつ（engine.js の speedTarget）。
 // さいきん 10かいの クリアの まんなか（3かい たまるまでは はじめの ねだん）。はじめの ねだんの 0.6〜1.5ばい。
@@ -1107,8 +1174,8 @@ function drawGameBolt(ctx){
 const KAKE_MAX = 5, KAKE_RB = 8000, KAKE_NEW = 2, KAKE_UNLOCK = 0.8;
 const KAKE_DEF = { A:4000, B:6000, C:10000, D:15000 };   // ⚡ はじめの めあて（グループごと）
 // ひっさんは くりかえし 出ると いやがる（パパ 2026-10-24）ので 12もんに 1かい（まえは 8もんに 1かい）
-// ちいさな ゴール（play）も はさむ：14もんで かけざん 2・あそび 2・とけい 2・ひっさん 1
-const MIX_SPECIALS = ['kake', 'play', 'clock', 'kake', 'play', 'clock', 'hissan'];
+// ちいさな ゴール（play）と 図形の面積（zukei。lab-zukei.html を かさねる）も はさむ：14もんで かけざん 2・あそび 1・ずけい 1・とけい 2・ひっさん 1
+const MIX_SPECIALS = ['kake', 'play', 'clock', 'kake', 'zukei', 'clock', 'hissan'];
 function kakeGroup(a, b){
   if(a <= 10 && b <= 10){
     const easy = a === b || [2, 5, 10].includes(a) || [2, 5, 10].includes(b);
@@ -1913,6 +1980,11 @@ function drawModeTabs(ctx){
     ctx.strokeStyle = active?'rgba(255,255,255,0.75)':'rgba(255,255,255,0.35)';
     ctx.lineWidth=1.5;
     ctx.beginPath(); ctx.roundRect(tx+2,ty+2,tabW-4,TAB_ROW_H-4,8); ctx.stroke();
+    if(td.val === 'task' && taskOn){                  // おだい の あいだ は これから の おだい の アイコン を ならべる
+      ctx.restore(); drawQueueIcons(ctx, tx+2, ty+2, tabW-4, TAB_ROW_H-4);
+      tabBtns.push({x:tx+2,y:ty+2,w:tabW-4,h:TAB_ROW_H-4,val:td.val});
+      tx += tabW; continue;
+    }
     ctx.fillStyle=active?'white':'#eef2f8';
     let fs = 13; ctx.font='bold 13px sans-serif';
     while(fs > 9 && ctx.measureText(td.label).width > tabW - 8){ fs--; ctx.font = 'bold ' + fs + 'px sans-serif'; }   // せまい 画面でも はみださない
@@ -1932,6 +2004,46 @@ function drawModeTabs(ctx){
   tabBtns.push({x:gx,y:gy,w:gw,h:gh,val:'settings'});
 }
 
+// ── これから の おだい の アイコン（うえ の「おだい」の ところ）──────────────────
+// ひだり が いま の おだい（しろい わく）。けいさん は その レベル の いろ で ねらい の かず、ほか は しゅるい の いろ と しるし。
+// ながおし（QHOLD_MS）すると その おだい まで とぶ（しらべ よう。skipTo）。
+const QHOLD_MS = 800;
+let qBtns = [], qHold = null;     // qHold：{ i, t0, pid }
+const Q_STYLE = { kake: ['#e0802a', '×'], clock: ['#2f9a8a', null], hissan: ['#7a5ad0', '✏️'], play: [PLAY_COLOR, '🎈'], zukei: ['#c0558a', null] };
+function drawQueueIcons(ctx, x, y, w, h){
+  ensureQueue(); qBtns = [];
+  const n = Math.min(QUEUE_N, queue.length), gap = 6, iw = Math.min((w - gap*(n + 1))/n, h*1.7), ih = h - 6;
+  if(qHold && Date.now() - qHold.t0 >= QHOLD_MS){ const i = qHold.i; qHold = null; skipTo(i); }
+  for(let i = 0; i < n; i++){
+    const q = queue[i], bx = x + gap + i*(iw + gap), by = y + 3;
+    let bg, mark = null;
+    if(q.k === 'calc'){ const t = TASKS[q.idx]; bg = TASK_LEVELS[t.lv].color; mark = String(t.n); }
+    else [bg, mark] = Q_STYLE[q.k] || ['#888', '?'];
+    ctx.save();
+    ctx.globalAlpha = i === 0 ? 1 : 0.88;
+    ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(bx, by, iw, ih, 8); ctx.fill();
+    if(i === 0){ ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke(); }
+    const cx = bx + iw/2, cy = by + ih/2;
+    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if(q.k === 'clock'){                               // ちいさな とけい
+      const r = ih*0.32; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI*2); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(cx, cy - r*0.75); ctx.moveTo(cx, cy); ctx.lineTo(cx + r*0.55, cy + r*0.15); ctx.stroke();
+    } else if(q.k === 'zukei'){                        // ちいさな さんかく と ながしかく
+      const r = ih*0.3; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(cx - r*1.3, cy + r); ctx.lineTo(cx + r*0.2, cy + r); ctx.lineTo(cx - r*0.9, cy - r); ctx.closePath(); ctx.fill();
+      ctx.strokeRect(cx + r*0.35, cy - r*0.55, r*1.0, r*1.55);
+    } else {
+      let fs = q.k === 'calc' ? 16 : 18; ctx.font = 'bold ' + fs + 'px sans-serif';
+      while(fs > 9 && ctx.measureText(mark).width > iw - 6){ fs--; ctx.font = 'bold ' + fs + 'px sans-serif'; }
+      ctx.fillText(mark, cx, cy + 1);
+    }
+    if(qHold && qHold.i === i){                       // ながおし の ゲージ
+      const hp = Math.min(1, (Date.now() - qHold.t0)/QHOLD_MS);
+      ctx.globalAlpha = 0.5; ctx.fillStyle = '#fff'; ctx.fillRect(bx, by + ih*(1 - hp), iw, ih*hp);
+    }
+    ctx.restore();
+    qBtns.push({ x: bx, y: by, w: iw, h: ih, i });
+  }
+}
 // 歯車の絵。絵文字の⚙は端末によってカラーになってしまうので自分で描く
 function drawGear(ctx, cx, cy, r, color, hole){
   const teeth = 8, inner = r*0.72, tw = 0.30;
@@ -4117,7 +4229,7 @@ function toggleFullscreen(){
 // （パパやママが気づかず ひなたの記録で遊んでしまわないように）。
 function setTaskOn(v){
   if(taskOn === v) return;
-  taskOn = v; taskDone = false; taskLog = []; clearUndo(); winFx = null; drum = null; genTask = null; closeHissan();
+  taskOn = v; taskDone = false; taskLog = []; clearUndo(); winFx = null; drum = null; genTask = null; closeHissan(); closeZukei(); resetQueue();
   paradeBreak = false; pendingParade = null; levelUpInfo = null;
   stageOpen = false; stageDetail = -1;
   hintOn = false; hintShownAt = 0; taskStartT = Date.now();
@@ -4932,6 +5044,11 @@ function handleStart(x,y,pid){
     if(ob.op==='undo') doUndo(); else setMode(ob.op);
     return;
   }
+  if(taskOn) for(const qb of qBtns){                 // これから の おだい の アイコン：ながおし で とぶ
+    if(!ptInRect(x,y,qb.x,qb.y,qb.w,qb.h)) continue;
+    if(qb.i > 0) qHold = { i: qb.i, t0: Date.now(), pid, x, y };
+    return;
+  }
   for(const tb of tabBtns){
     if(!ptInRect(x,y,tb.x,tb.y,tb.w,tb.h)) continue;
     if(katachiOn) katachiStop();                     // かたち（ためし）は タブ で おわる
@@ -5111,6 +5228,10 @@ function handleMove(x,y,pid){
     if(Math.hypot(x-paradeHold.x, y-paradeHold.y) > 24) paradeHold = null;   // 指が うごいたら やめ
     return;
   }
+  if(qHold && qHold.pid===pid){
+    if(Math.hypot(x-qHold.x, y-qHold.y) > 24) qHold = null;
+    return;
+  }
   if(stageHold && stageHold.pid===pid){
     if(Math.hypot(x-stageHold.sx, y-stageHold.sy) > 16) stageHold = null;
     return;
@@ -5129,6 +5250,7 @@ function handleMove(x,y,pid){
 }
 
 function handleEnd(x,y,pid){
+  if(qHold && qHold.pid===pid){ qHold = null; return; }                // とちゅう で はなした ＝ やめ
   if(paradeHold && paradeHold.pid===pid){ paradeHold = null; return; }  // 途中で離した＝中止
   if(stageHold && stageHold.pid===pid){ stageHold = null; return; }   // 途中で離した＝中止
   if(mode==='clock'){ if(drum && drum.drag) drumEnd(x, y); clockDrag=null; return; }
@@ -5299,7 +5421,7 @@ function drawFrame(ts){
   guardKidProfile();
   tickAutoNext();
   ctx.clearRect(0,0,sw,sh); drawBG(ctx); drawTabsAndUI(ctx);
-  waruSync();
+  waruSync(); zukeiSync();
   if(isFrameMode() && !paradeBreak){
     // わけっこ・けんばん：タブの 下は iframe。ここでは なにも かかない
   } else if(paradeBreak){
@@ -5545,6 +5667,7 @@ const play = (() => {
   // いま もんだいを といている とちゅうか（おわるまで まつ）
   function busy(){
     if(typeof hissanTask !== 'undefined' && hissanTask && hissanTask.frame) return true;
+    if(typeof zukeiTask !== 'undefined' && zukeiTask && zukeiTask.frame) return true;
     try{ return taskActive() && !taskDone; }catch(e){ return false; }
   }
   // ひらいた ときに もう じかんが ない なら、といている もんだいを またずに すぐ とめる
