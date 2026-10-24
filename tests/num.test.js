@@ -34,7 +34,7 @@ module.exports = {
     t.eq(r, [{ n: 12, d: 1 }, 12, 1000, 1, 'object'], 'ぶんすう で ない');
   },
 
-  'けいさん で しょうすう：0.1・0.5 の キー、÷2 で 5 → 2.5、0.3 ＋ 0.7 ＝ 1、7 ÷ 2 ＝ 3.5。0.1 きざみ に ならない ものは うけない。もどす で もどる': async t => {
+  'けいさん で しょうすう：0.1・0.5 の キー、÷2 で 5 → 2.5、0.3 ＋ 0.7 ＝ 1、7 ÷ 2 ＝ 3.5。0.01 きざみ に ならない ものは うけない。もどす で もどる': async t => {
     const p = await t.open();
     const r = await p.evaluate(() => {
       setQuizOn(false); if(typeof setTaskOn === 'function') setTaskOn(false); setMode('+'); blocks = []; clearUndo();
@@ -51,7 +51,7 @@ module.exports = {
       blocks = []; setMode('div'); spawnBlock(7); spawnBlock(2);
       const d7 = canCalc(blocks[0], blocks[1], 'div');
       blocks = []; spawnBlock(0.5); spawnBlock(0.5);
-      const rej = [canCalc(blocks[0], blocks[1], 'x'), canCalc(blocks[0], blocks[1], '+'), canScale('half', blocks[0].q), canScale('square', Num.from(1.5)), canScale('square', Num.from(3))];
+      const rej = [canCalc(blocks[0], blocks[1], 'x'), canCalc(blocks[0], blocks[1], '+'), canScale('half', blocks[0].q), canScale('half', Num.from(0.25)), canScale('square', Num.from(1.25)), canScale('square', Num.from(3))];
       blocks = []; spawnBlock(253); spawnBlock(0.1);
       const big = [canCalc(blocks[0], blocks[1], '+'), qOk(Num.from(999.9)), qOk(Num.from(1000.1))];
       return { keys: keys.slice(0, 2), half, sum, undone, d7, rej, big };
@@ -62,7 +62,7 @@ module.exports = {
     t.eq(r.undone, ['0.3', '0.7', '2.5'], 'もどす で もどらない');
     t.eq(r.d7, true, '7 ÷ 2 ＝ 3.5 が できない');
     t.eq(r.big, [true, true, false], '253 ＋ 0.1（100 より おおきい しょうすう）が できない／1000 を こえた');
-    t.eq(r.rej, [false, true, false, false, true], '0.1 きざみ に ならない もの（0.5×0.5・0.5÷2・1.5 の しかく）を うけた');
+    t.eq(r.rej, [true, true, true, false, false, true], '0.01 きざみ（0.5×0.5・0.5÷2 は ○）に ならない もの（0.25÷2・1.25 の しかく）を うけた');
   },
 
   'けいさん で ピンチアウト（はなす まで ゆびさき に 2ひき、はなすと わかれる・1て）。ちいさい キャラ は ゆびが そと でも つまめる。ダブルタップ では なにも しない': async t => {
@@ -96,6 +96,17 @@ module.exports = {
       return { tap, small: blocks.map(c => Num.fmt(c.q)).sort() }; });
     t.eq(d.tap, ['1'], 'ダブルタップ で かわった');
     t.eq(d.small, ['0.5', '0.5'], 'ちいさい キャラ を そと から つまめない');
+  },
+
+  '0.01 の くらい まで：0.5 → 0.25（÷2・はんぶんこ）、0.5 × 0.5 ＝ 0.25。0.25 は わけられない（0.125 に なる）': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      setMode('+'); spawnBlock(0.5); const b = blocks[0];
+      const half = canScale('half', b.q) && Num.fmt(scaledQ('half', b.q)), split = canSplitQ(b.q);
+      const q = Num.from(0.25);
+      return { half, split, mul: qOk(Num.mul(Num.from(0.5), Num.from(0.5))), q25: [canScale('half', q), canSplitQ(q)], tiny: qOk(Num.from(0.01)), less: qOk(Num.from(0.005)) };
+    });
+    t.eq(r, { half:'0.25', split:true, mul:true, q25:[false, false], tiny:true, less:false }, '0.01 の くらい の けいさんが ちがう');
   },
 
   'しょうすう の おだい（レベル7・8）：5 を はんぶんこ で 2.5 が できる・まぜまぜ では とばす': async t => {

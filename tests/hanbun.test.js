@@ -46,13 +46,15 @@ module.exports = {
     t.eq(await vis(p), 'hidden', 'ほかの タブで かくれない');
   },
 
-  'ゆび 2ほんで ひろげると はんぶんこ（4 → 2 と 2、5 → 2.5 と 2.5、1 → 0.5 と 0.5）。2.5・0.5 は わけられない': async t => {
+  'ゆび 2ほんで ひろげると はんぶんこ（4 → 2 と 2、5 → 2.5 と 2.5、1 → 0.5 と 0.5、0.5 → 0.25 と 0.25）。0.01 より こまかく なる 1.25・0.25 は わけられない': async t => {
     const { f } = await openHanbun(t, [5]);
     await pinchOut(f, 0);
     t.eq(await vals(f), [2.5, 2.5], '5 が わかれない');
     t.ok((await f.evaluate(() => hanbun.say())).includes('2.5 は「2 と はんぶん」'), 'ことば ' + await f.evaluate(() => hanbun.say()));
+    await f.evaluate(() => { hanbun.clear(); hanbun.add(1.25); });
+    await f.waitForTimeout(300);
     await pinchOut(f, 0);
-    t.eq(await vals(f), [2.5, 2.5], '2.5 が わかれた');
+    t.eq(await vals(f), [1.25], '1.25 が わかれた');
     t.ok((await f.evaluate(() => hanbun.say())).includes('できないよ'), 'わけられない ことば ' + await f.evaluate(() => hanbun.say()));
     await f.evaluate(() => { hanbun.clear(); hanbun.add(4); hanbun.add(1); });
     await f.waitForTimeout(400);
@@ -61,10 +63,11 @@ module.exports = {
     await f.waitForTimeout(300);
     const i = (await vals(f)).indexOf(0.5);
     await pinchOut(f, i);
-    t.eq((await vals(f)).filter(v => v === 0.5).length, 2, '0.5 が わかれた');
+    t.eq((await vals(f)).filter(v => v === 0.25).length, 2, '0.5 が 0.25 と 0.25 に わかれない');
+    t.ok((await f.evaluate(() => hanbun.say())).includes('0.25 は「はんぶん の はんぶん」'), 'ことば ' + await f.evaluate(() => hanbun.say()));
   },
 
-  '0.1〜0.9：1 を ダブルタップ すると 0.1 が 10こ。かさねて あつめると また 1。0.4 は 0.2 と 0.2、0.3 は わけられない': async t => {
+  '0.1〜0.9：1 を ダブルタップ すると 0.1 が 10こ。かさねて あつめると また 1。0.4 は 0.2 と 0.2、0.3 は 0.15 と 0.15': async t => {
     const { f } = await openHanbun(t, [1]);
     const a = await f.evaluate(() => hanbun.at(0));
     for(let k = 0; k < 2; k++){ await ptr(f, 'pointerdown', 1, a.x, a.y); await ptr(f, 'pointerup', 1, a.x, a.y); await f.waitForTimeout(80); }
@@ -78,7 +81,7 @@ module.exports = {
     await f.evaluate(() => hanbun.split(0));
     t.eq(await vals(f), [0.2, 0.2, 0.3], '0.4 が わかれない');
     await f.evaluate(() => hanbun.split(2));
-    t.eq(await vals(f), [0.2, 0.2, 0.3], '0.3 が わかれた');
+    t.eq(await vals(f), [0.2, 0.2, 0.15, 0.15], '0.3 が 0.15 と 0.15 に わかれない');
     await f.evaluate(() => { hanbun.clear(); hanbun.add(0.3); hanbun.add(0.7); hanbun.merge(0, 1); });
     t.eq(await vals(f), [1], '0.3 ＋ 0.7');
     t.ok((await f.evaluate(() => hanbun.say())).includes('いっぱい'), 'いっぱい の ことば');

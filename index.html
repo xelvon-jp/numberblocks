@@ -1180,12 +1180,14 @@ const PLAY_GOALS = [
   { n:1,   start:[0.5, 0.5], say:'0.5 と 0.5 を くっつけよう' },
   { n:12,  start:[6],        say:'6 を ふやして くっつけよう' },      // ミラー
   { n:0.5, start:[1],        say:'1 を はんぶんこ しよう' },
+  { n:0.25, start:[0.5],     say:'0.5 を はんぶんこ しよう' },        // 0.01 の くらい（ひなたの リクエスト）
   { n:9,   start:[2, 3, 4],  say:'ぜんぶ くっつけよう' },
   { n:5,   start:[2.5, 2.5], say:'2.5 と 2.5 を くっつけよう' },
   { n:1.5, start:[3],        say:'3 を はんぶんこ しよう' },
   { n:16,  start:[4],        say:'4 を ×2、×2 に しよう' },
   { n:3,   start:[1.5, 1.5], say:'1.5 と 1.5 を くっつけよう' },
   { n:20,  start:[5],        say:'5 を ふやして 20 に しよう' },
+  { n:0.5, start:[0.25, 0.25], say:'0.25 と 0.25 を くっつけよう' },
 ];
 function isPlayTask(t){ return !!(t && t.k === 'play'); }
 function playOf(id){
@@ -1476,7 +1478,7 @@ function isOverMirror(x,y){ return isOverTarget('mirror',x,y); }
 function isOverHome(x,y){   return isOverTarget('home',x,y); }
 
 // ×2 と ÷2 と しかく（2じょう）が使えるか（上限を超える／割り切れないときは受け付けない）
-// ×2・÷2・しかく。ふつうの かず でも Num でも うける。÷2 は きすう でも 0.1 きざみ なら うける（5 → 2.5）
+// ×2・÷2・しかく。ふつうの かず でも Num でも うける。÷2 は きすう でも 0.01 きざみ なら うける（5 → 2.5）
 function scaledQ(id,n){ const q = Num.from(n); return id==='square' ? Num.mul(q,q) : id==='double' ? Num.mul(q, Num.make(2)) : Num.div(q, Num.make(2)); }
 function canScale(id,n){
   const q = Num.from(n);
@@ -1998,9 +2000,9 @@ class NumberBlock {
   }
   // しょうすう：0.3 は ガラスの キャラ、2.3 は 2 ＋ あたま（か あしもと）の ガラス（engine.js。はんぶん と おなじ）。かえす のは かずを かく たかさ
   _drawDec(ctx,t,x,y,isMoving){
-    const bs=this.bs, k=Num.floor(this.q), fr=Num.fracPart(this.q), f=Num.toNumber(fr), d=Math.round(f*10);
+    const bs=this.bs, k=Num.floor(this.q), fr=Num.fracPart(this.q), f=Num.toNumber(fr), d=glassDigit(f);
     if(!this.w && typeof Mizu !== 'undefined') this.w = Mizu.mk();      // みず の うごき（かたむけると すいへい）
-    if(k===0){ drawGlassFigure(ctx, d, x+bs/2, y+bs, bs, this.w); return y - glassHatLift(d)*bs - 3; }
+    if(k===0){ drawGlassFigure(ctx, d, x+bs/2, y+bs, bs, this.w, f); return y - glassHatLift(d)*bs - 3; }
     const g=glassPlace(k), oy=g.side?0:bs;              // あたまに のる ときは キャラを 1だん さげる
     drawNumberblock(ctx, k, x, y+oy, bs, { t:t, animate:isMoving, numberling:false });
     drawGlassCube(ctx, x+g.gx*bs, y+oy+g.gy*bs, bs, f, glassLiqColor(d), this.w);
@@ -2088,9 +2090,9 @@ const MERGE_REACH = 28;   // ここまで近づけたら合体できる（体の
 const NEAR_REACH  = 60;   // 通行止めの合図を出しはじめる距離
 
 // ── しょうすう（かずは ぶんすう Num で けいさん）──
-// ゆるす のは ぶんぼ が DEC_DEN の やくすう の かず（10 ＝ 0.1 きざみ）。しょうすう も せいすう と おなじ MAX_NUM まで（さいしょ は 100 まで に したが「253.1 が つくれない！」で ひろげた）。
-// × ÷ しかく も こたえが 0.1 きざみ に おさまる とき だけ（パパと きめた。HANDOFF.md 1.5）。
-const DEC_DEN = 10;
+// ゆるす のは ぶんぼ が DEC_DEN の やくすう の かず（100 ＝ 0.01 きざみ。2026-10-24 に 0.1 から ひろげた：0.5 → 0.25）。しょうすう も せいすう と おなじ MAX_NUM まで（さいしょ は 100 まで に したが「253.1 が つくれない！」で ひろげた）。
+// × ÷ しかく も こたえが 0.01 きざみ に おさまる（2026-10-24 から。まえは 0.1） とき だけ（パパと きめた。HANDOFF.md 1.5）。
+const DEC_DEN = 100;
 function qOk(q){
   return Num.cmp(q, Num.ZERO) > 0 && Num.fits(q, DEC_DEN) && Num.cmp(q, Num.make(MAX_NUM)) <= 0;
 }
@@ -5070,7 +5072,7 @@ function pinchEnd(){
 // ねばねば の いと（ひろげて いる あいだ は のびて ほそく、わかれた あと は ぷつっと きれる）
 function drawCalcGoo(ctx, a, b, th){
   const ax=a.cx, ay=a.cy, bx=b.cx, by=b.cy, len=Math.hypot(bx-ax, by-ay)||1, nx=-(by-ay)/len, ny=(bx-ax)/len, mid=th*0.3, mx=(ax+bx)/2, my=(ay+by)/2;
-  const col = Num.floor(a.q) === 0 ? glassLiqColor(Math.round(Num.toNumber(Num.fracPart(a.q))*10)) : mainColorOf(Num.floor(a.q));
+  const col = Num.floor(a.q) === 0 ? glassLiqColor(glassDigit(Num.toNumber(Num.fracPart(a.q)))) : mainColorOf(Num.floor(a.q));
   ctx.save(); ctx.fillStyle = rgb(col); ctx.globalAlpha = 0.95; ctx.beginPath();
   ctx.moveTo(ax+nx*th, ay+ny*th); ctx.quadraticCurveTo(mx+nx*mid, my+ny*mid, bx+nx*th, by+ny*th);
   ctx.lineTo(bx-nx*th, by-ny*th); ctx.quadraticCurveTo(mx-nx*mid, my-ny*mid, ax-nx*th, ay-ny*th); ctx.closePath(); ctx.fill(); ctx.restore();

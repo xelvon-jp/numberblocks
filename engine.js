@@ -2467,10 +2467,10 @@ function drawGlassCube(ctx, x0, y0, bs, fill, col, w){
   ctx.beginPath(); ctx.moveTo(x0 + bs*0.88, y0 + bs*0.2); ctx.lineTo(x0 + bs*0.88, y0 + bs*0.42); ctx.stroke();
   ctx.restore();
 }
-// 0.d の キャラ（cx：まんなか、foot：キューブの した）
-function drawGlassFigure(ctx, d, cx, foot, bs, w){
+// 0.d の キャラ（cx：まんなか、foot：キューブの した）。fill：みずの たかさ（0〜1。なければ d/10。0.25 なら d＝2・fill＝0.25）
+function drawGlassFigure(ctx, d, cx, foot, bs, w, fill){
   drawGlassArt(ctx, glassLimbArt(d), cx, foot - bs/2, bs);
-  drawGlassCube(ctx, cx - bs/2, foot - bs, bs, d/10, glassLiqColor(d), w);
+  drawGlassCube(ctx, cx - bs/2, foot - bs, bs, fill == null ? d/10 : fill, glassLiqColor(d), w);
   drawGlassArt(ctx, glassFaceArt(d), cx, foot - bs/2, bs);
 }
 // 2.3 の ガラス（0.3）の ばしょ（k の キャラの マスめ で）：いちばん うえの だんの みぎはしの うえ（top）、
@@ -2481,6 +2481,9 @@ function glassPlace(k){
   let t = null; for(const c of s.cells) if(!t || c.gy < t.gy || (c.gy === t.gy && c.gx > t.gx)) t = c;
   return { side: false, gx: t.gx, gy: t.gy - 1 };
 }
+// 0.01 の くらい まで（2026-10-24。ひなたが「0.5 を はんぶん に したい」）：ガラスの かお・いろ は 0.1 の くらい の かず。
+// 0.25 → 2（みずは 0.2 と 0.3 の めもりの あいだ）、0.05 → 5（0.1 の くらい が 0 の ときは 0.01 の くらい）。f：0〜1 の かず
+function glassDigit(f){ const h = Math.round(f*100) % 100; return Math.floor(h/10) || h % 10 || 1; }
 const glassHatLift = d => d === 3 ? 0.42 : d === 7 ? 0.3 : 0;     // 3 の ぼうし・7 の かみ の ぶん、かずを うえに（キューブ なんこぶん）
 // あたまの かず（ナンバーリングと おなじ 字）。s：'2.5'・'1/3' など。「.」は まる、「/」は ななめ せん。by：かずの した
 function drawNumLabel(ctx, s, cx, by, bs){
