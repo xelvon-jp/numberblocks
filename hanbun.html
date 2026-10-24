@@ -18,6 +18,15 @@
   #say .sub { font-size:14px; color:#6a7486; min-height:18px; font-weight:700; }
   #say .ok { color:#d08a00; }
   #stage { flex:1; position:relative; min-height:0; }
+  #goal { display:none; flex:none; align-items:center; gap:8px; margin:6px 10px 0; padding:6px 8px 6px 12px; background:#fff3c4; border:3px solid #f0a020; border-radius:16px;
+          font-size:clamp(16px, 5vw, 22px); font-weight:900; color:#5a3a00; animation: glow 1.8s ease-in-out infinite alternate; }
+  #goal.on { display:flex; }
+  #goal .t { flex:1; }
+  #goal button { border:0; border-radius:12px; padding:9px 12px; font-size:15px; font-weight:900; }
+  #gnext { display:none; background:#3f8fd0; color:#fff; box-shadow:0 3px 0 #2a6aa0; }
+  #gnext.on { display:block; }
+  #gskip { background:#fff; color:#5a6576; font-size:12px !important; }
+  @keyframes glow { from { box-shadow:0 2px 6px rgba(240,160,32,0.25); } to { box-shadow:0 2px 16px rgba(240,160,32,0.7); } }
   canvas { display:block; position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
   #bar { flex:none; display:flex; gap:6px; align-items:center; padding:6px 10px calc(8px + env(safe-area-inset-bottom, 0px)); background:rgba(255,255,255,0.7); }
   #nums { flex:1; min-width:0; display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; }
@@ -33,6 +42,7 @@
 </style>
 </head>
 <body>
+<div id="goal"><div class="t"></div><button id="gnext">つぎ ▶</button><button id="gskip">もどる</button></div>
 <div id="say"><div class="big"></div><div class="sub"></div></div>
 <div id="stage"><canvas id="c"></canvas></div>
 <div id="bar">
@@ -91,7 +101,29 @@ try{ const v = JSON.parse(localStorage.getItem(KEY)); if(v && typeof v === 'obje
 // かずは 0.01 きざみ（なかでは 0.01 が なんこ か で かんがえる。0.1＋0.2 が 0.30000000000000004 に ならない ように）
 const hund = v => Math.round(v*100), norm = v => Math.round(v*100)/100;
 const okV = v => typeof v === 'number' && hund(v) >= 1 && v <= V_MAX && Math.abs(v*100 - hund(v)) < 1e-6;
-function save(){ try{ localStorage.setItem(KEY, JSON.stringify({ chars: chars.map(c => c.v) })); }catch(e){} }
+// ── ゲーム の ちいさな ゴール（index.html の まぜまぜ から ?embed=1&goal={type,v,cnt,say}）──
+// いつもの はんぶん の がめん の うえ に ゴール の カード。キャラ は からっぽ から（nb_hanbun は よまない・かかない）。
+// make：その かず の キャラ が いる／count：その かず の キャラ が cnt にん。できたら きんいろ の かみふぶき と「つぎ ▶」→ ゲーム に done。
+const GOAL = (() => { const m = /[?&]goal=([^&]+)/.exec(location.search); try{ return m ? JSON.parse(decodeURIComponent(m[1])) : null; }catch(e){ return null; } })();
+let goalDone = false;
+function tellGame(m){ try{ if(window.parent && window.parent !== window) window.parent.postMessage(Object.assign({ from:'hanbun' }, m), '*'); }catch(e){} }
+function goalMet(){
+  if(!GOAL) return false;
+  const n = chars.filter(c => hund(c.v) === hund(GOAL.v)).length;
+  return GOAL.type === 'count' ? n >= GOAL.cnt : n >= 1;
+}
+function checkGoal(){
+  if(!GOAL || goalDone || !goalMet()) return;
+  goalDone = true;
+  for(const c of chars) if(hund(c.v) === hund(GOAL.v)){ c.hop = now0(); c.gold = now0(); }
+  burst(W/2, H*0.4, 60, true);
+  setTimeout(() => say('できた！ 🎉', GOAL.say, true), 50);
+  document.getElementById('gnext').classList.add('on');
+}
+function save(){
+  if(GOAL){ checkGoal(); return; }
+  try{ localStorage.setItem(KEY, JSON.stringify({ chars: chars.map(c => c.v) })); }catch(e){}
+}
 
 // ── かずの かきかた ──
 // fracOf：0.01 が なんこ（0〜99）。fracS：その 小数の ぶぶん の 字（"0.5"・"0.25"）
@@ -524,7 +556,13 @@ document.getElementById('clear').addEventListener('click', () => { chars = []; s
 resize();
 bs = BS_MAX;
 const t0 = now0();
-chars = (Array.isArray(st.chars) ? st.chars.filter(okV).slice(0, MAX_CHARS) : []).map((v, i, a) => mk(v, W*(i + 1)/(a.length + 1), t0));
+chars = GOAL ? [] : (Array.isArray(st.chars) ? st.chars.filter(okV).slice(0, MAX_CHARS) : []).map((v, i, a) => mk(v, W*(i + 1)/(a.length + 1), t0));
+if(GOAL){
+  document.getElementById('goal').classList.add('on');
+  document.querySelector('#goal .t').textContent = '🎯 ' + GOAL.say;
+  document.getElementById('gnext').addEventListener('click', () => tellGame({ type:'done' }));
+  document.getElementById('gskip').addEventListener('click', () => tellGame({ type:'skip' }));
+}
 bs = targetBs();
 sayIdle();
 Mizu.autoStart();       // センサーは はじめから オン（iPhone は さいしょに さわった とき に ゆるしを きく）
@@ -533,7 +571,7 @@ requestAnimationFrame(frame);
 // テスト よう
 window.hanbun = { chars: () => chars.map(c => c.v), add: v => addChar(v), split: i => split(chars[i]), merge: (i, j) => merge(chars[i], chars[j]),
   at: i => { const c = chars[i], r = rect(c); return { x: c.x, y: r.y + r.h/2, w: r.w, h: r.h }; }, bs: () => bs, say: () => sayBig.textContent + '｜' + saySub.textContent,
-  water: i => chars[i].w, preview: () => pinch && pinch.pv ? [pinch.pv.a, pinch.pv.b].map(c => { const r = rect(c); return { v: c.v, x: c.x, y: r.y + r.h/2 }; }) : null, clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]) };
+  water: i => chars[i].w, goalDone: () => goalDone, preview: () => pinch && pinch.pv ? [pinch.pv.a, pinch.pv.b].map(c => { const r = rect(c); return { v: c.v, x: c.x, y: r.y + r.h/2 }; }) : null, clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]) };
 </script>
 </body>
 </html>

@@ -2,32 +2,62 @@
 // けいさん・はんぶん の じゆうあそびを 1〜2て の ゴール に して おだいの あいだに はさむ。
 
 module.exports = {
-  'ちいさな ゴール：キャラが はじめから いて、くっつけると できた。けいさんの きろく には つかない': async t => {
+  'ちいさな ゴール（けいさん）：いつも の キー ぜんぶ（R なし）・しき も でる。ゴール が できたら できた。けいさん の きろく には つかない': async t => {
     const p = await t.open();
     const r = await p.evaluate(() => {
       taskOn = true; startTask(5);
       const before = JSON.stringify(taskCleared);
-      startPlayTask({ n:7, start:[3, 4], say:'3 と 4 を くっつけよう' });
-      const start = blocks.map(b => b.num).sort((a, b) => a - b), keys = getNumpadLayout().map(b => b.label);
+      startPlayTask('c', { type:'make', n:777, say:'777 を つくろう', lv:3 });
+      const keys = getNumpadLayout().map(b => b.label);
+      spawnBlock(700); spawnBlock(77);
+      let shown = false; const ft = ctx.fillText; ctx.fillText = function(s){ if(/700 \+ 77/.test(String(s)) || /77 \+ 700/.test(String(s))) shown = true; return ft.apply(this, arguments); };
+      try{ drawFormula(ctx); } finally { ctx.fillText = ft; }
+      checkTask(); const early = taskDone;
       fuseBlocks(blocks[0], blocks[1]); checkTask();
-      return { start, keys, done: taskDone, same: JSON.stringify(taskCleared) === before, hint: hintReady(), idx: taskIdx };
+      return { keys: keys.join(), shown, early, done: taskDone, same: JSON.stringify(taskCleared) === before, hint: hintReady() };
     });
-    t.eq(r, { start:[3, 4], keys:['3', '4', 'CLR'], done:true, same:true, hint:false, idx:5 }, 'ちいさな ゴールが おかしい');
+    t.eq(r, { keys:'0.1,0.5,1,2,3,4,5,6,7,8,9,10,CLR', shown:true, early:false, done:true, same:true, hint:false }, 'けいさん の ちいさな ゴール が おかしい');
   },
 
-  'ちいさな ゴール：はんぶんこ（5 → 2.5）で できる。つぎは けいさんの おだい。ゴールは じゅんに まわる': async t => {
+  'ちいさな ゴール：make・op・count・pair の できた の きまり': async t => {
     const p = await t.open();
     const r = await p.evaluate(() => {
-      taskOn = true; startTask(0); queue = [{ k:'play' }, { k:'calc', idx:1 }];   // あそび の つぎ は けいさん
-      startPlayTask({ n:2.5, start:[5], say:'5 を はんぶんこ しよう' });
-      scaleBlock(blocks[0], 'half'); checkTask();
-      const done = taskDone;
-      nextTask(); if(paradeBreak) endParadeBreak();
-      const back = !genTask && !hissanTask && isCalcMode();
-      const i0 = playOf(profile().id).i; startPlayTask(); const a = currentTask().say; startPlayTask(); const b = currentTask().say;
-      return { done, back, a: a === PLAY_GOALS[i0].say, b: b === PLAY_GOALS[i0 + 1].say };
+      taskOn = true; startTask(0);
+      const chk = (g, f) => { startPlayTask('c', Object.assign({ say:'', lv:1 }, g)); f(); return goalMet(currentTask()); };
+      return [
+        chk({ type:'op', op:'square', n:144 }, () => spawnBlock(144)),                                 // しかく を つかって いない
+        chk({ type:'op', op:'square', n:144 }, () => { spawnBlock(12); scaleBlock(blocks[0], 'square'); }),
+        chk({ type:'count', n:250, cnt:2 }, () => { spawnBlock(250); }),
+        chk({ type:'count', n:250, cnt:2 }, () => { spawnBlock(250); spawnBlock(250); }),
+        chk({ type:'pair', n:1000 }, () => { spawnBlock(400); spawnBlock(600); }),
+        chk({ type:'pair', n:1 }, () => { spawnBlock(0.3); spawnBlock(0.7); }),
+      ];
     });
-    t.eq(r, { done:true, back:true, a:true, b:true }, 'はんぶんこ の ゴール／つぎへ の すすみかたが ちがう');
+    t.eq(r, [false, true, false, true, true, true], 'ゴール の きまり が ちがう');
+  },
+
+  'ちいさな ゴール の だん：はじめ は けいさん 2・はんぶん 1。90びょう いない に 2かい で うえ、おそい・とばす と した': async t => {
+    const p = await t.open({ who:'hinata' });
+    const r = await p.evaluate(() => {
+      const g = goalOf('hinata'), a = [g.c, g.h];
+      noteGoal('c', true, 30000); const b = g.c; noteGoal('c', true, 30000); const c = g.c;
+      noteGoal('c', false); const d = g.c; noteGoal('c', true, 300000); const e = g.c;
+      return [a, b, c, d, e];
+    });
+    t.eq(r, [[2, 1], 2, 3, 2, 1], 'だん の うごき が ちがう');
+  },
+
+  'ちいさな ゴール（はんぶん）：はんぶん の がめん を かさねて ゴール。できたら「つぎ」で ゲーム へ もどる': async t => {
+    const p = await t.open();
+    await p.evaluate(() => { taskOn = true; startTask(0); queue = [{ k:'play', sub:'h' }, { k:'calc', idx:3 }]; startPlayTask('h', { type:'count', v:2.5, cnt:2, say:'2.5 を 2にん つくろう', lv:2 }); });
+    await p.waitForFunction(() => { const f = document.querySelector('iframe[src^="hanbun.html"]'); return f && f.contentWindow && f.contentWindow.hanbun; }, null, { timeout: 5000 });
+    const f = p.frames().find(x => x.url().includes('hanbun.html'));
+    const a = await f.evaluate(() => { const c0 = hanbun.chars().length; hanbun.add(5); const before = hanbun.goalDone(); hanbun.split(0); return [c0, before, hanbun.goalDone()]; });
+    t.eq(a, [0, false, true], 'はんぶん の ゴール が おかしい（から から はじまる・2.5 が 2にん で できた）');
+    await f.evaluate(() => document.getElementById('gnext').click());
+    await p.waitForTimeout(300);
+    const r = await p.evaluate(() => ({ frame: !!document.querySelector('iframe[src^="hanbun.html"]'), idx: taskIdx, sh: goalOf(profile().id).sh }));
+    t.eq(r, { frame:false, idx:3, sh:1 }, 'はんぶん の ゴール の あと つぎ へ すすまない');
   },
 
   'タブは おだい だけ。ひらくと おだい（だれが あそぶ？）。ためし から ?mode=calc・?mode=hanbun・?katachi=1 で ひらける': async t => {

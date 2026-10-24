@@ -145,7 +145,7 @@ module.exports = {
   'まぜまぜ：けいさん1問ごとに かけざん・あそび・とけい・かけざん・ずけい・とけい・ひっさん を はさむ。けいさんは できて いない おだい 2もん・おさらい 1もん': async t => {
     const p = await t.open();
     const seq = await p.evaluate(() => {
-      taskOn = true; startTask(0);
+      taskOn = true; resetQueue(); goalOf(profile().id).next = 'c'; startTask(0);   // ちいさな ゴール は けいさん から（ひらいた とき に ならべた ぶん で ずれない ように）
       const out = [];
       for(let k=0;k<14;k++){
         if(zukeiTask){ out.push('ず'); zukeiTask.frame.remove(); zukeiTask.frame = null; nextTask(); if(paradeBreak) endParadeBreak(); continue; }   // 図形の面積：できた ことに する
@@ -160,7 +160,7 @@ module.exports = {
           drumSet(c.c.h24 ? h : (h % 12) || 12, c.c.goal % 60); drumAnswer();
         } else if(isClockTask(c)){
           clockT = c.c.goal % 720; clockAnswer();
-        } else { spawnBlock(c.n); checkTask(); }
+        } else { if(isPlayTask(c)) c.type = 'make'; spawnBlock(c.n); checkTask(); }
         if(!taskDone) return 'できない ' + out.join(',');
         nextTask(); if(paradeBreak) endParadeBreak();      // ごほうびの パレードは とばす
       }
