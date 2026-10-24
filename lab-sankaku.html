@@ -175,10 +175,9 @@ function draw(now){
   fx = fx.filter(p => (p.life -= 0.02) > 0);
   for(const p of fx){ p.x += p.vx; p.y += p.vy; p.vy += 0.12; ctx.fillStyle = 'hsla(' + p.hue + ',90%,60%,' + p.life + ')'; ctx.fillRect(p.x, p.y, 4, 4); }
 }
-// うごかせる ● の 大きさ：マス の 大きさ と、さんかく の みじかい ほう の へん（底辺・高さ）に あわせる
-// （ちいさい さんかく は ズーム の じょうげん で マス が それいじょう 大きく ならない ので、1×1 でも ● が 大きすぎない ように。パパ）。
-// さわれる ところ は hit で ひろい まま
-function handleR(){ return Math.max(4, Math.min(C*0.26, Math.min(tri.b, tri.h)*C*0.13)); }
+// うごかせる ● の 大きさ：どの さんかく でも だいたい おなじ（はんけい 5〜8px）。ちいさい さんかく（1×1）では みじかい へん に あわせて すこし ちいさく。
+// （マス に あわせる と 3×5 など ズーム が 大きい とき だけ 大きく なった。パパ）。さわれる ところ は hit で ひろい まま
+function handleR(){ return Math.max(5, Math.min(8, Math.min(tri.b, tri.h)*C*0.12)); }
 // ながさ の かず（へん の キューブ の よこ）
 function lenLabel(n, x, y, col){
   ctx.save(); ctx.font = '900 ' + Math.round(Math.max(16, Math.min(30, C*0.9))) + 'px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
