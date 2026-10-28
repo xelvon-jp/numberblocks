@@ -3338,7 +3338,8 @@ function followTaskMode(){
 let drum = null;   // { lists:[[..],[..],[..]], pos:[..], goal:[..], drag, shake }
 function drumReset(t){
   if(!isPickTask(t)){ drum = null; return; }
-  const hours = t.c.h24 ? Array.from({length:24}, (_, i) => i) : Array.from({length:12}, (_, i) => i + 1);
+  // ごご の とけい（デジタル で なんじ？）は 12〜23じ だけ（ごぜん の じこく は えらべない。パパ 2026-10-28）
+  const hours = t.c.h24 ? Array.from({length:12}, (_, i) => i + 12) : Array.from({length:12}, (_, i) => i + 1);
   const lists = [hours, [0,1,2,3,4,5], [0,1,2,3,4,5,6,7,8,9]];
   // はじめは 12:00（24じかんのときも 12:00）
   drum = { lists, pos:[hours.indexOf(12), 0, 0], goal:[hours.indexOf(12), 0, 0], drag:null, shake:0, miss:0 };

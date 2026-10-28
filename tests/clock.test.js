@@ -413,13 +413,13 @@ module.exports = {
          '2かいめで できた／虹は出ない のはず');
   },
 
-  'ごごを よむ：じの ドラムは 0〜23。1:18 では だめで 13:18 で できた。12じ台は 12': async t => {
+  'ごごを よむ：じの ドラムは 12〜23（ごぜん は えらべない）。13:18 で できた。12じ台は 12': async t => {
     const p = await t.open();
     await start(p, { k:'pick', to:'13:18' });
-    t.eq(await p.evaluate(() => [drum.lists[0].length, clockT, currentTask().c.tail]), [24, 78, 'ごごの とけい。デジタルで なんじ？'],
+    t.eq(await p.evaluate(() => [drum.lists[0].join(), clockT, currentTask().c.tail]), ['12,13,14,15,16,17,18,19,20,21,22,23', 78, 'ごごの とけい。デジタルで なんじ？'],
          'ごごを よむ の はじまりが おかしい');
-    await p.evaluate(() => { drumSet(1, 18); drumAnswer(); });
-    t.eq(await p.evaluate(() => taskDone), false, '1:18 で できたになった（ごごなので 13:18）');
+    await p.evaluate(() => { drumSet(14, 18); drumAnswer(); });
+    t.eq(await p.evaluate(() => taskDone), false, '14:18 で できたになった');
     await p.evaluate(() => { drumSet(13, 18); drumAnswer(); });
     t.eq(await p.evaluate(() => taskDone), true, '13:18 で できたにならない');
     await start(p, { k:'pick', to:'12:30' });
