@@ -2250,12 +2250,48 @@ function drawNumberblockFit(ctx, n, bx, by, bw, bh, opts){
 /* ── きせつ：ハロウィン ─────────────────────────────────────────────
    10月の あいだ（せっていで OFF にも できる）、ゲームと ひっさんの 景色を ハロウィンに する。
    せっていは この端末の localStorage（nb_halloween：'auto' か 'off'）。 */
-function isHalloween(){
+function isHalloween(){ return seasonNow() === 'halloween'; }
+// きせつ の かざり（2026-10-29）：10がつ ハロウィン、11がつ あき（もみじ・どんぐり）。ほか の つき は なし。
+// せってい は nb_halloween（'auto'・'off'。ためし よう に 'on'＝ハロウィン、'autumn'＝あき で いつでも）
+function seasonNow(){
   let v = 'auto';
   try{ v = localStorage.getItem('nb_halloween') || 'auto'; }catch(e){}
-  if(v === 'off') return false;
-  if(v === 'on') return true;
-  return new Date().getMonth() === 9;
+  if(v === 'off') return null;
+  if(v === 'on') return 'halloween';
+  if(v === 'autumn') return 'autumn';
+  const m = new Date().getMonth();
+  return m === 9 ? 'halloween' : m === 10 ? 'autumn' : null;
+}
+// もみじ の は（x, y：まんなか、s：おおきさ、rot：かたむき）。5つ の とがり と じく
+const MAPLE_COLS = ['#d8402a', '#e8662a', '#f2a03a', '#e9c046', '#c8322e'];
+function drawMapleLeaf(ctx, x, y, s, rot, col){
+  ctx.save(); ctx.translate(x, y); ctx.rotate(rot || 0);
+  ctx.fillStyle = col; ctx.beginPath();
+  for(let i = 0; i < 10; i++){
+    const a = -Math.PI/2 + i*Math.PI/5, r = i % 2 ? s*0.42 : s*(i === 4 || i === 6 ? 0.78 : 1);
+    if(i === 0) ctx.moveTo(Math.cos(a)*r, Math.sin(a)*r); else ctx.lineTo(Math.cos(a)*r, Math.sin(a)*r);
+  }
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(120,40,20,0.55)'; ctx.lineWidth = Math.max(1, s*0.1); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(0, s*0.25); ctx.lineTo(0, s*0.95); ctx.stroke();
+  ctx.restore();
+}
+// どんぐり（cx：まんなか、bottom：した、r：よこ の はんけい）
+function drawAcorn(ctx, cx, bottom, r){
+  ctx.save();
+  ctx.fillStyle = '#b8743a'; ctx.beginPath(); ctx.ellipse(cx, bottom - r*1.05, r*0.85, r*1.05, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.beginPath(); ctx.ellipse(cx - r*0.3, bottom - r*1.2, r*0.18, r*0.38, -0.3, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#7a5230'; ctx.beginPath(); ctx.ellipse(cx, bottom - r*1.75, r*0.98, r*0.5, 0, Math.PI, Math.PI*2); ctx.lineTo(cx + r*0.98, bottom - r*1.7); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#5a3a20'; ctx.lineWidth = Math.max(1, r*0.22); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(cx, bottom - r*2.15); ctx.lineTo(cx + r*0.15, bottom - r*2.5); ctx.stroke();
+  ctx.restore();
+}
+// まつぼっくり
+function drawPineCone(ctx, cx, bottom, r){
+  ctx.save(); ctx.fillStyle = '#8a5a32'; ctx.strokeStyle = '#5e3a1e'; ctx.lineWidth = Math.max(1, r*0.12);
+  for(let row = 0; row < 4; row++){ const w = r*(1 - row*0.18), y = bottom - r*0.45 - row*r*0.55;
+    for(let i = -1; i <= 1; i++){ ctx.beginPath(); ctx.ellipse(cx + i*w*0.55, y, w*0.38, r*0.32, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke(); } }
+  ctx.restore();
 }
 // ジャック・オー・ランタン。cx・bottom は 下の まんなか、r は よこの はんけい
 function drawPumpkin(ctx, cx, bottom, r, glow){

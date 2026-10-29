@@ -227,6 +227,23 @@ module.exports = {
     t.eq(r.on, [true, ''], 'ハロウィンの がめんで エラー');
   },
 
+  'きせつ：10がつ ハロウィン・11がつ あき・ほか なし（じどう）。OFF なら どちらも でない。あき の がめん で エラー が でない': async t => {
+    const p = await t.open();
+    const r = await p.evaluate(() => {
+      const RealDate = Date;
+      const at = m => { window.Date = class extends RealDate { constructor(...a){ super(...(a.length ? a : [2026, m, 15])); } }; const v = seasonNow(); window.Date = RealDate; return v; };
+      const month = [at(8), at(9), at(10), at(11)];
+      localStorage.setItem('nb_halloween', 'off'); const off = [at(9), at(10)];
+      localStorage.setItem('nb_halloween', 'autumn'); updSeason();
+      setMode('+'); spawnBlock(3); spawnBlock(4); notePrize(12);
+      for(let i=0;i<3;i++) drawFrame(performance.now());
+      return { month, off, au: [autumnOn, halloweenOn, leafRain.length, window.loopErr || ''] };
+    });
+    t.eq(r.month, [null, 'halloween', 'autumn', null], 'つき と きせつ が ちがう');
+    t.eq(r.off, [null, null], 'OFF でも でる');
+    t.eq(r.au, [true, false, 12, ''], 'あき：こたえ の かず だけ もみじ が ふらない／エラー');
+  },
+
   'タブ は おだい だけ。けいさん・はんぶん・ずけい・因数・ドリル・とけい・わけっこ・けんばん は ためし から（?mode=・?katachi=1）。せってい に ひっさん・けんばん は ない': async t => {
     const p = await t.open({ who:'papa' });
     const r = await p.evaluate(() => { drawTabsAndUI(ctx); const tabs = tabBtns.map(b => b.val).filter(v => v !== 'settings');
