@@ -789,7 +789,7 @@ function storyChStart(ch){
   if(ch === 0){
     storyStep = 0;
     say('クラブまつり！', 'とくいわざショー が はじまるよ', true);
-    storyCard('🎪 クラブまつり：とくいわざショー', 'はじめる ▶');
+    storyCard('🎪 クラブまつり：5 の とくいわざを みせてもらおう', 'はじめる ▶');
   } else if(ch === 1){
     storyStep = 10; storyStage([2]); storyZones(true, false);
     say('しかくクラブへ ようこそ', '2 を「しかく」へ ドラッグしてね', true);
@@ -833,10 +833,10 @@ function storyNext(){
   if(storySelect){ storyChStart([0, 1, 2, 3, 4, 5, 6, 7, 8].find(i => !storyProg.done.includes(i))); return; }
   if(storyDone){ if(storyCh < 8) storyChStart(storyCh + 1); else location.replace('hanbun.html?embed=1&v=' + Date.now()); return; }
   if(storyCh === 0 && storyStep === 0){
-    // お手本は しない（後の 章にも 無いので 一貫させる）。はじめたら すぐ あなたの 番
-    storyStep = 2; storyBase = storyKey(); storyBaseSum = storySum();
-    say('クラブまつり！', 'すきな かずで とくいわざを みせてね', true);
-    storyCard('🎯 あなたの ばん：すきな かずを だして、とくいわざを みせてね', '');
+    // 自由に やらせる のではなく、他の 章と おなじく「やること」を 具体的に しめす：5 を はんぶんこ → もどす
+    storyStep = 1; storyPrevKey = storyKey();
+    say('5 の とくいわざ', 'はんぶんこ！ ゆび 2ほんで 5 を ひろげてね', true);
+    storyCard('🎯 5 を はんぶんこ して みせてね（ゆび 2ほんで ひろげる）', '');
   }
 }
 function storyPause(fn){ storyBusy = true; clearTimeout(storyTimer); storyTimer = setTimeout(() => { storyBusy = false; fn(); }, 2300); }
@@ -884,11 +884,17 @@ const storySum = () => chars.reduce((a, c) => a + hund(c.v), 0);
 function storyCheck(){
   if(storyDone || storyBusy) return;
   if(storyCh === 0){
-    if(storyStep !== 2) return;
-    const k = storyKey(), s = storySum();
-    if(k === storyBase){ storyBaseSum = s; return; }
-    if(s !== storyBaseSum){ storyBase = k; storyBaseSum = s; return; }   // だす・かえる・かたづける は「じゅんび」として きじゅんを うつす（だした かずを わける のも わざ）
-    storyStamp(); return;
+    const k = storyKey();
+    if(storyStep === 1){
+      if(storyPrevKey === '500' && k === '250,250'){
+        storyStep = 2;
+        say('2.5 と 2.5！ はんぶんこ 成功', 'つぎは もどして みせてね', true);
+        storyCard('🎯 つぎ：2.5 どうしを かさねて 5 に もどしてね', '');
+      } else if(k !== storyPrevKey) say('ヒント', '5 を ゆび 2ほんで ひろげると はんぶんこ できるよ', true);
+    } else if(storyStep === 2){
+      if(storyPrevKey === '250,250' && k === '500') storyStamp();
+    }
+    storyPrevKey = k; return;
   }
   if(storyCh === 2){
     const k = storyKey();

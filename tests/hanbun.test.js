@@ -227,7 +227,7 @@ module.exports = {
     t.eq(r.e, 'れい てん れい いち', 'よみあげ が ちがう');
   },
 
-  'ストーリー（ためし）：クラブまつりの 導入。はじめから じゆうに わけると スタンプ（お手本なし）。nb_hanbun は かわらない': async t => {
+  'ストーリー（ためし）：クラブまつりの 導入。あんない通りに 5 を はんぶんこ → もどすと スタンプ。nb_hanbun は かわらない': async t => {
     const p = await t.open({ storage: { nb_hanbun: JSON.stringify({ chars: [3] }) } });
     await tapTab(p, 'story');
     await p.waitForFunction(() => { const f = document.querySelector('iframe[src^="hanbun.html"]'); return f && f.contentWindow && f.contentWindow.hanbun && f.contentWindow.hanbun.story(); }, null, { timeout: 5000 });
@@ -238,10 +238,13 @@ module.exports = {
     t.eq(await vals(f), [5], 'ホストの 5 から ではない');
     t.ok((await f.evaluate(() => hanbun.say())).includes('クラブまつり'), 'あいさつの ことば');
     await f.evaluate(() => hanbun.storyNext());
-    await f.waitForFunction(() => hanbun.story().step === 2, null, { timeout: 6000 });
-    t.eq(await vals(f), [5], 'おてほん で 5 に もどらない');
+    await f.waitForFunction(() => hanbun.story().step === 1, null, { timeout: 6000 });
+    t.eq(await vals(f), [5], '5 から はじまらない');
     await pinchOut(f, 0);
     t.eq(await vals(f), [2.5, 2.5], 'わけられない');
+    t.eq((await f.evaluate(() => hanbun.story())).step, 2, 'もどす 番に ならない');
+    await f.evaluate(() => hanbun.merge(0, 1));
+    t.eq(await vals(f), [5], '5 に もどらない');
     t.eq((await f.evaluate(() => hanbun.story())).done, true, 'スタンプが つかない');
     t.ok((await f.evaluate(() => hanbun.say())).includes('スタンプ'), 'スタンプの ことば');
     t.eq(await f.evaluate(() => JSON.parse(localStorage.getItem('nb_hanbun')).chars), [3], 'nb_hanbun が かわった');
