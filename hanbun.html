@@ -754,14 +754,30 @@ function storyZones(sq, mi){
   document.getElementById('zsquare').classList.toggle('on', !!sq);
   document.getElementById('zmirror').classList.toggle('on', !!mi);
 }
+// カードに 常時 出す「今の課題」。章タイトルでは なく、子供が 今 やること そのもの
+function storyTaskText(){
+  switch(storyCh){
+    case 0: return storyStep === 1 ? '🎯 5 を はんぶんこ してね' : storyStep === 2 ? '🎯 2.5 どうしを かさねて 5に もどしてね' : '';
+    case 1: return '🟪 ' + SQ_T[storyTask][0] + ' を しかく してね（しかくゾーンへ）';
+    case 2: return storySeqDone ? '🔺 そろった！ なわで かこんで 15に してね' : '🔺 1,2,3,4,5 の じゅんに タップ → なわで かこんでね';
+    case 3: return storyTask < 3 ? '🟦 ' + RECT_T[storyTask][0] + ' を ミラーで ふやして 12に してね' : '🟦 12 を はんぶんこ して 6と6に してね';
+    case 4: return '🟢 ' + [6, 7, 8, 9][storyTask] + ' を はんぶんこ してね';
+    case 5: return storyTask < 3 ? '🪞 4 を ミラーで ふやして ' + [8, 12, 16][storyTask] + 'を 作ってね' : '🪞 2.5 を ミラーで 5に してね';
+    case 6: return ['🍓 7.5 を はんぶんこ してね', '🍓 7 と 0.5 を くっつけて 7.5に してね', '🍓 5 と 2.5 を くっつけて 7.5に してね', '🍓 1 を パラパラ → 0.1 を あつめて 1に もどしてね', '🍓 2.75 と 2.5、どっちが 大きい？ タップしてね'][storyTask];
+    case 7: return storyTask === 0 ? '🕵️ ヒントに あう かずを タップしてね' : '🕵️ 4 を しかくして 16を 作ってね';
+    case 8: return ['🎉 4 を しかく して 16に してね', '🎉 16 を はんぶんこ してね', '🎉 4 を ミラーで 4つに して 16に してね', '🎉 8 を ミラーで ふやして 16に してね'][storyTask];
+  }
+  return '';
+}
 function storyStage(vals){
   chars = vals.map((v, i, a) => mk(v, W*(i + 1)/(a.length + 1), now0()));
   bs = targetBs(); holdUntil = 0; storyOps = []; storyTap = null; storySeqDone = false; storyPrevKey = storyKey();
   storyStuckKey = null; document.getElementById('gskip').classList.remove('hint');
   storyReady = false; storyPending = null; const zt = document.getElementById('ztent'); zt.classList.add('on'); zt.classList.remove('ready');
+  const tt = storyTaskText(); if(tt) storyCard(tt, '');
 }
 function storyTapSet(values, hint, ok){ storyTap = { values, hint, ok }; }
-function storySeqSet(){ storySeqDone = false; storyTap = { seq: [100, 200, 300, 400, 500], idx: 0, ok: () => { storySeqDone = true; say('そろった！', 'なわで かこんで 15に してね', true); } }; }
+function storySeqSet(){ storySeqDone = false; storyTap = { seq: [100, 200, 300, 400, 500], idx: 0, ok: () => { storySeqDone = true; say('そろった！', 'なわで かこんで 15に してね', true); storyCard('🔺 そろった！ なわで かこんで 15に してね', ''); } }; }
 function storyTapHit(c){
   if(!storyTap || storyDone || storyBusy) return false;
   if(storyTap.seq){
@@ -811,7 +827,7 @@ function storyChStart(ch){
   } else if(ch === 1){
     storyStep = 10; storyStage([2]); storyZones(true, false);
     say('しかくクラブへ ようこそ', '2 を「しかく」へ ドラッグしてね', true);
-    storyCard('🟪 しかくクラブ：しかく で かずを 大きく しよう', '');
+    storyCard('🟪 2 を しかく してね（しかくゾーンへ）', '');
   } else if(ch === 2){
     storyStep = 20; storyStage([3, 1, 4, 5, 2]); storySeqSet();
     say('ステップスクワッド！', 'バラバラの 1〜5 を じゅんに タップしてね', true);
@@ -819,19 +835,19 @@ function storyChStart(ch){
   } else if(ch === 3){
     storyStep = 30; storyStage([6]); storyZones(false, true);
     say('ながしかくクラブ！', '6 を「ミラー」へ ドラッグすると ふえるよ', true);
-    storyCard('🟦 ながしかくクラブ：ミラーで ふやして 12 を つくろう', '');
+    storyCard('🟦 6 を ミラーで ふやして 12に してね', '');
   } else if(ch === 4){
     storyStep = 40; storyStage([6]);
     say('きすう・ぐうすうクラブ！', '6 を はんぶんこ して みよう', true);
-    storyCard('🟢 きすう・ぐうすうクラブ：はんぶんこ で たしかめよう', '');
+    storyCard('🟢 6 を はんぶんこ してね', '');
   } else if(ch === 5){
     storyStep = 50; storyStage([4]); storyZones(false, true);
     say('かがみの ダブルクラブ！', '4 を ミラーで ふやして 8 を 作ろう', true);
-    storyCard('🪞 ダブルクラブ：ミラーで ふやして 8・12・16', '');
+    storyCard('🪞 4 を ミラーで ふやして 8を 作ってね', '');
   } else if(ch === 6){
     storyStep = 60; storyStage([7.5]);
     say('フルーツサラダ！', '7.5 を はんぶんこ して みよう', true);
-    storyCard('🍓 フルーツサラダ：小数を わけたり あつめたり', '');
+    storyCard('🍓 7.5 を はんぶんこ してね', '');
   } else if(ch === 7){
     storyStep = 70; storyStage([14, 16, 18]); storyTapSet([1600], 'ヒント：ぐうすう・しかくに なれる・10と 20の あいだ', storyDetective1);
     say('かずたんてい！', 'ヒントで あててね', true);
@@ -839,7 +855,7 @@ function storyChStart(ch){
   } else if(ch === 8){
     storyStep = 80; storyStage([4]); storyZones(true, false);
     say('クラブピクニック！', '16 は どの クラブにも 入れるかな？', true);
-    storyCard('🎉 クラブピクニック：16 の とくいわざを ぜんぶ 見せよう。まず 4 を しかく', '');
+    storyCard('🎉 4 を しかく して 16に してね', '');
   }
 }
 function storyDetective1(){

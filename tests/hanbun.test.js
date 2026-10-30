@@ -340,10 +340,12 @@ module.exports = {
     t.eq((await f.evaluate(() => hanbun.story())).done, true, 'きすう・ぐうすう：スタンプが つかない');
     await f.evaluate(() => hanbun.storyNext());
     t.eq(await vals(f), [4], 'ダブル：4 から ではない');
+    t.ok((await f.evaluate(() => document.getElementById('goal').textContent)).includes('8を 作ってね'), 'カードに 今の課題（8）が 出ない');
     await f.evaluate(() => hanbun.mirror(0));
     await f.evaluate(() => hanbun.merge(0, 1));
     await f.evaluate(() => hanbun.deliver(0));
     await f.waitForFunction(() => hanbun.chars()[0] === 4 && !hanbun.story().busy, null, { timeout: 5000 });
+    t.ok((await f.evaluate(() => document.getElementById('goal').textContent)).includes('12を 作ってね'), 'カードの課題が 12に 切り替わらない');
     await f.evaluate(() => { hanbun.mirror(0); hanbun.mirror(0); });
     await f.evaluate(() => hanbun.mergeMany([0, 1, 2]));
     await f.evaluate(() => hanbun.deliver(0));
