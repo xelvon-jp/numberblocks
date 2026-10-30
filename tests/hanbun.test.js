@@ -372,4 +372,20 @@ module.exports = {
     t.eq((await f.evaluate(() => hanbun.story())).done, true, 'ピクニック：スタンプが つかない');
     t.eq(await f.evaluate(() => hanbun.story().prog), [0, 1, 2, 3, 4, 5, 6, 7, 8], 'スタンプ帳が そろわない');
   },
+
+  'ストーリー 詰まり検出：材料を けすと ヒントと「もどす」の 強調が 出て、もどすと なおる': async t => {
+    const p = await t.open({ storage: { nb_story: JSON.stringify({ done: [0] }) } });
+    await tapTab(p, 'story');
+    await p.waitForFunction(() => { const f = document.querySelector('iframe[src^="hanbun.html"]'); return f && f.contentWindow && f.contentWindow.hanbun && f.contentWindow.hanbun.story(); }, null, { timeout: 5000 });
+    const f = p.frames().find(x => x.url().includes('story=1'));
+    await f.waitForTimeout(300);
+    await f.evaluate(() => hanbun.storyNext());
+    t.eq(await vals(f), [2], 'しかく：2 から ではない');
+    await f.evaluate(() => hanbun.clear());
+    t.eq(await f.evaluate(() => document.getElementById('gskip').classList.contains('hint')), true, '詰まりで もどす が 強調されない');
+    t.ok((await f.evaluate(() => hanbun.say())).includes('もどす'), '詰まりの ヒントが 出ない');
+    await f.evaluate(() => document.getElementById('gskip').click());
+    t.eq(await vals(f), [2], 'もどすで 2 に もどらない');
+    t.eq(await f.evaluate(() => document.getElementById('gskip').classList.contains('hint')), false, 'もどしても 強調が 消えない');
+  },
 };

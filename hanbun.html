@@ -45,6 +45,7 @@
   .zone.on { display:block; }
   #zsquare { left:10px; }
   #zmirror { right:10px; border-color:#2a9ab8; color:#146a84; }
+  #goal #gskip.hint { background:#ffcf3f; box-shadow:0 0 0 3px #f0a020; }   /* つまった ときは「もどす」を 目立たせる */
 </style>
 </head>
 <body>
@@ -148,7 +149,7 @@ function checkGoal(){
 function save(){
   checkTen();
   if(GOAL){ checkGoal(); return; }
-  if(STORY){ storyCheck(); return; }
+  if(STORY){ storyCheck(); storyStuckCheck(); return; }
   try{ localStorage.setItem(KEY, JSON.stringify({ chars: chars.map(c => c.v) })); }catch(e){}
 }
 
@@ -751,6 +752,7 @@ function storyZones(sq, mi){
 function storyStage(vals){
   chars = vals.map((v, i, a) => mk(v, W*(i + 1)/(a.length + 1), now0()));
   bs = targetBs(); holdUntil = 0; storyOps = []; storyTap = null; storyPrevKey = storyKey();
+  storyStuckKey = null; document.getElementById('gskip').classList.remove('hint');
 }
 function storyTapSet(values, hint, ok){ storyTap = { values, hint, ok }; }
 function storyTapHit(c){
@@ -878,6 +880,32 @@ function storyStamp(){
   clearTimeout(storyAutoTimer);
   const chS = storyCh;
   storyAutoTimer = setTimeout(() => { if(storyDone && storyCh === chS && !storySelect) storyNext(); }, 3600);   // ボタンを 押さなくても 数秒で つぎへ
+}
+// ── 詰まり検出：今の並びから その課題の正解に たどり着けない ときだけ、ヒントを出して「もどす」を目立たせる ──
+// 到達可能性は課題ごと：材料の数が まだ いるか／合計が 保たれているか／材料の 倍数・約数の 範囲か、で 見る。並びが 変わるたびに 1回だけ 言う。
+let storyStuckKey = null;
+function storyIsStuck(k){
+  const has = v => chars.some(c => hund(c.v) === v), sum = storySum();
+  const chain = base => chars.every(c => { const v = hund(c.v); return v % base === 0 || base % v === 0; });   // 材料の はんぶん・倍 の範囲に いるか
+  switch(storyCh){
+    case 0: return storyStep === 1 ? !has(500) : storyStep === 2 ? (k !== '500' && chars.filter(c => hund(c.v) === 250).length < 2) : false;
+    case 1: return !has(SQ_T[storyTask][0]*100);
+    case 2: { const set = [100, 200, 300, 400, 500], vs = chars.map(c => hund(c.v)); return k !== '1500' && (new Set(vs).size !== vs.length || vs.some(v => !set.includes(v))); }
+    case 3: return storyTask < 3 ? (sum !== 1200 || !chain(RECT_T[storyTask][0]*100)) : (sum !== 1200 || !chain(1200));
+    case 4: return !has([6, 7, 8, 9][storyTask]*100);
+    case 5: { const T = [[800, 1], [1200, 2], [1600, 3], [500, 1]][storyTask]; return sum !== T[0] || !chain(storyTask === 3 ? 250 : 400); }
+    case 6: return storyTask === 0 ? !has(750) : storyTask === 3 ? sum !== 100 : false;
+    case 7: return storyTask === 1 ? !has(400) : false;
+    case 8: return storyTask === 0 ? !has(400) : storyTask === 1 ? !has(1600) : storyTask === 2 ? (sum !== 1600 || !chain(400)) : (sum !== 1600 || !chain(800));
+  }
+  return false;
+}
+function storyStuckCheck(){
+  if(storyDone || storyBusy || storySelect || storyAllDone || storyCh < 0) return;
+  const k = storyKey(), stuck = storyIsStuck(k);
+  document.getElementById('gskip').classList.toggle('hint', !!stuck);
+  if(stuck && storyStuckKey !== k){ storyStuckKey = k; say('あれ？ つまったかも', '「もどす」を おすと その 課題の はじめに もどるよ', true); }
+  if(!stuck) storyStuckKey = null;
 }
 const storyKey = () => chars.map(c => hund(c.v)).sort((a, b) => a - b).join(',');
 const storySum = () => chars.reduce((a, c) => a + hund(c.v), 0);
