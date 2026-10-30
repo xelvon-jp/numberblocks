@@ -256,8 +256,10 @@ module.exports = {
     t.eq((await f.evaluate(() => hanbun.story())).ch, 1, '第1章から はじまらない');
     t.eq(await vals(f), [2], 'しかく：2 から ではない');
     await f.evaluate(() => hanbun.square(0));
+    await f.waitForFunction(() => hanbun.chars()[0] === 3, null, { timeout: 5000 });
     t.eq(await vals(f), [3], 'しかく：2→4 の つぎは 3 の はず');
     await f.evaluate(() => hanbun.square(0));
+    await f.waitForFunction(() => hanbun.chars()[0] === 4, null, { timeout: 5000 });
     t.eq(await vals(f), [4], 'しかく：3→9 の つぎは 4 の はず');
     await f.evaluate(() => hanbun.square(0));
     t.eq((await f.evaluate(() => hanbun.story())).done, true, 'しかく：スタンプが つかない');
@@ -267,6 +269,7 @@ module.exports = {
     await f.evaluate(() => { for(const v of [1, 2, 3, 4, 5]) hanbun.add(v); });
     await f.evaluate(() => hanbun.mergeMany([0, 1, 2, 3, 4]));
     t.eq((await f.evaluate(() => hanbun.story())).task, 1, 'ステップ：15 が できない');
+    await f.waitForFunction(() => hanbun.chars().length === 0, null, { timeout: 5000 });
     await f.evaluate(() => { for(const v of [5, 4, 3, 2, 1]) hanbun.add(v); });
     await f.evaluate(() => hanbun.mergeMany([0, 1, 2, 3, 4]));
     t.eq((await f.evaluate(() => hanbun.story())).done, true, 'ステップ：スタンプが つかない');
@@ -275,13 +278,16 @@ module.exports = {
     await f.evaluate(() => hanbun.mirror(0));
     t.eq(await vals(f), [6, 6], 'ミラーで ふえない');
     await f.evaluate(() => hanbun.merge(0, 1));
+    await f.waitForFunction(() => hanbun.chars()[0] === 4, null, { timeout: 5000 });
     t.eq(await vals(f), [4], 'ながしかく：12 の つぎは 4 の はず');
     await f.evaluate(() => { hanbun.mirror(0); hanbun.mirror(0); });
     t.eq((await vals(f)).length, 3, '4 が 3ひきに ならない');
     await f.evaluate(() => hanbun.mergeMany([0, 1, 2]));
+    await f.waitForFunction(() => hanbun.chars()[0] === 3, null, { timeout: 5000 });
     t.eq(await vals(f), [3], 'ながしかく：つぎは 3 の はず');
     await f.evaluate(() => { hanbun.mirror(0); hanbun.mirror(0); hanbun.mirror(0); });
     await f.evaluate(() => hanbun.mergeMany([0, 1, 2, 3]));
+    await f.waitForFunction(() => hanbun.chars()[0] === 12, null, { timeout: 5000 });
     t.eq(await vals(f), [12], 'ながしかく：さいごは 12 の はず');
     await f.evaluate(() => hanbun.split(0));
     t.eq((await f.evaluate(() => hanbun.story())).done, true, 'ながしかく：スタンプが つかない');
