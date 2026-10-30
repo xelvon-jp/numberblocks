@@ -996,7 +996,7 @@ function storyCheck(){
   }
   if(storyCh === 5){
     const T = [[800, 1], [1200, 2], [1600, 3], [500, 1]][storyTask], k = storyKey();
-    if(k === String(T[0]) && storyOps.filter(o => o === 'mirror').length >= T[1]){
+    if(k === String(T[0]) && storyOps.filter(o => o === 'mirror').length >= 1){
       say(fmt(T[0]/100) + ' できた！', 'やった！', true);
       storyTask++;
       if(storyTask === 1 || storyTask === 2) storyPause(() => { storyStage([4]); say('つぎは ' + fmt([[800, 1], [1200, 2], [1600, 3], [500, 1]][storyTask][0]/100) + ' を 作ろう', 'ミラーで ふやしてね', true); });
@@ -1019,14 +1019,14 @@ function storyCheck(){
   if(storyCh === 8){
     const k = storyKey();
     if(storyTask === 1 && k === '800,800'){ say('ぐうすうクラブ ✓', '8 と 8 に われた！', true); storyTask = 2; storyPause(() => { storyStage([4]); storyZones(false, true); say('つぎ：ながしかくクラブ。4 を ミラーで 3かい ふやして 16', '', true); storyCard('🎉 つぎ：4 を 4つ にして 16（ながしかく）', ''); }); }
-    else if(storyTask === 2 && k === '1600' && storyOps.filter(o => o === 'mirror').length >= 3){ say('ながしかくクラブ ✓', '4 が 4つ で 16！', true); storyTask = 3; storyPause(() => { storyStage([8]); say('さいご：ダブルクラブ。8 を ミラーで ふやして 16', '', true); storyCard('🎉 さいご：8 を ミラーで ふやして 16（ダブル）', ''); }); }
+    else if(storyTask === 2 && k === '1600' && storyOps.filter(o => o === 'mirror').length >= 1){ say('ながしかくクラブ ✓', '4 が 4つ で 16！', true); storyTask = 3; storyPause(() => { storyStage([8]); say('さいご：ダブルクラブ。8 を ミラーで ふやして 16', '', true); storyCard('🎉 さいご：8 を ミラーで ふやして 16（ダブル）', ''); }); }
     else if(storyTask === 3 && k === '1600' && storyOps.filter(o => o === 'mirror').length >= 1) storyStamp();
     storyPrevKey = k; return;
   }
   if(storyCh === 3){
     const k = storyKey();
     if(storyTask < 3){
-      if(k === '1200' && storyOps.filter(o => o === 'mirror').length >= RECT_T[storyTask][1]){
+      if(k === '1200' && storyOps.filter(o => o === 'mirror').length >= 1){
         storyTask++;
         say('12 できた！', 'やった！', true);
         if(storyTask < 3) storyPause(() => { storyStage([RECT_T[storyTask][0]]); say('つぎは ' + RECT_T[storyTask][0] + ' を ミラーで ' + RECT_T[storyTask][1] + 'かい ふやして 12', '', true); });
