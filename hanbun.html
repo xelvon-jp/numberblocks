@@ -734,7 +734,7 @@ function applyMirror(c){
 // ── ストーリー の すすみかた ──
 // 章は 0 導入（とくいわざショー）→ 1 しかくクラブ → 2 ステップスクワッド → 3 ながしかくクラブ。カード（#goal を つかいまわす）に すすむ ボタン、say に せりふ。
 // スタンプ ずみの 章は nb_story に おぼえ、つぎは つづきの 章から。タスク中の「もどす」（#gskip）は その タスクの はじめに もどす。
-const SQ_T = [[2, 4], [3, 9], [4, 16]];                    // しかくクラブ：もと → さき
+const SQ_T = [[2, 4], [3, 9], [4, 16], [5, 25]];          // しかくクラブ：もと → さき（「つぎは 25？」は 問いかけで 終わらず、さいごの 課題として じっさいに 作る）
 const RECT_T = [[6, 1], [4, 2], [3, 3], [12, 0]];          // ながしかく：はじめの かず と ミラーの かいすう（さいごは はんぶんこ で 6＋6）
 function storyCard(t, btn){
   const g = document.getElementById('goal'); g.classList.add('on');
@@ -835,7 +835,7 @@ function storyStamp(){
   for(const c of chars){ c.hop = now0(); c.gold = now0(); }
   burst(W/2, H*0.4, 60, true);
   const n = storyProg.done.length;
-  say('できた！ スタンプ ' + n + 'こめ ゲット ⭐', storyCh === 1 ? 'しかく の れつ：1, 4, 9, 16 …つぎは 25？' : 'すごい！', true);
+  say('できた！ スタンプ ' + n + 'こめ ゲット ⭐', storyCh === 1 ? 'しかく の れつ：1, 4, 9, 16, 25！' : 'すごい！', true);
   storyCard('⭐ スタンプ ' + n + 'こめ！' + (storyCh === 3 ? ' ここまで ぜんぶ クリア 🎉 つづきは おたのしみ' : ''), storyCh < 3 ? 'つぎの クラブへ ▶' : 'おわる ▶');
 }
 const storyKey = () => chars.map(c => hund(c.v)).sort((a, b) => a - b).join(',');

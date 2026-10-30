@@ -264,6 +264,9 @@ module.exports = {
     await f.waitForFunction(() => hanbun.chars()[0] === 4, null, { timeout: 5000 });
     t.eq(await vals(f), [4], 'しかく：3→9 の つぎは 4 の はず');
     await f.evaluate(() => hanbun.square(0));
+    await f.waitForFunction(() => hanbun.chars()[0] === 5, null, { timeout: 5000 });
+    t.eq(await vals(f), [5], 'しかく：4→16 の つぎは 5 の はず');
+    await f.evaluate(() => hanbun.square(0));
     t.eq((await f.evaluate(() => hanbun.story())).done, true, 'しかく：スタンプが つかない');
     await f.evaluate(() => hanbun.storyNext());
     t.eq((await f.evaluate(() => hanbun.story())).ch, 2, '第2章へ すすまない');
