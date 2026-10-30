@@ -233,7 +233,8 @@ module.exports = {
     await p.waitForFunction(() => { const f = document.querySelector('iframe[src^="hanbun.html"]'); return f && f.contentWindow && f.contentWindow.hanbun && f.contentWindow.hanbun.story(); }, null, { timeout: 5000 });
     const f = p.frames().find(x => x.url().includes('story=1'));
     await f.waitForTimeout(300);
-    t.eq(await f.evaluate(() => hanbun.story()), { step: 0, done: false }, '導入が はじまらない');
+    const st0 = await f.evaluate(() => hanbun.story());
+    t.eq([st0.ch, st0.step, st0.done], [0, 0, false], '導入が はじまらない');
     t.eq(await vals(f), [5], 'ホストの 5 から ではない');
     t.ok((await f.evaluate(() => hanbun.say())).includes('クラブまつり'), 'あいさつの ことば');
     await f.evaluate(() => hanbun.storyNext());
@@ -244,5 +245,46 @@ module.exports = {
     t.eq((await f.evaluate(() => hanbun.story())).done, true, 'スタンプが つかない');
     t.ok((await f.evaluate(() => hanbun.say())).includes('スタンプ'), 'スタンプの ことば');
     t.eq(await f.evaluate(() => JSON.parse(localStorage.getItem('nb_hanbun')).chars), [3], 'nb_hanbun が かわった');
+  },
+
+  'ストーリー つづき：しかく・ステップ・ながしかく の 3章が スタンプまで すすむ（nb_story に おぼえる）': async t => {
+    const p = await t.open({ storage: { nb_story: JSON.stringify({ done: [0] }) } });
+    await tapTab(p, 'story');
+    await p.waitForFunction(() => { const f = document.querySelector('iframe[src^="hanbun.html"]'); return f && f.contentWindow && f.contentWindow.hanbun && f.contentWindow.hanbun.story(); }, null, { timeout: 5000 });
+    const f = p.frames().find(x => x.url().includes('story=1'));
+    await f.waitForTimeout(300);
+    t.eq((await f.evaluate(() => hanbun.story())).ch, 1, '第1章から はじまらない');
+    t.eq(await vals(f), [2], 'しかく：2 から ではない');
+    await f.evaluate(() => hanbun.square(0));
+    t.eq(await vals(f), [3], 'しかく：2→4 の つぎは 3 の はず');
+    await f.evaluate(() => hanbun.square(0));
+    t.eq(await vals(f), [4], 'しかく：3→9 の つぎは 4 の はず');
+    await f.evaluate(() => hanbun.square(0));
+    t.eq((await f.evaluate(() => hanbun.story())).done, true, 'しかく：スタンプが つかない');
+    await f.evaluate(() => hanbun.storyNext());
+    t.eq((await f.evaluate(() => hanbun.story())).ch, 2, '第2章へ すすまない');
+    t.eq(await vals(f), [], 'ステップ：からっぽ から ではない');
+    await f.evaluate(() => { for(const v of [1, 2, 3, 4, 5]) hanbun.add(v); });
+    await f.evaluate(() => hanbun.mergeMany([0, 1, 2, 3, 4]));
+    t.eq((await f.evaluate(() => hanbun.story())).task, 1, 'ステップ：15 が できない');
+    await f.evaluate(() => { for(const v of [5, 4, 3, 2, 1]) hanbun.add(v); });
+    await f.evaluate(() => hanbun.mergeMany([0, 1, 2, 3, 4]));
+    t.eq((await f.evaluate(() => hanbun.story())).done, true, 'ステップ：スタンプが つかない');
+    await f.evaluate(() => hanbun.storyNext());
+    t.eq(await vals(f), [6], 'ながしかく：6 から ではない');
+    await f.evaluate(() => hanbun.mirror(0));
+    t.eq(await vals(f), [6, 6], 'ミラーで ふえない');
+    await f.evaluate(() => hanbun.merge(0, 1));
+    t.eq(await vals(f), [4], 'ながしかく：12 の つぎは 4 の はず');
+    await f.evaluate(() => { hanbun.mirror(0); hanbun.mirror(0); });
+    t.eq((await vals(f)).length, 3, '4 が 3ひきに ならない');
+    await f.evaluate(() => hanbun.mergeMany([0, 1, 2]));
+    t.eq(await vals(f), [3], 'ながしかく：つぎは 3 の はず');
+    await f.evaluate(() => { hanbun.mirror(0); hanbun.mirror(0); hanbun.mirror(0); });
+    await f.evaluate(() => hanbun.mergeMany([0, 1, 2, 3]));
+    t.eq(await vals(f), [12], 'ながしかく：さいごは 12 の はず');
+    await f.evaluate(() => hanbun.split(0));
+    t.eq((await f.evaluate(() => hanbun.story())).done, true, 'ながしかく：スタンプが つかない');
+    t.eq(await f.evaluate(() => hanbun.story().prog), [0, 1, 2, 3], 'スタンプ帳が たまらない');
   },
 };
