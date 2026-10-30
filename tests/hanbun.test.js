@@ -253,6 +253,8 @@ module.exports = {
     await p.waitForFunction(() => { const f = document.querySelector('iframe[src^="hanbun.html"]'); return f && f.contentWindow && f.contentWindow.hanbun && f.contentWindow.hanbun.story(); }, null, { timeout: 5000 });
     const f = p.frames().find(x => x.url().includes('story=1'));
     await f.waitForTimeout(300);
+    t.eq((await f.evaluate(() => hanbun.story())).select, true, '入り口の えらぶ が でない');
+    await f.evaluate(() => hanbun.storyNext());
     t.eq((await f.evaluate(() => hanbun.story())).ch, 1, '第1章から はじまらない');
     t.eq(await vals(f), [2], 'しかく：2 から ではない');
     await f.evaluate(() => hanbun.square(0));
@@ -293,5 +295,18 @@ module.exports = {
     await f.evaluate(() => hanbun.split(0));
     t.eq((await f.evaluate(() => hanbun.story())).done, true, 'ながしかく：スタンプが つかない');
     t.eq(await f.evaluate(() => hanbun.story().prog), [0, 1, 2, 3], 'スタンプ帳が たまらない');
+  },
+
+  'ストーリー 入り口：「はじめから」で スタンプ帳が けえて 導入に もどる': async t => {
+    const p = await t.open({ storage: { nb_story: JSON.stringify({ done: [0, 1] }) } });
+    await tapTab(p, 'story');
+    await p.waitForFunction(() => { const f = document.querySelector('iframe[src^="hanbun.html"]'); return f && f.contentWindow && f.contentWindow.hanbun && f.contentWindow.hanbun.story(); }, null, { timeout: 5000 });
+    const f = p.frames().find(x => x.url().includes('story=1'));
+    await f.waitForTimeout(300);
+    t.eq((await f.evaluate(() => hanbun.story())).select, true, '入り口の えらぶ が でない');
+    await f.evaluate(() => document.getElementById('gskip').click());
+    const s2 = await f.evaluate(() => hanbun.story());
+    t.eq([s2.ch, s2.step, s2.prog.length], [0, 0, 0], 'はじめからに ならない');
+    t.eq(await f.evaluate(() => JSON.parse(localStorage.getItem('nb_story')).done), [], 'nb_story が けえていない');
   },
 };

@@ -124,6 +124,7 @@ const STORY = /[?&]story=1/.test(location.search);
 let storyStep = -1, storyDone = false, storyBase = null, storyBaseSum = 0;   // 章0（導入）の step：0 あいさつ／1 おてほん／2 あなたの ばん
 let storyCh = 0, storyTask = 0, storyOps = [], storyPrevKey = null, storyPrevOrder = [], storyAllDone = false;
 let storyBusy = false, storyTimer = 0;   // できた ときに 結果を 2.3びょう 見せてから つぎの だいへ（すぐ 消えると 何が できたか 見えない）
+let storySelect = false;   // 入り口で「つづき／はじめから」を えらぶ 画面か
 const SKEY = 'nb_story';   // すすみ（スタンプ ずみの 章）は この たんまつに おぼえる（nb_hanbun とは べつ）
 let storyProg = { done: [] };
 try{ const v = JSON.parse(localStorage.getItem(SKEY)); if(v && Array.isArray(v.done)) storyProg = { done: v.done.filter(n => [0, 1, 2, 3].includes(n)) }; }catch(e){}
@@ -748,21 +749,33 @@ function storyStage(vals){
   chars = vals.map((v, i, a) => mk(v, W*(i + 1)/(a.length + 1), now0()));
   bs = targetBs(); holdUntil = 0; storyOps = [];
 }
-function storySkip(on){ const sk = document.getElementById('gskip'); sk.style.display = on ? '' : 'none'; sk.textContent = 'もどす'; }
+function storySkip(on, label){ const sk = document.getElementById('gskip'); sk.style.display = on ? '' : 'none'; sk.textContent = label || 'もどす'; }
 function storyStart(){
   document.getElementById('gnext').addEventListener('click', storyNext);
-  document.getElementById('gskip').addEventListener('click', storyReset);
+  document.getElementById('gskip').addEventListener('click', storySkipBtn);
   storySkip(false);
   const next = [0, 1, 2, 3].find(i => !storyProg.done.includes(i));
-  if(next === undefined){
-    storyAllDone = true;
-    say('クラブまつり！', 'ぜんぶの クラブ スタンプ かんりょう 🎉', true);
-    storyCard('🎪 クラブまつり：ぜんぶ スタンプ かんりょう！', 'あそぶ ▶');
+  if(storyProg.done.length){   // スタンプが あれば 入り口で えらべる（つづき／はじめから）
+    storySelect = true;
+    storySkip(true, 'はじめから');
+    if(next === undefined){
+      storyAllDone = true;
+      say('クラブまつり！', 'ぜんぶ スタンプ かんりょう 🎉 または はじめから', true);
+      storyCard('🎪 クラブまつり：ぜんぶ スタンプ かんりょう！', 'あそぶ ▶');
+    } else {
+      say('クラブまつり！', 'スタンプ ' + storyProg.done.length + 'こ あるよ', true);
+      storyCard('🎪 クラブまつり：つづきから？ はじめから？', 'つづき ▶');
+    }
     return;
   }
   storyChStart(next);
 }
+function storySkipBtn(){
+  if(storySelect){ storyProg = { done: [] }; storySaveProg(); storyAllDone = false; storyChStart(0); return; }
+  storyReset();
+}
 function storyChStart(ch){
+  storySelect = false;
   storyCh = ch; storyDone = false; storyTask = 0; storyOps = []; storyZones(false, false); storySkip(ch > 0);
   if(ch === 0){
     storyStep = 0;
@@ -784,6 +797,7 @@ function storyChStart(ch){
 }
 function storyNext(){
   if(storyAllDone){ location.replace('hanbun.html?embed=1&v=' + Date.now()); return; }
+  if(storySelect){ storyChStart([0, 1, 2, 3].find(i => !storyProg.done.includes(i))); return; }
   if(storyDone){ if(storyCh < 3) storyChStart(storyCh + 1); else location.replace('hanbun.html?embed=1&v=' + Date.now()); return; }
   if(storyCh === 0 && storyStep === 0){
     storyStep = 1;
@@ -881,7 +895,7 @@ requestAnimationFrame(frame);
 window.hanbun = { chars: () => chars.map(c => c.v), add: v => addChar(v), split: i => split(chars[i]), merge: (i, j) => merge(chars[i], chars[j]),
   at: i => { const c = chars[i], r = rect(c); return { x: c.x, y: r.y + r.h/2, w: r.w, h: r.h }; }, bs: () => bs, say: () => sayBig.textContent + '｜' + saySub.textContent,
   water: i => chars[i].w, goalDone: () => goalDone, mergeMany: idx => mergeMany(idx.map(i => chars[i])), lastTalk: () => lastTalk, preview: () => pinch && pinch.pv ? [pinch.pv.a, pinch.pv.b].map(c => { const r = rect(c); return { v: c.v, x: c.x, y: r.y + r.h/2 }; }) : null, clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]),
-  story: () => STORY ? { ch: storyCh, step: storyStep, task: storyTask, done: storyDone, busy: storyBusy, prog: storyProg.done.slice() } : null, storyNext: () => storyNext(),
+  story: () => STORY ? { ch: storyCh, step: storyStep, task: storyTask, done: storyDone, busy: storyBusy, select: storySelect, prog: storyProg.done.slice() } : null, storyNext: () => storyNext(),
   square: i => applySquare(chars[i]), mirror: i => applyMirror(chars[i]) };
 </script>
 </body>
