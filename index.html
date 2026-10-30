@@ -1053,7 +1053,7 @@ function startHissanTask(){
 // タブの 下に iframe で かさねる（あそぶ じかんは そのまま かぞえる）。1まいずつ つかいまわして、まえの ようすを のこす。
 // せってい・だれが あそぶ？・きろく・ステージを 出している あいだは かくす（キャンバスに かくので）。
 // けんばんは タブに ない（せっていの「けんばん」から）。タブを おすと もどる。
-const FRAME_PAGES = { waru: 'waru.html', hanbun: 'hanbun.html', kenban: 'kenban.html' };
+const FRAME_PAGES = { waru: 'waru.html', hanbun: 'hanbun.html', kenban: 'kenban.html', story: 'hanbun.html?story=1' };   // ストーリー（ためし）は はんぶん の 導入モード
 function isFrameMode(m){ return !!FRAME_PAGES[m || mode]; }
 const modeFrames = {};
 function waruSync(){
@@ -1063,7 +1063,7 @@ function waruSync(){
     if(!on && !f) continue;
     if(!f || !f.isConnected){
       f = document.createElement('iframe');
-      f.src = FRAME_PAGES[m] + '?embed=1&v=' + Date.now();   // キャッシュの 古い版を ひらかない
+      f.src = FRAME_PAGES[m] + (FRAME_PAGES[m].includes('?') ? '&' : '?') + 'embed=1&v=' + Date.now();   // キャッシュの 古い版を ひらかない（story は もとから ? が ある）
       f.allow = 'microphone; accelerometer; gyroscope';      // こえ・おとの たかさ／はんぶんの みず（スマホの かたむき）
       f.style.cssText = 'position:fixed;left:0;right:0;bottom:0;width:100%;border:0;z-index:50;background:#dff3f6';
       document.body.appendChild(f);
@@ -1435,7 +1435,7 @@ let lastOp = '+';   // けいさんタブに戻ったときに選び直す演算
 const TAB_DEFS = [
   {label:'おだい', val:'task'},
 ];
-const LAB_MODES = ['calc', 'hanbun', 'factor', 'quiz', 'clock', 'waru', 'kenban'];   // ためし から ひらく がめん
+const LAB_MODES = ['calc', 'hanbun', 'factor', 'quiz', 'clock', 'waru', 'kenban', 'story'];   // ためし から ひらく がめん
 
 let tabBtns = [], opBarBtns = [];
 
