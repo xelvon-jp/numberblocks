@@ -33,7 +33,7 @@ module.exports = {
                  html: !!(document.getElementById('zukan-btn') || document.getElementById('fs-btn')) };
       });
       t.eq(r.tabH, 44, `${w}x${h} で上部バーの高さが 44 ではない`);
-      t.eq(r.vals, ['task','settings'], `${w}x${h} でタブの並びがちがう`);
+      t.eq(r.vals, ['task','hanbun','settings'], `${w}x${h} でタブの並びがちがう`);
       t.ok(!r.overlap, `${w}x${h} でタブどうしが重なる`);
       t.ok(!r.out, `${w}x${h} でタブが画面からはみ出す`);
       t.ok(!r.html, 'HTML の ずかん・全画面ボタンが残っている');
@@ -246,7 +246,7 @@ module.exports = {
 
   'タブ は おだい だけ。けいさん・はんぶん・ずけい・因数・ドリル・とけい・わけっこ・けんばん は ためし から（?mode=・?katachi=1）。せってい に ひっさん・けんばん は ない': async t => {
     const p = await t.open({ who:'papa' });
-    const r = await p.evaluate(() => { drawTabsAndUI(ctx); const tabs = tabBtns.map(b => b.val).filter(v => v !== 'settings');
+    const r = await p.evaluate(() => { drawTabsAndUI(ctx); const tabs = tabBtns.map(b => b.val).filter(v => v !== 'settings' && v !== 'hanbun');
       setOpen = true; drawSettings(ctx); const sb = setBtns.map(b => b.val); setOpen = false;
       return { tabs, sb: ['hissan', 'kenban', 'lab'].map(v => sb.includes(v)) }; });
     t.eq(r, { tabs: ['task'], sb: [false, false, true] }, 'タブ・せってい が ちがう');

@@ -36,7 +36,6 @@
   #nums button:active { transform:translateY(2px); box-shadow:none; }
   #nums #clear { --f:#dfe6ef; --b:#b8c3d2; font-size:clamp(11px, 3.4vw, 14px); font-weight:800; grid-column:span 2;
                  background:linear-gradient(90deg, #f7b2a8 var(--hp, 0%), var(--f) var(--hp, 0%)); }   /* ながおし の ゲージ */
-  #voice { position:absolute; right:8px; top:8px; z-index:2; border:0; border-radius:12px; width:40px; height:36px; font-size:20px; background:rgba(255,255,255,0.8); }
   #home { flex:none; width:clamp(44px, 14vw, 56px); height:85px; border:0; border-radius:14px; background:#fff; box-shadow:0 1px 3px rgba(40,60,90,0.15);
           display:flex; align-items:center; justify-content:center; transition:transform 0.12s; }
   #home.on { background:#fff4c8; box-shadow:0 0 0 3px #e7b400; }        /* つれて いける ときは ひかる */
@@ -47,7 +46,7 @@
 <body>
 <div id="goal"><div class="t"></div><button id="gnext">つぎ ▶</button><button id="gskip">もどる</button></div>
 <div id="say"><div class="big"></div><div class="sub"></div></div>
-<div id="stage"><canvas id="c"></canvas><button id="voice" aria-label="こえ">🔊</button></div>
+<div id="stage"><canvas id="c"></canvas></div>
 <div id="bar">
   <button id="home" aria-label="おうち"><svg viewBox="0 0 40 40" width="32" height="32"><path d="M20 5 L37 19 L32 19 L32 35 L8 35 L8 19 L3 19 Z" fill="#e8a04a" stroke="#8a5a20" stroke-width="2.4" stroke-linejoin="round"/><rect x="16" y="23" width="8" height="12" rx="1.5" fill="#8a5a20"/><path d="M20 5 L37 19 L3 19 Z" fill="#d0503c" stroke="#8a3020" stroke-width="2.4" stroke-linejoin="round"/></svg></button>
   <div id="nums"><button id="clear">かたづける</button></div>
@@ -323,6 +322,18 @@ function checkTen(){
   for(const c of chars) if(![1, 10, 100, 1000].includes(hund(c.v))) c.ten = false;
 }
 
+// ── はんぶん に できなかった 2ひき が もと の ばしょ へ すうっと よって くっつく（BACK_MS。おわったら もと の キャラ が ぷるん）──
+const BACK_MS = 420;
+let backs = [];
+function drawBacks(now){
+  backs = backs.filter(B => {
+    const k = Math.min(1, (now - B.t0)/BACK_MS), e = 1 - Math.pow(1 - k, 3), tx = B.c.x, ty = B.c.y;
+    B.a.x = B.ax + (tx - B.ax)*e; B.a.y = B.ay + (ty - B.ay)*e; B.b.x = B.bx + (tx - B.bx)*e; B.b.y = B.by + (ty - B.by)*e;
+    if(k < 1){ drawGooLive(B.a, B.b); drawChar(B.a, now); drawChar(B.b, now); return true; }
+    B.c.hidden = false; B.c.jelly = now; B.c.shake = now; burst(tx, ty - dims(B.c.v).rows*bs/2, 10);
+    return false;
+  });
+}
 // ── ねばねば ──
 // わかれた 2ひきの あいだに のびる いと（まんなかが ほそく なって、ぷつっと きれる）
 const GOO_MS = 520;
@@ -361,7 +372,8 @@ function stretchOf(c, now){
 // ── ことば ──
 function say(big, sub, ok){ sayBig.textContent = big; sayBig.classList.toggle('ok', !!ok); saySub.textContent = sub || ''; }
 // ── よみあげ（2026-10-30。ひなた は じ を まだ よめない ので こえ で「れいてん にご」「0.1 が 10こ で 1」）──
-// スマホ に はいって いる よみあげ（speechSynthesis・にほんご）。🔊 で オン／オフ（この たんまつ に おぼえる。nb_hanbun_voice）。
+// スマホ に はいって いる よみあげ（speechSynthesis・にほんご）。ひなた が あまり きに いらなかった ので いまは オフ（ボタン も なし。パパ 2026-10-30）。
+// つかう ときは voiceOn を true に する。
 // しょうすう は じぶん で かな に する（0.25 → れい てん に ご。「にじゅうご」と よまれない ように）
 const DIG = ['れい', 'いち', 'に', 'さん', 'よん', 'ご', 'ろく', 'なな', 'はち', 'きゅう'];
 function yN(v){
@@ -370,10 +382,7 @@ function yN(v){
   if(!f) return ip;
   return ip + ' てん ' + (f % 10 ? DIG[Math.floor(f/10)] + ' ' + DIG[f % 10] : DIG[f/10]);
 }
-let voiceOn = (() => { try{ return localStorage.getItem('nb_hanbun_voice') !== 'off'; }catch(e){ return true; } })();
-const voiceEl = document.getElementById('voice');
-function updVoice(){ voiceEl.textContent = voiceOn ? '🔊' : '🔇'; }
-voiceEl.addEventListener('click', () => { voiceOn = !voiceOn; try{ localStorage.setItem('nb_hanbun_voice', voiceOn ? 'on' : 'off'); }catch(e){} updVoice(); if(voiceOn) talk('こえ を だすよ'); else try{ speechSynthesis.cancel(); }catch(e){} });
+const voiceOn = false;
 let jaVoice = null;
 function pickVoice(){ try{ jaVoice = speechSynthesis.getVoices().find(v => /^ja/i.test(v.lang)) || null; }catch(e){} }
 try{ pickVoice(); speechSynthesis.addEventListener('voiceschanged', pickVoice); }catch(e){}
@@ -486,6 +495,7 @@ function frame(){
   // ひろげて いる とちゅう：わかれた 2ひきが ゆびさきに くっついて くる（はなすと わかれる）
   stickPreview();
   if(pinch && pinch.pv){ const { a, b } = pinch.pv; drawGooLive(a, b); drawChar(a, now); drawChar(b, now); }
+  drawBacks(now);
   homeEl.classList.toggle('on', chars.some(c => c.drag));
   homeEl.classList.toggle('over', chars.some(c => c.drag && overHome(c)));
   confetti = confetti.filter(p => p.life > 0);
@@ -569,8 +579,8 @@ function up(e){
   if(lasso && lasso.id === e.pointerId){ if(e.type === 'pointercancel') lasso = null; else lassoEnd(); return; }
   if(pinch && (e.pointerId === pinch.a || e.pointerId === pinch.b)){
     const pc = pinch; pinch = null;
-    if(pc.pv && pc.pv.bad){                                                          // ちいさすぎる：ぷるぷる して もとに もどる
-      pc.c.hidden = false; pc.c.jelly = now0(); pc.c.shake = now0();
+    if(pc.pv && pc.pv.bad){                                                          // ちいさすぎる：2ひき が すうっと よって もと に くっつく（backs）
+      backs.push({ c: pc.c, a: pc.pv.a, b: pc.pv.b, ax: pc.pv.a.x, ay: pc.pv.a.y, bx: pc.pv.b.x, by: pc.pv.b.y, t0: now0() });
       say(fmt(pc.c.v) + ' は はんぶんこ できないよ', 'はんぶんに すると 0.01 より こまかく なっちゃう');
       talk(yN(pc.c.v) + ' は はんぶんこ できないよ'); return;
     }
@@ -680,7 +690,7 @@ if(GOAL){
   document.getElementById('gskip').addEventListener('click', () => tellGame({ type:'skip' }));
 }
 bs = targetBs();
-sayIdle(); updVoice(); checkTen();
+sayIdle(); checkTen();
 Mizu.autoStart();       // センサーは はじめから オン（iPhone は さいしょに さわった とき に ゆるしを きく）
 requestAnimationFrame(frame);
 

@@ -2015,7 +2015,7 @@ function drawMirror(ctx, t){
 // モードタブ（けいさん 因数 ドリル とけい）と、右はしの歯車（せってい）
 function drawModeTabs(ctx){
   const pad = 3;
-  const tabW = (sw - pad*2 - GEAR_W) / TAB_DEFS.length;
+  const tabW = (sw - pad*2 - GEAR_W*2) / TAB_DEFS.length;     // みぎ に「½（はんぶん）」と 歯車
   tabBtns = [];
   let tx = pad;
   for(let i=0;i<TAB_DEFS.length;i++){
@@ -2050,6 +2050,23 @@ function drawModeTabs(ctx){
     tabBtns.push({x:tx+2,y:ty+2,w:tabW-4,h:TAB_ROW_H-4,val:td.val});
     tx += tabW;
   }
+  // ½：ながおし で ためし の「はんぶん」へ（ひなた の おきにいり。ごタップ よけ に ながおし。2026-10-30）
+  {
+    const hx = tx+2, hy = TOP_ROW_H+2, hw = GEAR_W-4, hh = TAB_ROW_H-4, on = !taskOn && mode === 'hanbun';
+    ctx.save();
+    ctx.fillStyle = on ? 'rgba(100,160,255,0.95)' : 'rgba(42,157,176,0.85)';
+    ctx.beginPath(); ctx.roundRect(hx,hy,hw,hh,8); ctx.fill();
+    if(hanHold){
+      const hp = Math.min(1, (Date.now() - hanHold.t0)/QHOLD_MS);
+      ctx.fillStyle = 'rgba(255,205,70,0.75)'; ctx.fillRect(hx, hy + hh*(1 - hp), hw, hh*hp);
+      if(hp >= 1){ hanHold = null; if(taskOn) setTaskOn(false); whoOpen = false; setOpen = false; setMode('hanbun'); }
+    }
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 19px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('½', hx+hw/2, hy+hh/2+1);
+    ctx.restore();
+    tabBtns.push({x:hx,y:hy,w:hw,h:hh,val:'hanbun'});
+    tx += GEAR_W;
+  }
   // 歯車。めったに使わないので、タブより控えめな色にする
   const gx = tx+2, gy = TOP_ROW_H+2, gw = GEAR_W-4, gh = TAB_ROW_H-4;
   ctx.save();
@@ -2066,6 +2083,7 @@ function drawModeTabs(ctx){
 const QHOLD_MS = 800;
 let qBtns = [], qHold = null;     // qHold：{ i, t0, pid }
 let tabHold = null;               // ためし の あそび（taskOn で ない とき）の「おだい」の ながおし { pid, t0, x, y }
+let hanHold = null;               // うえ の ½（はんぶん へ）の ながおし { pid, t0, x, y }
 const Q_STYLE = { kake: ['#e0802a', '×'], clock: ['#2f9a8a', null], hissan: ['#7a5ad0', '✏️'], play: [PLAY_COLOR, '🎯'], playh: ['#3f9fc8', '½'], zukei: ['#c0558a', null] };
 function drawQueueIcons(ctx, x, y, w, h){
   ensureQueue(); qBtns = [];
@@ -5148,7 +5166,8 @@ function handleStart(x,y,pid){
     if(katachiOn) katachiStop();                     // かたち（ためし）は タブ で おわる
     if(tb.val==='settings'){ setOpen = true; stageOpen = false; }
     // おだいに入るときは、かならず「だれが あそぶ？」を聞く（setTaskOn）
-    else if(tb.val==='task'){ if(!taskOn) tabHold = { pid, t0: Date.now(), x, y }; }   // ためし の あそび から は ながおし で おだい へ（ごタップ よけ）
+    else if(tb.val==='task'){ if(!taskOn) tabHold = { pid, t0: Date.now(), x, y }; }
+    else if(tb.val==='hanbun'){ if(taskOn || mode !== 'hanbun') hanHold = { pid, t0: Date.now(), x, y }; }   // ながおし で はんぶん へ   // ためし の あそび から は ながおし で おだい へ（ごタップ よけ）
     else { if(taskOn) setTaskOn(false); setMode(tb.val); }
     return;
   }
@@ -5323,6 +5342,7 @@ function handleMove(x,y,pid){
     return;
   }
   if(tabHold && tabHold.pid===pid && Math.hypot(x-tabHold.x, y-tabHold.y) > 24) tabHold = null;
+  if(hanHold && hanHold.pid===pid && Math.hypot(x-hanHold.x, y-hanHold.y) > 24) hanHold = null;
   if(qHold && qHold.pid===pid){
     if(Math.hypot(x-qHold.x, y-qHold.y) > 24) qHold = null;
     return;
@@ -5347,6 +5367,7 @@ function handleMove(x,y,pid){
 function handleEnd(x,y,pid){
   if(qHold && qHold.pid===pid){ qHold = null; return; }                // とちゅう で はなした ＝ やめ
   if(tabHold && tabHold.pid===pid){ tabHold = null; return; }
+  if(hanHold && hanHold.pid===pid){ hanHold = null; return; }
   if(paradeHold && paradeHold.pid===pid){ paradeHold = null; return; }  // 途中で離した＝中止
   if(stageHold && stageHold.pid===pid){ stageHold = null; return; }   // 途中で離した＝中止
   if(mode==='clock'){ if(drum && drum.drag) drumEnd(x, y); clockDrag=null; return; }

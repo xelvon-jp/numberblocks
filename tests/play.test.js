@@ -63,7 +63,12 @@ module.exports = {
   'タブは おだい だけ。ひらくと おだい（だれが あそぶ？）。ためし から ?mode=calc・?mode=hanbun・?katachi=1 で ひらける': async t => {
     const p = await t.open({ keepPicker:true });
     const r = await p.evaluate(() => ({ tabs: tabBtns.map(b => b.val), taskOn, whoOpen }));
-    t.eq(r, { tabs:['task', 'settings'], taskOn:true, whoOpen:true }, 'ひらいた ときが おだい で ない');
+    t.eq(r, { tabs:['task', 'hanbun', 'settings'], taskOn:true, whoOpen:true }, 'ひらいた ときが おだい で ない');
+    // うえ の ½ を ながおし すると はんぶん へ（ちょん では いかない）
+    const h = await p.evaluate(() => { whoOpen = false; drawTabsAndUI(ctx); const b = tabBtns.find(x => x.val === 'hanbun');
+      handleStart(b.x + b.w/2, b.y + b.h/2, 'h'); handleEnd(b.x + b.w/2, b.y + b.h/2, 'h'); const tap = [taskOn, mode];
+      handleStart(b.x + b.w/2, b.y + b.h/2, 'h'); hanHold.t0 -= 1000; drawTabsAndUI(ctx); return [tap, [taskOn, mode]]; });
+    t.eq(h, [[true, h[0][1]], [false, 'hanbun']], '½ の ながおし で はんぶん に はいらない');
     for(const [q, want] of [['mode=calc', '+'], ['mode=hanbun', 'hanbun'], ['katachi=1', 'katachi']]){
       await p.goto(new URL('index.html?' + q, p.url()).href); await p.waitForFunction(() => typeof drawFrame === 'function');
       const s = await p.evaluate(() => ({ taskOn, mode, katachi: katachiOn }));

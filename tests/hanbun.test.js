@@ -1,8 +1,8 @@
 // はんぶん（hanbun.html）：ゆび 2ほんで ひろげると はんぶんこ（5 → 2.5 と 2.5）、かさねると くっつく。
 // ゲームの「はんぶん」タブで タブの 下に iframe で かさなる。
 
-// タブ に ない がめん（わけっこ・因数 など）は ためし から ひらく（index.html?mode=○○ と おなじ setMode）
-const tapTab = (p, val) => p.evaluate(v => { const b = tabBtns.find(x => x.val === v); if(!b){ setMode(v); return; } handleStart(b.x + b.w/2, b.y + b.h/2, 'm'); handleEnd(b.x + b.w/2, b.y + b.h/2, 'm'); }, val);
+// タブ に ない がめん（わけっこ・因数 など）は ためし から ひらく（index.html?mode=○○ と おなじ setMode）。はんぶん（うえ の ½）は ながおし なので じか に
+const tapTab = (p, val) => p.evaluate(v => { const b = tabBtns.find(x => x.val === v); if(!b || v === 'hanbun'){ if(taskOn) setTaskOn(false); setMode(v); return; } handleStart(b.x + b.w/2, b.y + b.h/2, 'm'); handleEnd(b.x + b.w/2, b.y + b.h/2, 'm'); }, val);
 async function openHanbun(t, chars){
   const p = await t.open(chars ? { storage: { nb_hanbun: JSON.stringify({ n: 5, chars }) } } : undefined);
   await tapTab(p, 'hanbun');
