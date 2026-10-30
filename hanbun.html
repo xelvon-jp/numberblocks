@@ -46,12 +46,15 @@
   #zsquare { left:10px; }
   #zmirror { right:10px; border-color:#2a9ab8; color:#146a84; }
   #goal #gskip.hint { background:#ffcf3f; box-shadow:0 0 0 3px #f0a020; }   /* つまった ときは「もどす」を 目立たせる */
+  #ztent { left:50%; transform:translateX(-50%); border-color:#e07b2a; color:#a34d00; font-size:22px; }
+  #ztent.ready { background:#ffe9a8; animation:tpulse .6s ease-in-out infinite alternate; }
+  @keyframes tpulse { from { transform:translateX(-50%) scale(1); } to { transform:translateX(-50%) scale(1.16); } }
 </style>
 </head>
 <body>
 <div id="goal"><div class="t"></div><button id="gnext">つぎ ▶</button><button id="gskip">もどる</button></div>
 <div id="say"><div class="big"></div><div class="sub"></div></div>
-<div id="stage"><canvas id="c"></canvas><div id="zsquare" class="zone">しかく<sup>2</sup></div><div id="zmirror" class="zone">🪞 ミラー</div></div>
+<div id="stage"><canvas id="c"></canvas><div id="zsquare" class="zone">しかく<sup>2</sup></div><div id="zmirror" class="zone">🪞 ミラー</div><div id="ztent" class="zone">🎪</div></div>
 <div id="bar">
   <button id="home" aria-label="おうち"><svg viewBox="0 0 40 40" width="32" height="32"><path d="M20 5 L37 19 L32 19 L32 35 L8 35 L8 19 L3 19 Z" fill="#e8a04a" stroke="#8a5a20" stroke-width="2.4" stroke-linejoin="round"/><rect x="16" y="23" width="8" height="12" rx="1.5" fill="#8a5a20"/><path d="M20 5 L37 19 L3 19 Z" fill="#d0503c" stroke="#8a3020" stroke-width="2.4" stroke-linejoin="round"/></svg></button>
   <div id="nums"><button id="clear">かたづける</button></div>
@@ -126,7 +129,8 @@ let storyStep = -1, storyDone = false, storyBase = null, storyBaseSum = 0;   // 
 let storyCh = 0, storyTask = 0, storyOps = [], storyPrevKey = null, storyPrevOrder = [], storyAllDone = false;
 let storyBusy = false, storyTimer = 0;   // できた ときに 結果を 2.3びょう 見せてから つぎの だいへ（すぐ 消えると 何が できたか 見えない）
 let storySelect = false;   // 入り口で「つづき／はじめから」を えらぶ 画面か
-let storyTap = null;         // タップで こたえる 課題（{ values:[hund], hint, ok }）
+let storyTap = null;         // タップで こたえる 課題（{ values:[hund], hint, ok }／{ seq:[hund…], idx, ok } は 順番タップ）
+let storySeqDone = false;    // 第2章：1,2,3,4,5 の 順番タップが そろったか
 let storyAutoTimer = 0;      // スタンプ後、数秒で 自動で つぎへ
 const SKEY = 'nb_story';   // すすみ（スタンプ ずみの 章）は この たんまつに おぼえる（nb_hanbun とは べつ）
 let storyProg = { done: [] };
@@ -618,6 +622,7 @@ function up(e){
   if(e.type === 'pointercancel') return;
   if(STORY && overZone(document.getElementById('zsquare'), c, q)){ applySquare(c); return; }
   if(STORY && overZone(document.getElementById('zmirror'), c, q)){ applyMirror(c); return; }
+  if(STORY && storyReady && overZone(document.getElementById('ztent'), c, q)){ storyDeliver(c); return; }
   if(overHome(c)){ goHome(c); return; }
   // うごかさずに ポンと おした：2かい つづけて おすと（ダブルタップ）0.1 に パラパラ
   if(Math.hypot(q.x - q.sx, q.y - q.sy) < 12 && now0() - q.t < 400){
@@ -751,12 +756,23 @@ function storyZones(sq, mi){
 }
 function storyStage(vals){
   chars = vals.map((v, i, a) => mk(v, W*(i + 1)/(a.length + 1), now0()));
-  bs = targetBs(); holdUntil = 0; storyOps = []; storyTap = null; storyPrevKey = storyKey();
+  bs = targetBs(); holdUntil = 0; storyOps = []; storyTap = null; storySeqDone = false; storyPrevKey = storyKey();
   storyStuckKey = null; document.getElementById('gskip').classList.remove('hint');
+  storyReady = false; storyPending = null; const zt = document.getElementById('ztent'); zt.classList.add('on'); zt.classList.remove('ready');
 }
 function storyTapSet(values, hint, ok){ storyTap = { values, hint, ok }; }
+function storySeqSet(){ storySeqDone = false; storyTap = { seq: [100, 200, 300, 400, 500], idx: 0, ok: () => { storySeqDone = true; say('そろった！', 'なわで かこんで 15に してね', true); } }; }
 function storyTapHit(c){
   if(!storyTap || storyDone || storyBusy) return false;
+  if(storyTap.seq){
+    const want = storyTap.seq[storyTap.idx];
+    if(hund(c.v) === want){ c.hop = now0(); storyTap.idx++;
+      if(storyTap.idx >= storyTap.seq.length){ const ok = storyTap.ok; storyTap = null; ok(); }
+      else say(fmt(want/100) + '！', 'つぎは ' + fmt(storyTap.seq[storyTap.idx]/100), true);
+      return true; }
+    if(storyTap.seq.slice(0, storyTap.idx).includes(hund(c.v))) return true;
+    c.shake = now0(); say('つぎは ' + fmt(want/100) + ' だよ', '', true); return true;
+  }
   if(storyTap.values.includes(hund(c.v))){ const ok = storyTap.ok; storyTap = null; ok(); return true; }
   c.shake = now0(); say('ちがうよ', storyTap.hint || 'よく みてね', true); return true;
 }
@@ -797,9 +813,9 @@ function storyChStart(ch){
     say('しかくクラブへ ようこそ', '2 を「しかく」へ ドラッグしてね', true);
     storyCard('🟪 しかくクラブ：しかく で かずを 大きく しよう', '');
   } else if(ch === 2){
-    storyStep = 20; storyStage([]);
-    say('ステップスクワッド！', '1・2・3・4・5 を だして ならべてね', true);
-    storyCard('🔺 ステップスクワッド：1,2,3,4,5 を ならべて、なわで かこんでね', '');
+    storyStep = 20; storyStage([3, 1, 4, 5, 2]); storySeqSet();
+    say('ステップスクワッド！', 'バラバラの 1〜5 を じゅんに タップしてね', true);
+    storyCard('🔺 ステップスクワッド：1,2,3,4,5 の じゅんに タップ → なわで かこんでね', '');
   } else if(ch === 3){
     storyStep = 30; storyStage([6]); storyZones(false, true);
     say('ながしかくクラブ！', '6 を「ミラー」へ ドラッグすると ふえるよ', true);
@@ -841,16 +857,33 @@ function storyNext(){
     storyCard('🎯 5 を はんぶんこ して みせてね（ゆび 2ほんで ひろげる）', '');
   }
 }
-function storyPause(fn){ storyBusy = true; clearTimeout(storyTimer); storyTimer = setTimeout(() => { storyBusy = false; fn(); }, 2300); }
+let storyReady = false, storyPending = null;
+// 課題が できても すぐには すすめない：🎪 テントが 光るので、キャラを 1体 テントへ つれていくと すすむ（クリアの 実感を 子供の 手に）
+function storyComplete(fn){
+  if(storyReady || storyDone) return;
+  storyReady = true; storyPending = fn;
+  const t = document.getElementById('ztent'); t.classList.add('on'); t.classList.add('ready');
+  saySub.textContent = '🎪 テントに つれていってね';
+}
+function storyDeliver(c){
+  if(!storyReady || !c) return;
+  storyReady = false; const fn = storyPending; storyPending = null;
+  document.getElementById('ztent').classList.remove('ready');
+  chars.splice(chars.indexOf(c), 1); burst(W/2, 52, 26, true);
+  storyBusy = true; save();
+  if(fn) fn();
+  if(storyDone) storyBusy = false;
+}
+function storyPause(fn){ storyComplete(() => { storyBusy = true; clearTimeout(storyTimer); storyTimer = setTimeout(() => { storyBusy = false; fn(); }, 1200); }); }
 function storyReset(){
   if(storyBusy){ clearTimeout(storyTimer); storyBusy = false; }
   if(storyDone || storyCh === 0) return;
   if(storyCh === 1){ storyStage([SQ_T[storyTask][0]]); say('もどしたよ', SQ_T[storyTask][0] + ' を しかく してね', true); }
-  else if(storyCh === 2){ storyStage([]); say('もどしたよ', storyTask === 0 ? '1,2,3,4,5 の じゅんに ならべてね' : '5,4,3,2,1 の じゅんに ならべてね', true); }
+  else if(storyCh === 2){ storyStage([3, 1, 4, 5, 2]); storySeqSet(); say('もどしたよ', 'バラバラの 1〜5 を じゅんに タップしてね', true); }
   else if(storyCh === 3){ storyStage([RECT_T[storyTask][0]]); storyZones(false, storyTask < 3); say('もどしたよ', storyTask < 3 ? 'ミラーで ふやして 12 を つくろう' : '12 を はんぶんこ してね', true); }
   else if(storyCh === 4){ storyStage([[6, 7, 8, 9][storyTask]]); say('もどしたよ', 'はんぶんこ してね', true); }
   else if(storyCh === 5){ storyStage([storyTask === 3 ? 2.5 : 4]); storyZones(false, true); say('もどしたよ', 'ミラーで ふやしてね', true); }
-  else if(storyCh === 6){ if(storyTask <= 2) storyStage([7.5]); else if(storyTask === 3) storyStage([1]); else { storyStage([2.75, 2.5]); storyTapSet([275], '水の 高さが 高いほうが 大きいよ', () => storyStamp()); } say('もどしたよ', '', true); }
+  else if(storyCh === 6){ if(storyTask === 0) storyStage([7.5]); else if(storyTask === 1) storyStage([7, 0.5]); else if(storyTask === 2) storyStage([5, 2.5]); else if(storyTask === 3) storyStage([1]); else { storyStage([2.75, 2.5]); storyTapSet([275], '水の 高さが 高いほうが 大きいよ', () => storyStamp()); } say('もどしたよ', storyTask === 0 ? '7.5 を はんぶんこ してね' : storyTask === 1 ? '7 と 0.5 を くっつけてね' : storyTask === 2 ? '5 と 2.5 を くっつけてね' : storyTask === 3 ? '1 を ダブルタップで パラパラ してね' : '大きいほうを タップしてね', true); }
   else if(storyCh === 7){ if(storyTask === 0){ storyStage([14, 16, 18]); storyTapSet([1600], 'ヒント：ぐうすう・しかくに なれる・10と 20の あいだ', storyDetective1); } else { storyStage([4]); storyZones(true, false); } say('もどしたよ', '', true); }
   else if(storyCh === 8){ if(storyTask === 0){ storyStage([4]); storyZones(true, false); } else if(storyTask === 1){ storyStage([16]); storyZones(false, false); } else if(storyTask === 2){ storyStage([4]); storyZones(false, true); } else { storyStage([8]); storyZones(false, true); } say('もどしたよ', '', true); }
 }
@@ -869,8 +902,10 @@ function storySquareDone(from, to){
     else storyStamp();
   } else say('いまは ' + SQ_T[storyTask][0] + ' の しかく だよ', SQ_T[storyTask][0] + ' を しかくゾーンへ もっていってね', true);
 }
-function storyStamp(){
+function storyStamp(){ storyComplete(storyStampReal); }
+function storyStampReal(){
   storyDone = true; storyZones(false, false); storySkip(false);
+  const zt = document.getElementById('ztent'); zt.classList.remove('on'); zt.classList.remove('ready');
   if(!storyProg.done.includes(storyCh)){ storyProg.done.push(storyCh); storySaveProg(); }
   for(const c of chars){ c.hop = now0(); c.gold = now0(); }
   burst(W/2, H*0.4, 60, true);
@@ -881,27 +916,27 @@ function storyStamp(){
   const chS = storyCh;
   storyAutoTimer = setTimeout(() => { if(storyDone && storyCh === chS && !storySelect) storyNext(); }, 3600);   // ボタンを 押さなくても 数秒で つぎへ
 }
-// ── 詰まり検出：今の並びから その課題の正解に たどり着けない ときだけ、ヒントを出して「もどす」を目立たせる ──
-// 到達可能性は課題ごと：材料の数が まだ いるか／合計が 保たれているか／材料の 倍数・約数の 範囲か、で 見る。並びが 変わるたびに 1回だけ 言う。
+// ── 詰まり検出（誘導のみ・ブロックは しない）：途中経過が 想定解と ちがうのは 許容し、本当に 進めなく なった ときだけ ヒントを出して「もどす」を目立たせる ──
+// 見るのは「合計が 壊れた（帰す・余分に ふやす）」「材料が 全部いない」など、もどさないと 先へ いけない 状態だけ。並びが 変わるたびに 1回だけ 言う。
 let storyStuckKey = null;
 function storyIsStuck(k){
   const has = v => chars.some(c => hund(c.v) === v), sum = storySum();
-  const chain = base => chars.every(c => { const v = hund(c.v); return v % base === 0 || base % v === 0; });   // 材料の はんぶん・倍 の範囲に いるか
+  if(!chars.length) return true;   // ぜんぶ 帰してしまったら すすまない
   switch(storyCh){
-    case 0: return storyStep === 1 ? !has(500) : storyStep === 2 ? (k !== '500' && chars.filter(c => hund(c.v) === 250).length < 2) : false;
-    case 1: return !has(SQ_T[storyTask][0]*100);
-    case 2: { const set = [100, 200, 300, 400, 500], vs = chars.map(c => hund(c.v)); return k !== '1500' && (new Set(vs).size !== vs.length || vs.some(v => !set.includes(v))); }
-    case 3: return storyTask < 3 ? (sum !== 1200 || !chain(RECT_T[storyTask][0]*100)) : (sum !== 1200 || !chain(1200));
-    case 4: return !has([6, 7, 8, 9][storyTask]*100);
-    case 5: { const T = [[800, 1], [1200, 2], [1600, 3], [500, 1]][storyTask]; return sum !== T[0] || !chain(storyTask === 3 ? 250 : 400); }
-    case 6: return storyTask === 0 ? !has(750) : storyTask === 3 ? sum !== 100 : false;
-    case 7: return storyTask === 1 ? !has(400) : false;
-    case 8: return storyTask === 0 ? !has(400) : storyTask === 1 ? !has(1600) : storyTask === 2 ? (sum !== 1600 || !chain(400)) : (sum !== 1600 || !chain(800));
+    case 0: return sum !== 500;
+    case 1: return sum !== SQ_T[storyTask][0]*100;
+    case 2: return sum !== 1500;
+    case 3: return storyTask < 3 ? sum > 1200 : sum !== 1200;
+    case 4: return sum !== [6, 7, 8, 9][storyTask]*100;
+    case 5: return false;   // ミラーで ふやす 課題は 合計が 動くのが 正常（空っぽは 上で 検出）
+    case 6: return storyTask === 4 ? false : sum !== (storyTask === 3 ? 100 : 750);
+    case 7: return storyTask === 1 ? (!has(400) && sum !== 400) : false;
+    case 8: return storyTask === 0 ? (!has(400) && sum !== 400) : storyTask === 1 ? sum !== 1600 : sum > 1600;
   }
   return false;
 }
 function storyStuckCheck(){
-  if(storyDone || storyBusy || storySelect || storyAllDone || storyCh < 0) return;
+  if(storyDone || storyBusy || storyReady || storySelect || storyAllDone || storyCh < 0) return;
   const k = storyKey(), stuck = storyIsStuck(k);
   document.getElementById('gskip').classList.toggle('hint', !!stuck);
   if(stuck && storyStuckKey !== k){ storyStuckKey = k; say('あれ？ つまったかも', '「もどす」を おすと その 課題の はじめに もどるよ', true); }
@@ -911,31 +946,30 @@ const storyKey = () => chars.map(c => hund(c.v)).sort((a, b) => a - b).join(',')
 const storySum = () => chars.reduce((a, c) => a + hund(c.v), 0);
 function storyCheck(){
   if(storyDone || storyBusy) return;
+  if(storyReady){ storyPrevKey = storyKey(); return; }
   if(storyCh === 0){
     const k = storyKey();
     if(storyStep === 1){
-      if(storyPrevKey === '500' && k === '250,250'){
-        storyStep = 2;
-        say('2.5 と 2.5！ はんぶんこ 成功', 'つぎは もどして みせてね', true);
-        storyCard('🎯 つぎ：2.5 どうしを かさねて 5 に もどしてね', '');
+      if(k === '250,250'){
+        say('2.5 と 2.5！ はんぶんこ 成功', '', true);
+        storyPause(() => { storyStep = 2; storyStage([2.5, 2.5]); say('つぎは もどして みせてね', '2.5 どうしを かさねて 5に してね', true); storyCard('🎯 つぎ：2.5 どうしを かさねて 5 に もどしてね', ''); });
       } else if(k !== storyPrevKey) say('ヒント', '5 を ゆび 2ほんで ひろげると はんぶんこ できるよ', true);
     } else if(storyStep === 2){
-      if(storyPrevKey === '250,250' && k === '500') storyStamp();
+      if(k === '500') storyStamp();
     }
     storyPrevKey = k; return;
   }
   if(storyCh === 2){
     const k = storyKey();
-    if(k === '100,200,300,400,500') storyPrevOrder = chars.map(c => c.v);
-    else if(storyPrevKey === '100,200,300,400,500' && k === '1500'){
-      if(storyPrevOrder.join(',') === '1,2,3,4,5') storyStamp();
-      else say('15 になった！', 'でも じゅんばん が ちがうみたい。「もどす」で やりなおせるよ', true);
+    if(k === '1500'){
+      if(storySeqDone) storyStamp();
+      else if(storyPrevKey !== '1500') say('まずは 1,2,3,4,5 の じゅんに タップしてね', 'タップが そろってから なわだよ', true);
     }
     storyPrevKey = k; return;
   }
   if(storyCh === 4){
     const G = [6, 7, 8, 9][storyTask], k = storyKey(), h = G*50;
-    if(storyPrevKey === String(G*100) && k === h + ',' + h){
+    if(k === h + ',' + h){
       const odd = G % 2 === 1;
       say(G + (odd ? ' は きすう！' : ' は ぐうすう！'), odd ? '.5 が うまれた（' + fmt(G/2) + ' と ' + fmt(G/2) + '）' : 'せいすう どうしに われた（' + (G/2) + ' と ' + (G/2) + '）', true);
       storyTask++;
@@ -957,9 +991,9 @@ function storyCheck(){
   }
   if(storyCh === 6){
     const k = storyKey();
-    if(storyTask === 0 && storyPrevKey === '750' && k === '375,375'){ say('7.5 が 3.75 と 3.75！', 'やった！', true); storyTask = 1; storyPause(() => { storyStage([7.5]); say('つぎ：7 ＋ 0.5 で 7.5 を 作ってね', 'おうちと ボタンを つかってね', true); storyCard('🍓 つぎ：7 ＋ 0.5 で 7.5', ''); }); }
-    else if(storyTask === 1 && k === '50,700'){ say('7 ＋ 0.5 ＝ 7.5！', 'やった！', true); storyTask = 2; storyPause(() => { storyStage([7.5]); say('つぎ：5 ＋ 2.5 で 7.5 を 作ってね', '', true); storyCard('🍓 つぎ：5 ＋ 2.5 で 7.5', ''); }); }
-    else if(storyTask === 2 && k === '250,500'){ say('5 ＋ 2.5 ＝ 7.5！', 'やった！', true); storyTask = 3; storyPause(() => { storyStage([1]); say('つぎ：1 を パラパラ（ダブルタップ）して 0.1 に', '', true); storyCard('🍓 つぎ：1 を パラパラ → 0.1 を あつめて 1 に もどしてね', ''); }); }
+    if(storyTask === 0 && k === '375,375'){ say('7.5 が 3.75 と 3.75！', 'やった！', true); storyTask = 1; storyPause(() => { storyStage([7, 0.5]); say('つぎ：7 と 0.5 を くっつけて 7.5', 'かさねると くっつくよ', true); storyCard('🍓 つぎ：7 と 0.5 を くっつけて 7.5 に してね', ''); }); }
+    else if(storyTask === 1 && k === '750'){ say('7 ＋ 0.5 ＝ 7.5！', 'やった！', true); storyTask = 2; storyPause(() => { storyStage([5, 2.5]); say('つぎ：5 と 2.5 を くっつけて 7.5', 'かさねると くっつくよ', true); storyCard('🍓 つぎ：5 と 2.5 を くっつけて 7.5 に してね', ''); }); }
+    else if(storyTask === 2 && k === '750'){ say('5 ＋ 2.5 ＝ 7.5！', 'やった！', true); storyTask = 3; storyPause(() => { storyStage([1]); say('つぎ：1 を パラパラ（ダブルタップ）して 0.1 に', '', true); storyCard('🍓 つぎ：1 を パラパラ → 0.1 を あつめて 1 に もどしてね', ''); }); }
     else if(storyTask === 3){
       if(k === '10,10,10,10,10,10,10,10,10,10' && !storyOps.includes('scat')) storyOps.push('scat');
       else if(k === '100' && storyOps.includes('scat')){ say('0.1 が 10こ で 1！', 'やった！', true); storyTask = 4; storyPause(() => { storyStage([2.75, 2.5]); storyTapSet([275], '水の 高さが 高いほうが 大きいよ', () => storyStamp()); say('さいご：どっちが 大きい？', '大きいほうを タップしてね', true); storyCard('🍓 さいご：2.75 と 2.5、どっちが 大きい？ タップしてね', ''); }); }
@@ -968,7 +1002,7 @@ function storyCheck(){
   }
   if(storyCh === 8){
     const k = storyKey();
-    if(storyTask === 1 && storyPrevKey === '1600' && k === '800,800'){ say('ぐうすうクラブ ✓', '8 と 8 に われた！', true); storyTask = 2; storyPause(() => { storyStage([4]); storyZones(false, true); say('つぎ：ながしかくクラブ。4 を ミラーで 3かい ふやして 16', '', true); storyCard('🎉 つぎ：4 を 4つ にして 16（ながしかく）', ''); }); }
+    if(storyTask === 1 && k === '800,800'){ say('ぐうすうクラブ ✓', '8 と 8 に われた！', true); storyTask = 2; storyPause(() => { storyStage([4]); storyZones(false, true); say('つぎ：ながしかくクラブ。4 を ミラーで 3かい ふやして 16', '', true); storyCard('🎉 つぎ：4 を 4つ にして 16（ながしかく）', ''); }); }
     else if(storyTask === 2 && k === '1600' && storyOps.filter(o => o === 'mirror').length >= 3){ say('ながしかくクラブ ✓', '4 が 4つ で 16！', true); storyTask = 3; storyPause(() => { storyStage([8]); say('さいご：ダブルクラブ。8 を ミラーで ふやして 16', '', true); storyCard('🎉 さいご：8 を ミラーで ふやして 16（ダブル）', ''); }); }
     else if(storyTask === 3 && k === '1600' && storyOps.filter(o => o === 'mirror').length >= 1) storyStamp();
     storyPrevKey = k; return;
@@ -1007,8 +1041,8 @@ requestAnimationFrame(frame);
 window.hanbun = { chars: () => chars.map(c => c.v), add: v => addChar(v), split: i => split(chars[i]), merge: (i, j) => merge(chars[i], chars[j]),
   at: i => { const c = chars[i], r = rect(c); return { x: c.x, y: r.y + r.h/2, w: r.w, h: r.h }; }, bs: () => bs, say: () => sayBig.textContent + '｜' + saySub.textContent,
   water: i => chars[i].w, goalDone: () => goalDone, mergeMany: idx => mergeMany(idx.map(i => chars[i])), lastTalk: () => lastTalk, preview: () => pinch && pinch.pv ? [pinch.pv.a, pinch.pv.b].map(c => { const r = rect(c); return { v: c.v, x: c.x, y: r.y + r.h/2 }; }) : null, clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]),
-  story: () => STORY ? { ch: storyCh, step: storyStep, task: storyTask, done: storyDone, busy: storyBusy, select: storySelect, prog: storyProg.done.slice() } : null, storyNext: () => storyNext(),
-  square: i => applySquare(chars[i]), mirror: i => applyMirror(chars[i]), tap: i => storyTapHit(chars[i]) };
+  story: () => STORY ? { ch: storyCh, step: storyStep, task: storyTask, done: storyDone, busy: storyBusy, ready: storyReady, select: storySelect, prog: storyProg.done.slice() } : null, storyNext: () => storyNext(),
+  square: i => applySquare(chars[i]), mirror: i => applyMirror(chars[i]), tap: i => storyTapHit(chars[i]), deliver: i => storyDeliver(chars[i]) };
 </script>
 </body>
 </html>
