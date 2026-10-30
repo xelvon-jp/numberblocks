@@ -79,7 +79,7 @@ module.exports = {
       for(const m of ['hanbun', 'waru']){
         taskOn = false; whoOpen = false; setMode(m);
         drawTabsAndUI(ctx); const b = tabBtns.find(x => x.val === 'task');
-        handleStart(b.x+b.w/2, b.y+b.h/2, 's'); handleEnd(b.x+b.w/2, b.y+b.h/2, 's');
+        handleStart(b.x+b.w/2, b.y+b.h/2, 's'); if(tabHold){ tabHold.t0 -= 1000; drawTabsAndUI(ctx); } handleEnd(b.x+b.w/2, b.y+b.h/2, 's');   // ためし から は ながおし
         drawWhoPicker(ctx, 0); const w = whoBtns.find(x => x.i === profileIdx) || whoBtns[0]; handleStart(w.x+w.w/2, w.y+w.h/2, 's');
         out.push([m, whoOpen, isCalcMode() || mode === 'clock']);
       }
@@ -91,7 +91,7 @@ module.exports = {
   'おだい は タブ。入るたびに だれが遊ぶか聞かれ、ほかのタブへ行くと おだいは おわる。せっていには もう無い': async t => {
     const p = await t.open({ who:'papa' });
     const tap = v => p.evaluate(v => { drawTabsAndUI(ctx); const b = tabBtns.find(x => x.val === v);
-                                       handleStart(b.x+b.w/2, b.y+b.h/2, 's'); handleEnd(b.x+b.w/2, b.y+b.h/2, 's'); }, v);
+                                       handleStart(b.x+b.w/2, b.y+b.h/2, 's'); if(tabHold){ tabHold.t0 -= 1000; drawTabsAndUI(ctx); } handleEnd(b.x+b.w/2, b.y+b.h/2, 's'); }, v);   // おだい の そと から は ながおし
     const pick = () => p.evaluate(() => { drawWhoPicker(ctx, 0); const w = whoBtns[1]; handleStart(w.x+w.w/2, w.y+w.h/2, 's'); });
     await p.evaluate(() => { taskOn = false; whoOpen = false; });
     await tap('task');

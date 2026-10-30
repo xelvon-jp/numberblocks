@@ -29,11 +29,14 @@
   @keyframes glow { from { box-shadow:0 2px 6px rgba(240,160,32,0.25); } to { box-shadow:0 2px 16px rgba(240,160,32,0.7); } }
   canvas { display:block; position:absolute; inset:0; width:100%; height:100%; touch-action:none; }
   #bar { flex:none; display:flex; gap:6px; align-items:center; padding:6px 10px calc(8px + env(safe-area-inset-bottom, 0px)); background:rgba(255,255,255,0.7); }
-  #nums { flex:1; min-width:0; display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; }
+  #nums { flex:1; min-width:0; display:grid; grid-template-columns:repeat(8, 1fr); gap:4px; }
   #nums button { height:40px; min-width:0; border:2px solid var(--b); border-radius:11px; background:var(--f); color:#2b3a52;
                  font-size:clamp(14px, 4.6vw, 21px); font-weight:900; line-height:1; padding:0; box-shadow:0 2px 0 var(--b); }
+  #nums button.small { font-size:clamp(11px, 3.4vw, 16px); letter-spacing:-0.5px; }   /* 0.01・0.05 */
   #nums button:active { transform:translateY(2px); box-shadow:none; }
-  #nums #clear { --f:#dfe6ef; --b:#b8c3d2; font-size:clamp(11px, 3.4vw, 14px); font-weight:800; grid-column:span 2; }
+  #nums #clear { --f:#dfe6ef; --b:#b8c3d2; font-size:clamp(11px, 3.4vw, 14px); font-weight:800; grid-column:span 2;
+                 background:linear-gradient(90deg, #f7b2a8 var(--hp, 0%), var(--f) var(--hp, 0%)); }   /* ながおし の ゲージ */
+  #voice { position:absolute; right:8px; top:8px; z-index:2; border:0; border-radius:12px; width:40px; height:36px; font-size:20px; background:rgba(255,255,255,0.8); }
   #home { flex:none; width:clamp(44px, 14vw, 56px); height:85px; border:0; border-radius:14px; background:#fff; box-shadow:0 1px 3px rgba(40,60,90,0.15);
           display:flex; align-items:center; justify-content:center; transition:transform 0.12s; }
   #home.on { background:#fff4c8; box-shadow:0 0 0 3px #e7b400; }        /* つれて いける ときは ひかる */
@@ -44,7 +47,7 @@
 <body>
 <div id="goal"><div class="t"></div><button id="gnext">つぎ ▶</button><button id="gskip">もどる</button></div>
 <div id="say"><div class="big"></div><div class="sub"></div></div>
-<div id="stage"><canvas id="c"></canvas></div>
+<div id="stage"><canvas id="c"></canvas><button id="voice" aria-label="こえ">🔊</button></div>
 <div id="bar">
   <button id="home" aria-label="おうち"><svg viewBox="0 0 40 40" width="32" height="32"><path d="M20 5 L37 19 L32 19 L32 35 L8 35 L8 19 L3 19 Z" fill="#e8a04a" stroke="#8a5a20" stroke-width="2.4" stroke-linejoin="round"/><rect x="16" y="23" width="8" height="12" rx="1.5" fill="#8a5a20"/><path d="M20 5 L37 19 L3 19 Z" fill="#d0503c" stroke="#8a3020" stroke-width="2.4" stroke-linejoin="round"/></svg></button>
   <div id="nums"><button id="clear">かたづける</button></div>
@@ -74,7 +77,7 @@
 //   たくさん わけても ちいさく なりすぎない ように、ぶんしょうの ように たて・よこに ならべる（だん）。
 // この たんまつの localStorage（nb_hanbun）に いる キャラと「だす」かずを おぼえる。
 const V_MAX = 100, MAX_CHARS = 24;
-const ADD_NUMS = [0.1, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];   // したの ボタン（おすと その かずの キャラが でる）
+const ADD_NUMS = [0.01, 0.05, 0.1, 0.5, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];   // したの ボタン（おすと その かずの キャラが でる。0.01・0.05 は 2026-10-30）
 const BS_MAX = 120;        // キューブの いちばん 大きい ばあい（px。まえの 40 の 3ばい。すくない ときに 大きく）
 const SPLIT_PX = 45;        // ゆびが これだけ ひろがったら はんぶんこ
 // ── ガラスの キャラ（0.1〜0.9）：かきかた は engine.js（drawGlassFigure・drawGlassCube など。けいさん と おなじ もの）──
@@ -121,6 +124,7 @@ function checkGoal(){
   document.getElementById('gnext').classList.add('on');
 }
 function save(){
+  checkTen();
   if(GOAL){ checkGoal(); return; }
   try{ localStorage.setItem(KEY, JSON.stringify({ chars: chars.map(c => c.v) })); }catch(e){}
 }
@@ -230,6 +234,7 @@ function splitAt(c, pa, pb){
   chars.splice(i, 1, pa, pb);
   burst((pa.x + pb.x)/2, (pa.y + pb.y)/2 - dims(h).rows*bs/2, 18);
   say(fmt(c.v) + ' を はんぶんこ → ' + fmt(h) + ' と ' + fmt(h), yomi(h) || (fmt(h) + ' ＋ ' + fmt(h) + ' ＝ ' + fmt(c.v)), true);
+  talk(yN(c.v) + ' を はんぶんこ。' + yN(h) + ' と ' + yN(h));
   save(); return true;
 }
 function split(c, ang){
@@ -252,6 +257,7 @@ function split(c, ang){
   chars.splice(i, 1, a, b);
   burst(c.x, c.y - dims(c.v).rows*bs/2, 18);
   say(fmt(c.v) + ' を はんぶんこ → ' + fmt(h) + ' と ' + fmt(h), yomi(h) || (fmt(h) + ' ＋ ' + fmt(h) + ' ＝ ' + fmt(c.v)), true);
+  talk(yN(c.v) + ' を はんぶんこ。' + yN(h) + ' と ' + yN(h));
   save(); return true;
 }
 function merge(a, b){
@@ -267,7 +273,54 @@ function merge(a, b){
       full ? (a.v < 1 && b.v < 1 ? (fracOf(a.v) % 10 || fracOf(b.v) % 10 ? 'いっぱい！ ' + fmt(a.v) + ' と ' + fmt(b.v) + ' で 1'
                                                                          : 'いっぱい！ ' + fracOf(a.v)/10 + ' と ' + fracOf(b.v)/10 + ' で 10 と おなじ')
                                    : 'みずが いっぱい に なったよ') : yomi(v), true);
+  talk(yN(a.v) + ' たす ' + yN(b.v) + ' は ' + yN(v) + (full ? '。いっぱい！' : ''));
   save(); return c;
+}
+// ── なわ で かこんで ぜんぶ くっつける（2026-10-30）──
+// キャラ の いない ところ から ゆび 1ぽん で ぐるっと かこむ と、なか の キャラ（2ひき いじょう）が ぜんぶ くっつく。
+// しき は「0.1 ＋ 0.1 ＋ 0.1 ＝ 0.3」、おなじ かず ばかり なら「0.1 が 3こ で 0.3」。
+let lasso = null;           // { id, pts:[[x,y],…] }
+function inPoly(x, y, P){ let c = false; for(let i = 0, j = P.length - 1; i < P.length; j = i++){ const [xi, yi] = P[i], [xj, yj] = P[j];
+  if((yi > y) !== (yj > y) && x < (xj - xi)*(y - yi)/(yj - yi) + xi) c = !c; } return c; }
+function lassoEnd(){
+  const L = lasso; lasso = null;
+  if(!L || L.pts.length < 8) return;
+  const inside = chars.filter(c => !c.hidden && (() => { const r = rect(c); return inPoly(c.x, r.y + r.h/2, L.pts); })());
+  if(inside.length < 2){ if(inside.length === 1) say('2ひき いじょう かこんでね', 'なか の キャラ が ぜんぶ くっつくよ'); return; }
+  mergeMany(inside);
+}
+function mergeMany(list){
+  const t = now0(), v = norm(list.reduce((a, c) => a + c.v, 0));
+  if(v > V_MAX){ for(const c of list) c.shake = t; say(V_MAX + ' より おおきく なっちゃう', ''); return null; }
+  const cx = list.reduce((a, c) => a + c.x, 0)/list.length, cy = Math.max(...list.map(c => c.y));
+  const n = mk(v, cx, t); n.y = cy; n.hop = t; n.hx = cx; n.hy = cy; holdUntil = t + HOLD_MS;
+  const i = Math.min(...list.map(c => chars.indexOf(c)));
+  chars = chars.filter(c => !list.includes(c)); chars.splice(Math.min(i, chars.length), 0, n);
+  burst(cx, cy - dims(v).rows*bs/2, 36);
+  const full = list.every(c => isFrac(c.v)) && !isFrac(v);
+  if(full){ n.gold = t; burst(cx, cy - dims(v).rows*bs/2, 30, true); }
+  const same = list.every(c => hund(c.v) === hund(list[0].v));
+  if(same){ say(fmt(list[0].v) + ' が ' + list.length + 'こ で ' + fmt(v), list.length === 10 ? fmt(list[0].v) + ' が 10こ あつまると ' + fmt(v) + '！' : yomi(v), true);
+            talk(yN(list[0].v) + ' が ' + list.length + 'こ で ' + yN(v)); }
+  else { const eq = list.map(c => fmt(c.v)).join(' ＋ ') + ' ＝ ' + fmt(v);
+         say(eq.length > 30 ? 'ぜんぶ で ' + fmt(v) : eq, eq.length > 30 ? list.length + 'ひき を くっつけた' : yomi(v), true);
+         talk('ぜんぶ で ' + yN(v)); }
+  save(); return n;
+}
+// ── 10こ そろったら ぽん！（2026-10-30）：おなじ かず（0.01・0.1・1・10）が 10こ いじょう いる と ひかって しらせる ──
+let tenSaid = {};
+function checkTen(){
+  const t = now0();
+  for(const u of [1, 10, 100, 1000]){
+    const same = chars.filter(c => hund(c.v) === u);
+    if(same.length >= 10){
+      for(const c of same) c.ten = true;
+      if(!tenSaid[u]){ tenSaid[u] = true; const us = fmt(u/100), up = fmt(u/10);
+        setTimeout(() => { if(chars.filter(c => hund(c.v) === u).length < 10) return;   // もう くっつけた・かたづけた
+          say(us + ' が 10こ！', 'なわ で かこむと ' + up + ' に なるよ', true); talk(yN(u/100) + ' が 10こ あつまったよ。かこんで くっつけると ' + yN(u/10)); }, 900); }
+    } else { tenSaid[u] = false; for(const c of same) c.ten = false; }
+  }
+  for(const c of chars) if(![1, 10, 100, 1000].includes(hund(c.v))) c.ten = false;
 }
 
 // ── ねばねば ──
@@ -307,6 +360,29 @@ function stretchOf(c, now){
 
 // ── ことば ──
 function say(big, sub, ok){ sayBig.textContent = big; sayBig.classList.toggle('ok', !!ok); saySub.textContent = sub || ''; }
+// ── よみあげ（2026-10-30。ひなた は じ を まだ よめない ので こえ で「れいてん にご」「0.1 が 10こ で 1」）──
+// スマホ に はいって いる よみあげ（speechSynthesis・にほんご）。🔊 で オン／オフ（この たんまつ に おぼえる。nb_hanbun_voice）。
+// しょうすう は じぶん で かな に する（0.25 → れい てん に ご。「にじゅうご」と よまれない ように）
+const DIG = ['れい', 'いち', 'に', 'さん', 'よん', 'ご', 'ろく', 'なな', 'はち', 'きゅう'];
+function yN(v){
+  const k = intOf(v), f = fracOf(v);
+  const ip = k === 0 ? 'れい' : String(k);
+  if(!f) return ip;
+  return ip + ' てん ' + (f % 10 ? DIG[Math.floor(f/10)] + ' ' + DIG[f % 10] : DIG[f/10]);
+}
+let voiceOn = (() => { try{ return localStorage.getItem('nb_hanbun_voice') !== 'off'; }catch(e){ return true; } })();
+const voiceEl = document.getElementById('voice');
+function updVoice(){ voiceEl.textContent = voiceOn ? '🔊' : '🔇'; }
+voiceEl.addEventListener('click', () => { voiceOn = !voiceOn; try{ localStorage.setItem('nb_hanbun_voice', voiceOn ? 'on' : 'off'); }catch(e){} updVoice(); if(voiceOn) talk('こえ を だすよ'); else try{ speechSynthesis.cancel(); }catch(e){} });
+let jaVoice = null;
+function pickVoice(){ try{ jaVoice = speechSynthesis.getVoices().find(v => /^ja/i.test(v.lang)) || null; }catch(e){} }
+try{ pickVoice(); speechSynthesis.addEventListener('voiceschanged', pickVoice); }catch(e){}
+let lastTalk = '';
+function talk(text){
+  lastTalk = text;
+  if(!voiceOn || typeof speechSynthesis === 'undefined') return;
+  try{ speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(text); u.lang = 'ja-JP'; if(jaVoice) u.voice = jaVoice; u.rate = 0.9; u.pitch = 1.15; speechSynthesis.speak(u); }catch(e){}
+}
 function sayIdle(){ say('ゆび 2ほんで ひろげて はんぶんこ', 'かさねると くっつくよ'); }
 
 // ── かみふぶき ──
@@ -340,11 +416,14 @@ function drawChar(c, now){
   const gk = c.gold != null ? (now - c.gold)/1400 : 1;
   if(gk < 1){ const r0 = Math.max(d.cols, d.rows)*bs*0.9 + bs, cy = footY - d.rows*bs/2, g = ctx.createRadialGradient(x, cy, 0, x, cy, r0);
     g.addColorStop(0, 'rgba(255,214,80,' + (0.75*(1 - gk)) + ')'); g.addColorStop(1, 'rgba(255,214,80,0)'); ctx.fillStyle = g; ctx.fillRect(x - r0, cy - r0, r0*2, r0*2); }
+  if(c.ten && !c.drag){ const r0 = Math.max(d.cols, d.rows)*bs*0.75 + bs*0.6, cy = footY - d.rows*bs/2, a = 0.45 + 0.25*Math.sin(now*0.006);
+    const g = ctx.createRadialGradient(x, cy, 0, x, cy, r0); g.addColorStop(0, 'rgba(255,230,120,' + a + ')'); g.addColorStop(1, 'rgba(255,230,120,0)');
+    ctx.fillStyle = g; ctx.fillRect(x - r0, cy - r0, r0*2, r0*2); }                // 10こ そろった なかま
   if(c.drag){ ctx.shadowColor = 'rgba(30,50,80,0.25)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 6; }
   if(k === 0){
     // 0.1〜0.9：ガラスの キューブに みずが 0.いくつ
-    drawGlassChar(gd(c.v), x, footY, c.w || (c.w = Mizu.mk()), f/100);
-    drawLabel(c.v, x, footY - bs - hatLift(gd(c.v))*bs);
+    drawGlassChar(gd(c.v), x, footY, c.w || (c.w = Mizu.mk()), f/100*(c.halfK || 1));
+    if(c.lab) drawNumLabel(ctx, c.lab, x, footY - bs - hatLift(gd(c.v))*bs, bs); else drawLabel(c.v, x, footY - bs - hatLift(gd(c.v))*bs);
   } else {
     const s = blockSpec(k), y0 = footY - s.rows*bs;
     if(f){
@@ -398,6 +477,11 @@ function frame(){
     ctx.save(); ctx.fillStyle = 'rgba(255,215,80,0.35)'; ctx.beginPath(); ctx.roundRect(r.x - bs*0.5, r.y - bs*0.8, r.w + bs, r.h + bs*1.6, bs*0.5); ctx.fill(); ctx.restore(); } }
   goos = goos.filter(g => chars.includes(g.a) && chars.includes(g.b) && drawGoo(g, now));
   for(const c of order) drawChar(c, now);
+  if(lasso && lasso.pts.length > 1){                    // なわ（てんせん）。かこめて いる キャラ は きいろ く
+    ctx.save(); ctx.setLineDash([8, 6]); ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(200,120,20,0.85)'; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.beginPath(); lasso.pts.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.stroke();
+    ctx.fillStyle = 'rgba(255,214,90,0.15)'; ctx.fill(); ctx.restore();
+  }
   // ひろげて いる とちゅう：わかれた 2ひきが ゆびさきに くっついて くる（はなすと わかれる）
   stickPreview();
   if(pinch && pinch.pv){ const { a, b } = pinch.pv; drawGooLive(a, b); drawChar(a, now); drawChar(b, now); }
@@ -446,17 +530,27 @@ cv.addEventListener('pointerdown', e => {
     }
   }
   const c = hit(p.x, p.y, 0.4);
+  if(!c && !ptrs.size && !lasso) lasso = { id: e.pointerId, pts: [[p.x, p.y]] };   // なわ で かこむ
   if(c && !c.drag) c.drag = e.pointerId;
   ptrs.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y, t: now0(), c: c && c.drag === e.pointerId ? c : null, ox: c ? c.x - p.x : 0, oy: c ? c.y - p.y : 0 });
 });
 cv.addEventListener('pointermove', e => {
   const q = ptrs.get(e.pointerId); if(!q) return;
   const p = pos(e); q.x = p.x; q.y = p.y;
+  if(lasso && lasso.id === e.pointerId){ const l = lasso.pts[lasso.pts.length - 1]; if(Math.hypot(p.x - l[0], p.y - l[1]) > 6) lasso.pts.push([p.x, p.y]); }
+  if(lasso && lasso.id !== e.pointerId) lasso = null;                              // 2ほんめ が きたら なわ は やめ
   if(pinch && (e.pointerId === pinch.a || e.pointerId === pinch.b)){
     const A = ptrs.get(pinch.a), B = ptrs.get(pinch.b); if(!A || !B) return;
     const ext = Math.hypot(A.x - B.x, A.y - B.y) - pinch.d0, c = pinch.c;
     if(!pinch.pv && ext > SPLIT_PX){
       // ここで わかれる…けど まだ きめない。ゆびを はなすまで 2ひきが ゆびさきに くっついて くる
+      if(hund(c.v) % 2 && intOf(c.v) === 0 && chars.length < MAX_CHARS){
+        // 0.01 より こまかく なる（0.01 → 0.005、0.25 → 0.125）：はんぶん の ガラス が でる けど、はなすと もとに もどる（2026-10-30）
+        const t = now0(), lab = String(+(c.v/2).toFixed(4)), a = mk(c.v, c.x, t - 260), b = mk(c.v, c.x, t - 260);
+        a.lab = b.lab = lab; a.halfK = b.halfK = 0.5; a.jelly = b.jelly = t; c.hidden = true; pinch.pv = { a, b, bad: true };
+        say(lab + ' …？', 'はんぶんに すると 0.01 より こまかく なっちゃう');
+        stickPreview(); return;
+      }
       if(!canSplit(c)){ pinch = null; return; }
       const h = hund(c.v)/200, t = now0(), a = mk(h, c.x, t - 260), b = mk(h, c.x, t - 260);
       a.jelly = b.jelly = t; c.hidden = true; pinch.pv = { a, b };
@@ -469,8 +563,14 @@ cv.addEventListener('pointermove', e => {
 function up(e){
   const q = ptrs.get(e.pointerId); if(!q) return;
   ptrs.delete(e.pointerId);
+  if(lasso && lasso.id === e.pointerId){ if(e.type === 'pointercancel') lasso = null; else lassoEnd(); return; }
   if(pinch && (e.pointerId === pinch.a || e.pointerId === pinch.b)){
     const pc = pinch; pinch = null;
+    if(pc.pv && pc.pv.bad){                                                          // ちいさすぎる：ぷるぷる して もとに もどる
+      pc.c.hidden = false; pc.c.jelly = now0(); pc.c.shake = now0();
+      say(fmt(pc.c.v) + ' は はんぶんこ できないよ', 'はんぶんに すると 0.01 より こまかく なっちゃう');
+      talk(yN(pc.c.v) + ' は はんぶんこ できないよ'); return;
+    }
     if(pc.pv && e.type !== 'pointercancel') splitAt(pc.c, pc.pv.a, pc.pv.b);      // ゆびを はなした ところで わかれる
     else { pc.c.hidden = false; pc.c.jelly = now0(); }                             // とちゅうで はなすと ぷるん と もどる
     return;
@@ -490,14 +590,16 @@ function up(e){
   if(o) merge(c, o);
   else { insertAt(c, q.x, q.y); holdUntil = 0; save(); }     // はなした ところの じゅんばんに はいる
 }
-// ── ダブルタップ：1（と 0.いくつ）を 0.1 に パラパラ ──
-// 10 が 1 の 10にん なのと おなじ ように、1 は 0.1 の 10にん。あつめる（かさねる）と また 1 に もどる。
-// 0.1 は 0.01 の 10にん（0.1 の くらい が ない 0.25 などは 0.01 に。おおすぎる ときは できない）
+// ── ダブルタップ：パラパラ わかれる ──
+// 100 → 10 が 10こ、10 → 1 が 10こ、1 → 0.1 が 10こ、0.1 → 0.01 が 10こ（2026-10-30 に 10・100 も）。
+// わける たんい は その かず を わりきれる、その かず より ちいさい いちばん 大きい 10 の なかま（0.3 → 0.1 が 3こ、7 → 1 が 7こ、0.25 → 0.01 が 25こ）。
+// あつめる（かさねる・なわ で かこむ）と また もとに もどる。おおすぎる（24ひき を こえる）ときは できない。
 let lastTap = null;
 function scatter(c){
-  const t = now0(), hv = hund(c.v), u = hv % 10 === 0 && hv > 10 ? 10 : 1, uv = u/100, us = fmt(uv), n = hv/u;
-  if(hv === 1){ c.shake = t; say('0.01 は いちばん ちいさい よ', '0.01 を 10こ あつめると 0.1'); return false; }
-  if(c.v > 1){ c.shake = t; say('1 か 0.いくつ を ダブルタップ してね', '0.1 に パラパラ わかれるよ'); return false; }
+  const t = now0(), hv = hund(c.v);
+  let u = 1; for(const p of [10, 100, 1000]) if(p < hv && hv % p === 0) u = p;
+  const uv = u/100, us = fmt(uv), n = hv/u;
+  if(hv === 1){ c.shake = t; say('0.01 は いちばん ちいさい よ', '0.01 を 10こ あつめると 0.1'); talk('れい てん れい いち は いちばん ちいさい よ'); return false; }
   if(chars.length - 1 + n > MAX_CHARS){ c.shake = t; say('いっぱい だよ', 'くっつけてから やってね'); return false; }
   // 10こ ぶん はいる 大きさに すぐ する（まって いる あいだに かさならない）
   const i = chars.indexOf(c), keep = chars.slice(); chars.splice(i, 1, ...Array.from({ length: n }, () => mk(uv, 0, t))); bs = Math.min(bs, targetBs()); chars = keep;
@@ -515,6 +617,7 @@ function scatter(c){
   chars.splice(i, 1, ...out); holdUntil = t + HOLD_MS + 500;
   burst(c.x, cy, 22);
   say(fmt(c.v) + ' を パラパラ → ' + us + ' が ' + n + 'こ', us + ' が 10こ あつまると ' + fmt(uv*10), true);
+  talk(yN(c.v) + ' は ' + yN(uv) + ' が ' + n + 'こ');
   save(); return true;
 }
 // ── おうち：つれて いって はなすと その キャラだけ かえる ──
@@ -545,12 +648,22 @@ for(const v of ADD_NUMS){
   const b = document.createElement('button'), col = colorOf(v);
   b.textContent = fmt(v); b.dataset.v = v;
   if(v < 1) b.classList.add('dec');
+  if(fmt(v).length >= 4) b.classList.add('small');
   b.style.setProperty('--f', v === 7 ? 'linear-gradient(90deg,#fbb,#fdc,#ffe9a8,#c8efc0,#bdeefa,#c7c4f0,#e3c6f2)' : rgb(mixWhite(col, 0.6)));
   b.style.setProperty('--b', rgb(v === 10 ? [229, 36, 42] : v === 7 ? [150, 110, 190] : darken(col, 0.15)));
-  b.addEventListener('click', () => { if(addChar(v)) say(fmt(v) + ' が きたよ', yomi(v) || 'ゆび 2ほんで ひろげると はんぶんこ'); });
+  b.addEventListener('click', () => { if(addChar(v)){ say(fmt(v) + ' が きたよ', yomi(v) || 'ゆび 2ほんで ひろげると はんぶんこ'); talk(yN(v)); } });
   numsEl.insertBefore(b, clearEl);
 }
-document.getElementById('clear').addEventListener('click', () => { chars = []; save(); sayIdle(); });
+// かたづける：ながおし（0.8びょう）で ぜんぶ かたづける（ごばく よけ。ちょん と おすと やりかた を いう）
+const clearEl2 = document.getElementById('clear'), CLEAR_MS = 800;
+let clearHold = null;
+function clearAll(){ chars = []; tenSaid = {}; save(); sayIdle(); }
+clearEl2.addEventListener('pointerdown', e => { e.preventDefault(); clearHold = { t0: now0(), id: e.pointerId };
+  const tick = () => { if(!clearHold) return; const k = Math.min(1, (now0() - clearHold.t0)/CLEAR_MS); clearEl2.style.setProperty('--hp', (k*100).toFixed(0) + '%');
+    if(k >= 1){ clearHold = null; clearEl2.style.setProperty('--hp', '0%'); clearAll(); } else requestAnimationFrame(tick); };
+  requestAnimationFrame(tick); });
+const clearCancel = () => { if(!clearHold) return; clearHold = null; clearEl2.style.setProperty('--hp', '0%'); say('ながおし で かたづけるよ', 'ずっと おして いてね'); };
+clearEl2.addEventListener('pointerup', clearCancel); clearEl2.addEventListener('pointerleave', clearCancel); clearEl2.addEventListener('pointercancel', clearCancel);
 
 // ── はじめ ──
 resize();
@@ -564,14 +677,14 @@ if(GOAL){
   document.getElementById('gskip').addEventListener('click', () => tellGame({ type:'skip' }));
 }
 bs = targetBs();
-sayIdle();
+sayIdle(); updVoice(); checkTen();
 Mizu.autoStart();       // センサーは はじめから オン（iPhone は さいしょに さわった とき に ゆるしを きく）
 requestAnimationFrame(frame);
 
 // テスト よう
 window.hanbun = { chars: () => chars.map(c => c.v), add: v => addChar(v), split: i => split(chars[i]), merge: (i, j) => merge(chars[i], chars[j]),
   at: i => { const c = chars[i], r = rect(c); return { x: c.x, y: r.y + r.h/2, w: r.w, h: r.h }; }, bs: () => bs, say: () => sayBig.textContent + '｜' + saySub.textContent,
-  water: i => chars[i].w, goalDone: () => goalDone, preview: () => pinch && pinch.pv ? [pinch.pv.a, pinch.pv.b].map(c => { const r = rect(c); return { v: c.v, x: c.x, y: r.y + r.h/2 }; }) : null, clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]) };
+  water: i => chars[i].w, goalDone: () => goalDone, mergeMany: idx => mergeMany(idx.map(i => chars[i])), lastTalk: () => lastTalk, preview: () => pinch && pinch.pv ? [pinch.pv.a, pinch.pv.b].map(c => { const r = rect(c); return { v: c.v, x: c.x, y: r.y + r.h/2 }; }) : null, clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]) };
 </script>
 </body>
 </html>

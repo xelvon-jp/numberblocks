@@ -54,12 +54,15 @@ const list = document.getElementById('list');
 for(const e of EXPERIMENTS){
   const a = document.createElement('a'); a.className = 'exp';
   a.href = e.file + (e.file.includes('?') ? '&' : '?') + 'v=' + Date.now();       // キャッシュの 古い版を ひらかない
+  // 「もどる」の りれき を のこさない（iPhone の はしっこ スワイプ で ためし に もどって しまう ごそうさ よけ。2026-10-30）
+  a.addEventListener('click', ev => { ev.preventDefault(); location.replace(a.href); });
   a.innerHTML = '<b></b><span class="st"></span><p></p>';
   a.querySelector('b').textContent = e.name;
   const s = a.querySelector('.st'); s.textContent = e.st === 'done' ? 'ほんたいに いれた' : e.st === 'game' ? 'あそび' : 'ためし中'; s.classList.add(e.st);
   a.querySelector('p').textContent = e.desc;
   list.appendChild(a);
 }
+document.querySelector('.back').addEventListener('click', ev => { ev.preventDefault(); location.replace('index.html'); });
 </script>
 </body>
 </html>

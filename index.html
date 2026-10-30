@@ -2036,11 +2036,16 @@ function drawModeTabs(ctx){
       tabBtns.push({x:tx+2,y:ty+2,w:tabW-4,h:TAB_ROW_H-4,val:td.val});
       tx += tabW; continue;
     }
+    if(td.val === 'task' && tabHold){                 // ながおし の ゲージ。たまったら おだい へ
+      const hp = Math.min(1, (Date.now() - tabHold.t0)/QHOLD_MS);
+      ctx.fillStyle = 'rgba(255,205,70,0.6)'; ctx.fillRect(tx+2, ty+2, (tabW-4)*hp, TAB_ROW_H-4);
+      if(hp >= 1){ tabHold = null; setTaskOn(true); }
+    }
     ctx.fillStyle=active?'white':'#eef2f8';
     let fs = 13; ctx.font='bold 13px sans-serif';
     while(fs > 9 && ctx.measureText(td.label).width > tabW - 8){ fs--; ctx.font = 'bold ' + fs + 'px sans-serif'; }   // せまい 画面でも はみださない
     ctx.textAlign='center'; ctx.textBaseline='middle';
-    ctx.fillText(td.label,tx+tabW/2,ty+TAB_ROW_H/2);
+    ctx.fillText(td.val === 'task' && !taskOn ? 'おだい（ながおし）' : td.label,tx+tabW/2,ty+TAB_ROW_H/2);
     ctx.restore();
     tabBtns.push({x:tx+2,y:ty+2,w:tabW-4,h:TAB_ROW_H-4,val:td.val});
     tx += tabW;
@@ -2060,6 +2065,7 @@ function drawModeTabs(ctx){
 // ながおし（QHOLD_MS）すると その おだい まで とぶ（しらべ よう。skipTo）。
 const QHOLD_MS = 800;
 let qBtns = [], qHold = null;     // qHold：{ i, t0, pid }
+let tabHold = null;               // ためし の あそび（taskOn で ない とき）の「おだい」の ながおし { pid, t0, x, y }
 const Q_STYLE = { kake: ['#e0802a', '×'], clock: ['#2f9a8a', null], hissan: ['#7a5ad0', '✏️'], play: [PLAY_COLOR, '🎯'], playh: ['#3f9fc8', '½'], zukei: ['#c0558a', null] };
 function drawQueueIcons(ctx, x, y, w, h){
   ensureQueue(); qBtns = [];
@@ -4414,7 +4420,7 @@ function handleSettingsTap(x, y){
     else if(b.val==='sync')  sync.setup();
     else if(b.val==='halloween'){ try{ localStorage.setItem('nb_halloween', b.v); }catch(e){} updSeason(); }
     else if(b.val==='zukan') location.href = 'zukan.html?v=' + Date.now();   // キャッシュの 古い版を ひらかない
-    else if(b.val==='lab')   location.href = 'lab.html?v=' + Date.now();
+    else if(b.val==='lab')   location.replace('lab.html?v=' + Date.now());   // 「もどる」の りれき を のこさない（はしっこ スワイプ で もどって しまう ごそうさ よけ）
     else if(b.val==='fs')    toggleFullscreen();
     else if(b.val==='arc')   { setOpen = false; openArcTuner(); }
     else if(b.val==='ptune') { setOpen = false; openParadeTuner(); }
@@ -5142,7 +5148,7 @@ function handleStart(x,y,pid){
     if(katachiOn) katachiStop();                     // かたち（ためし）は タブ で おわる
     if(tb.val==='settings'){ setOpen = true; stageOpen = false; }
     // おだいに入るときは、かならず「だれが あそぶ？」を聞く（setTaskOn）
-    else if(tb.val==='task'){ if(!taskOn) setTaskOn(true); }
+    else if(tb.val==='task'){ if(!taskOn) tabHold = { pid, t0: Date.now(), x, y }; }   // ためし の あそび から は ながおし で おだい へ（ごタップ よけ）
     else { if(taskOn) setTaskOn(false); setMode(tb.val); }
     return;
   }
@@ -5316,6 +5322,7 @@ function handleMove(x,y,pid){
     if(Math.hypot(x-paradeHold.x, y-paradeHold.y) > 24) paradeHold = null;   // 指が うごいたら やめ
     return;
   }
+  if(tabHold && tabHold.pid===pid && Math.hypot(x-tabHold.x, y-tabHold.y) > 24) tabHold = null;
   if(qHold && qHold.pid===pid){
     if(Math.hypot(x-qHold.x, y-qHold.y) > 24) qHold = null;
     return;
@@ -5339,6 +5346,7 @@ function handleMove(x,y,pid){
 
 function handleEnd(x,y,pid){
   if(qHold && qHold.pid===pid){ qHold = null; return; }                // とちゅう で はなした ＝ やめ
+  if(tabHold && tabHold.pid===pid){ tabHold = null; return; }
   if(paradeHold && paradeHold.pid===pid){ paradeHold = null; return; }  // 途中で離した＝中止
   if(stageHold && stageHold.pid===pid){ stageHold = null; return; }   // 途中で離した＝中止
   if(mode==='clock'){ if(drum && drum.drag) drumEnd(x, y); clockDrag=null; return; }

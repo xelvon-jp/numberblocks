@@ -190,9 +190,9 @@ module.exports = {
     t.ok(r.bs >= 25, 'ちいさい ' + r.bs);
   },
 
-  'だす・かたづける。はんぶんの キャラも ぶたいの 中に おさまる': async t => {
-    const { f } = await openHanbun(t, []);
-    t.eq(await f.evaluate(() => [...document.querySelectorAll('#nums button')].map(b => b.textContent)), ['0.1', '0.5', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'かたづける'], 'ボタン');
+  'だす・かたづける（ながおし）。はんぶんの キャラも ぶたいの 中に おさまる': async t => {
+    const { p, f } = await openHanbun(t, []);
+    t.eq(await f.evaluate(() => [...document.querySelectorAll('#nums button')].map(b => b.textContent)), ['0.01', '0.05', '0.1', '0.5', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'かたづける'], 'ボタン');
     await f.evaluate(() => { [...document.querySelectorAll('#nums button')].find(b => b.textContent === '7').click(); [...document.querySelectorAll('#nums button')].find(b => b.textContent === '0.5').click(); });
     t.eq(await vals(f), [7, 0.5], 'だす');
     await f.evaluate(() => { hanbun.clear(); [0.5, 2.5, 3.5, 6.5, 7.5, 10.5, 20.5, 99.5].forEach(v => hanbun.add(v)); });
@@ -200,7 +200,30 @@ module.exports = {
     const r = await f.evaluate(() => { const W = document.getElementById('c').clientWidth, H = document.getElementById('c').clientHeight;
       return hanbun.chars().map((v, i) => { const a = hanbun.at(i); return [v, a.x - a.w/2 >= 0 && a.x + a.w/2 <= W && a.y - a.h/2 >= 0 && a.y + a.h/2 <= H]; }).filter(x => !x[1]); });
     t.eq(r, [], 'はみだす');
-    await f.click('#clear');
-    t.eq(await vals(f), [], 'かたづけない');
+    await f.click('#clear');                                        // ちょん と おした だけ では かたづけない
+    t.eq((await vals(f)).length, 8, 'ちょん で かたづいた');
+    const cb = await f.evaluate(() => { const r = document.getElementById('clear').getBoundingClientRect(); return [r.x + r.width/2, r.y + r.height/2]; });
+    const fb = await (await f.frameElement()).boundingBox();
+    await p.mouse.move(fb.x + cb[0], fb.y + cb[1]); await p.mouse.down(); await f.waitForTimeout(1000); await p.mouse.up();
+    t.eq(await vals(f), [], 'ながおし で かたづけない');
+  },
+
+  'ダブルタップ：10 → 1 が 10こ、100 → 10 が 10こ。なわ で かこむ と ぜんぶ くっつく（0.1 が 10こ で 1）。0.01 は はんぶんこ できない。よみあげ は れい てん に ご': async t => {
+    const { f } = await openHanbun(t, []);
+    const r = await f.evaluate(() => {
+      hanbun.add(10); hanbun.scatter(0); const a = hanbun.chars().slice();
+      hanbun.clear(); hanbun.add(100); hanbun.scatter(0); const b = hanbun.chars().slice();
+      hanbun.clear(); for(let i = 0; i < 10; i++) hanbun.add(0.1);
+      hanbun.mergeMany([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]); const c = [hanbun.chars(), hanbun.say()];
+      hanbun.clear(); hanbun.add(0.01); hanbun.split(0); const d = hanbun.chars();
+      hanbun.clear(); document.querySelector('#nums button').click(); const e = hanbun.lastTalk();
+      return { a, b, c, d, e };
+    });
+    t.eq(r.a, Array(10).fill(1), '10 が 1 の 10こ に ならない');
+    t.eq(r.b, Array(10).fill(10), '100 が 10 の 10こ に ならない');
+    t.eq(r.c[0], [1], 'なわ で 0.1 が 10こ を かこんでも 1 に ならない');
+    t.ok(r.c[1].includes('0.1 が 10こ で 1'), 'ことば ' + r.c[1]);
+    t.eq(r.d, [0.01], '0.01 が わかれた');
+    t.eq(r.e, 'れい てん れい いち', 'よみあげ が ちがう');
   },
 };
