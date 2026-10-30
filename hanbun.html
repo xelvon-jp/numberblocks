@@ -422,18 +422,19 @@ function drawChar(c, now){
   if(c.drag){ ctx.shadowColor = 'rgba(30,50,80,0.25)'; ctx.shadowBlur = 12; ctx.shadowOffsetY = 6; }
   if(k === 0){
     // 0.1〜0.9：ガラスの キューブに みずが 0.いくつ
-    drawGlassChar(gd(c.v), x, footY, c.w || (c.w = Mizu.mk()), f/100*(c.halfK || 1));
+    drawGlassChar(gd(c.v), x, footY, c.w || (c.w = Mizu.mk()), c.fill != null ? c.fill : f/100);
     if(c.lab) drawNumLabel(ctx, c.lab, x, footY - bs - hatLift(gd(c.v))*bs, bs); else drawLabel(c.v, x, footY - bs - hatLift(gd(c.v))*bs);
   } else {
     const s = blockSpec(k), y0 = footY - s.rows*bs;
-    if(f){
+    if(f || c.fill){
       const h = glassAt(k), x0 = x - d.cols*bs/2;
       drawNumberblock(ctx, k, x0, y0, bs, { t: now, animate: !c.drag, numberling: false });
       ctx.shadowColor = 'transparent';
-      glassCube(x0 + h.gx*bs, y0 + h.gy*bs, f/100, liqCol(gd(c.v)), c.w || (c.w = Mizu.mk()));
+      glassCube(x0 + h.gx*bs, y0 + h.gy*bs, c.fill != null ? c.fill : f/100, liqCol(gd(c.v)), c.w || (c.w = Mizu.mk()));
       // かずは キャラの まんなかの うえ（ぼうし・かみの けの ぶん あける）
       const lift = s.face && (s.face.jesterHat || s.face.hair) ? bs*0.55 : s.face && s.face.tophat ? bs*1.15 : 0;
-      drawLabel(c.v, x0 + s.cols*bs/2, y0 + Math.min(0, h.side ? 0 : h.gy)*bs - (h.side ? lift : 0));
+      const ly = y0 + Math.min(0, h.side ? 0 : h.gy)*bs - (h.side ? lift : 0);
+      if(c.lab) drawNumLabel(ctx, c.lab, x0 + s.cols*bs/2, ly, bs); else drawLabel(c.v, x0 + s.cols*bs/2, ly);
     } else {
       drawNumberblock(ctx, k, x - s.cols*bs/2, y0, bs, { t: now, animate: !c.drag });
     }
@@ -544,10 +545,12 @@ cv.addEventListener('pointermove', e => {
     const ext = Math.hypot(A.x - B.x, A.y - B.y) - pinch.d0, c = pinch.c;
     if(!pinch.pv && ext > SPLIT_PX){
       // ここで わかれる…けど まだ きめない。ゆびを はなすまで 2ひきが ゆびさきに くっついて くる
-      if(hund(c.v) % 2 && intOf(c.v) === 0 && chars.length < MAX_CHARS){
-        // 0.01 より こまかく なる（0.01 → 0.005、0.25 → 0.125）：はんぶん の ガラス が でる けど、はなすと もとに もどる（2026-10-30）
-        const t = now0(), lab = String(+(c.v/2).toFixed(4)), a = mk(c.v, c.x, t - 260), b = mk(c.v, c.x, t - 260);
-        a.lab = b.lab = lab; a.halfK = b.halfK = 0.5; a.jelly = b.jelly = t; c.hidden = true; pinch.pv = { a, b, bad: true };
+      if(hund(c.v) % 2 && chars.length < MAX_CHARS){
+        // 0.01 より こまかく なる（0.01 → 0.005、0.25 → 0.125、4.25 → 2.125）：はんぶん の キャラ が でる けど、はなすと もとに もどる（2026-10-30）
+        // かたち は 0.01 まで で きった かず（2.12）、ガラス の みず は ほんとう の はんぶん（0.125）、あたま の かず は 2.125
+        const t = now0(), half = c.v/2, lab = String(+half.toFixed(4)), cut0 = Math.floor(hund(c.v)/2), cut = (cut0 % 100 ? cut0 : cut0 + 1)/100;   // せいすう に なる とき（2.01 → 1.005）も ガラス の ある かたち に
+        const a = mk(cut, c.x, t - 260), b = mk(cut, c.x, t - 260);
+        a.lab = b.lab = lab; a.fill = b.fill = +(half - Math.floor(half)).toFixed(4); a.jelly = b.jelly = t; c.hidden = true; pinch.pv = { a, b, bad: true };
         say(lab + ' …？', 'はんぶんに すると 0.01 より こまかく なっちゃう');
         stickPreview(); return;
       }
