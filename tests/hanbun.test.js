@@ -289,6 +289,7 @@ module.exports = {
     await f.evaluate(() => hanbun.mergeMany([0, 1, 2, 3]));
     await f.waitForFunction(() => hanbun.chars()[0] === 12, null, { timeout: 5000 });
     t.eq(await vals(f), [12], 'ながしかく：さいごは 12 の はず');
+    await f.waitForFunction(() => !hanbun.story().busy, null, { timeout: 5000 });
     await f.evaluate(() => hanbun.split(0));
     t.eq((await f.evaluate(() => hanbun.story())).done, true, 'ながしかく：スタンプが つかない');
     t.eq(await f.evaluate(() => hanbun.story().prog), [0, 1, 2, 3], 'スタンプ帳が たまらない');

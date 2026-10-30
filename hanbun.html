@@ -854,7 +854,7 @@ function storyCheck(){
         storyTask++;
         say('12 できた！', 'やった！', true);
         if(storyTask < 3) storyPause(() => { storyStage([RECT_T[storyTask][0]]); say('つぎは ' + RECT_T[storyTask][0] + ' を ミラーで ' + RECT_T[storyTask][1] + 'かい ふやして 12', '', true); });
-        else storyPause(() => { storyStage([12]); storyZones(false, false); say('さいご：12 を はんぶんこ して 6 と 6 に もどそう', '', true); storyCard('🟦 さいご：12 を はんぶんこ してね', ''); });
+        else storyPause(() => { if(storyKey() === '600,600'){ storyStamp(); return; } storyStage([12]); storyZones(false, false); say('さいご：12 を はんぶんこ して 6 と 6 に もどそう', '', true); storyCard('🟦 さいご：12 を はんぶんこ してね', ''); });
       }
     } else if(k === '600,600') storyStamp();
   }
@@ -881,7 +881,7 @@ requestAnimationFrame(frame);
 window.hanbun = { chars: () => chars.map(c => c.v), add: v => addChar(v), split: i => split(chars[i]), merge: (i, j) => merge(chars[i], chars[j]),
   at: i => { const c = chars[i], r = rect(c); return { x: c.x, y: r.y + r.h/2, w: r.w, h: r.h }; }, bs: () => bs, say: () => sayBig.textContent + '｜' + saySub.textContent,
   water: i => chars[i].w, goalDone: () => goalDone, mergeMany: idx => mergeMany(idx.map(i => chars[i])), lastTalk: () => lastTalk, preview: () => pinch && pinch.pv ? [pinch.pv.a, pinch.pv.b].map(c => { const r = rect(c); return { v: c.v, x: c.x, y: r.y + r.h/2 }; }) : null, clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]),
-  story: () => STORY ? { ch: storyCh, step: storyStep, task: storyTask, done: storyDone, prog: storyProg.done.slice() } : null, storyNext: () => storyNext(),
+  story: () => STORY ? { ch: storyCh, step: storyStep, task: storyTask, done: storyDone, busy: storyBusy, prog: storyProg.done.slice() } : null, storyNext: () => storyNext(),
   square: i => applySquare(chars[i]), mirror: i => applyMirror(chars[i]) };
 </script>
 </body>
