@@ -125,9 +125,11 @@ let storyStep = -1, storyDone = false, storyBase = null, storyBaseSum = 0;   // 
 let storyCh = 0, storyTask = 0, storyOps = [], storyPrevKey = null, storyPrevOrder = [], storyAllDone = false;
 let storyBusy = false, storyTimer = 0;   // できた ときに 結果を 2.3びょう 見せてから つぎの だいへ（すぐ 消えると 何が できたか 見えない）
 let storySelect = false;   // 入り口で「つづき／はじめから」を えらぶ 画面か
+let storyTap = null;         // タップで こたえる 課題（{ values:[hund], hint, ok }）
+let storyAutoTimer = 0;      // スタンプ後、数秒で 自動で つぎへ
 const SKEY = 'nb_story';   // すすみ（スタンプ ずみの 章）は この たんまつに おぼえる（nb_hanbun とは べつ）
 let storyProg = { done: [] };
-try{ const v = JSON.parse(localStorage.getItem(SKEY)); if(v && Array.isArray(v.done)) storyProg = { done: v.done.filter(n => [0, 1, 2, 3].includes(n)) }; }catch(e){}
+try{ const v = JSON.parse(localStorage.getItem(SKEY)); if(v && Array.isArray(v.done)) storyProg = { done: v.done.filter(n => [0, 1, 2, 3, 4, 5, 6, 7, 8].includes(n)) }; }catch(e){}
 function storySaveProg(){ try{ localStorage.setItem(SKEY, JSON.stringify(storyProg)); }catch(e){} }
 function tellGame(m){ try{ if(window.parent && window.parent !== window) window.parent.postMessage(Object.assign({ from:'hanbun' }, m), '*'); }catch(e){} }
 function goalMet(){
@@ -618,6 +620,7 @@ function up(e){
   if(overHome(c)){ goHome(c); return; }
   // うごかさずに ポンと おした：2かい つづけて おすと（ダブルタップ）0.1 に パラパラ
   if(Math.hypot(q.x - q.sx, q.y - q.sy) < 12 && now0() - q.t < 400){
+    if(STORY && storyTapHit(c)) return;   // ストーリーの「タップで こたえる」課題
     const t = now0();
     if(lastTap && lastTap.c === c && t - lastTap.t < 420){ lastTap = null; scatter(c); }
     else lastTap = { c, t };
@@ -747,14 +750,20 @@ function storyZones(sq, mi){
 }
 function storyStage(vals){
   chars = vals.map((v, i, a) => mk(v, W*(i + 1)/(a.length + 1), now0()));
-  bs = targetBs(); holdUntil = 0; storyOps = [];
+  bs = targetBs(); holdUntil = 0; storyOps = []; storyTap = null; storyPrevKey = storyKey();
+}
+function storyTapSet(values, hint, ok){ storyTap = { values, hint, ok }; }
+function storyTapHit(c){
+  if(!storyTap || storyDone || storyBusy) return false;
+  if(storyTap.values.includes(hund(c.v))){ const ok = storyTap.ok; storyTap = null; ok(); return true; }
+  c.shake = now0(); say('ちがうよ', storyTap.hint || 'よく みてね', true); return true;
 }
 function storySkip(on, label){ const sk = document.getElementById('gskip'); sk.style.display = on ? '' : 'none'; sk.textContent = label || 'もどす'; }
 function storyStart(){
   document.getElementById('gnext').addEventListener('click', storyNext);
   document.getElementById('gskip').addEventListener('click', storySkipBtn);
   storySkip(false);
-  const next = [0, 1, 2, 3].find(i => !storyProg.done.includes(i));
+  const next = [0, 1, 2, 3, 4, 5, 6, 7, 8].find(i => !storyProg.done.includes(i));
   if(storyProg.done.length){   // スタンプが あれば 入り口で えらべる（つづき／はじめから）
     storySelect = true;
     storySkip(true, 'はじめから');
@@ -793,24 +802,41 @@ function storyChStart(ch){
     storyStep = 30; storyStage([6]); storyZones(false, true);
     say('ながしかくクラブ！', '6 を「ミラー」へ ドラッグすると ふえるよ', true);
     storyCard('🟦 ながしかくクラブ：ミラーで ふやして 12 を つくろう', '');
+  } else if(ch === 4){
+    storyStep = 40; storyStage([6]);
+    say('きすう・ぐうすうクラブ！', '6 を はんぶんこ して みよう', true);
+    storyCard('🟢 きすう・ぐうすうクラブ：はんぶんこ で たしかめよう', '');
+  } else if(ch === 5){
+    storyStep = 50; storyStage([4]); storyZones(false, true);
+    say('かがみの ダブルクラブ！', '4 を ミラーで ふやして 8 を 作ろう', true);
+    storyCard('🪞 ダブルクラブ：ミラーで ふやして 8・12・16', '');
+  } else if(ch === 6){
+    storyStep = 60; storyStage([7.5]);
+    say('フルーツサラダ！', '7.5 を はんぶんこ して みよう', true);
+    storyCard('🍓 フルーツサラダ：小数を わけたり あつめたり', '');
+  } else if(ch === 7){
+    storyStep = 70; storyStage([14, 16, 18]); storyTapSet([1600], 'ヒント：ぐうすう・しかくに なれる・10と 20の あいだ', storyDetective1);
+    say('かずたんてい！', 'ヒントで あててね', true);
+    storyCard('🕵️ かずたんてい：ぐうすう／しかくに なれる／10より 大きく 20より 小さい のは どれ？ タップしてね', '');
+  } else if(ch === 8){
+    storyStep = 80; storyStage([4]); storyZones(true, false);
+    say('クラブピクニック！', '16 は どの クラブにも 入れるかな？', true);
+    storyCard('🎉 クラブピクニック：16 の とくいわざを ぜんぶ 見せよう。まず 4 を しかく', '');
   }
+}
+function storyDetective1(){
+  storyTask = 1; say('16 だ！ たんてい 成功', 'つぎは 作る もんだい', true);
+  storyPause(() => { storyStage([4]); storyZones(true, false); storyCard('🕵️ つぎ：16 が いない。4 を しかくして 16 を 作って！', ''); });
 }
 function storyNext(){
   if(storyAllDone){ location.replace('hanbun.html?embed=1&v=' + Date.now()); return; }
-  if(storySelect){ storyChStart([0, 1, 2, 3].find(i => !storyProg.done.includes(i))); return; }
-  if(storyDone){ if(storyCh < 3) storyChStart(storyCh + 1); else location.replace('hanbun.html?embed=1&v=' + Date.now()); return; }
+  if(storySelect){ storyChStart([0, 1, 2, 3, 4, 5, 6, 7, 8].find(i => !storyProg.done.includes(i))); return; }
+  if(storyDone){ if(storyCh < 8) storyChStart(storyCh + 1); else location.replace('hanbun.html?embed=1&v=' + Date.now()); return; }
   if(storyCh === 0 && storyStep === 0){
-    storyStep = 1;
-    storyCard('ホストの 5 が おてほんを みせるよ', '');
-    say('わたしの とくいわざ', 'はんぶんこ！', true);
-    const host = chars.find(c => hund(c.v) === 500) || chars[0];
-    setTimeout(() => { if(host && chars.includes(host)) split(host); }, 700);
-    setTimeout(() => {
-      if(chars.length >= 2) merge(chars[0], chars[1]);
-      say('くっつけると もとどおり', 'つぎは あなたの ばん', true);
-      storyStep = 2; storyBase = storyKey(); storyBaseSum = storySum();
-      storyCard('🎯 あなたの ばん：すきな かずを だして、とくいわざを みせてね', '');
-    }, 2600);
+    // お手本は しない（後の 章にも 無いので 一貫させる）。はじめたら すぐ あなたの 番
+    storyStep = 2; storyBase = storyKey(); storyBaseSum = storySum();
+    say('クラブまつり！', 'すきな かずで とくいわざを みせてね', true);
+    storyCard('🎯 あなたの ばん：すきな かずを だして、とくいわざを みせてね', '');
   }
 }
 function storyPause(fn){ storyBusy = true; clearTimeout(storyTimer); storyTimer = setTimeout(() => { storyBusy = false; fn(); }, 2300); }
@@ -820,9 +846,21 @@ function storyReset(){
   if(storyCh === 1){ storyStage([SQ_T[storyTask][0]]); say('もどしたよ', SQ_T[storyTask][0] + ' を しかく してね', true); }
   else if(storyCh === 2){ storyStage([]); say('もどしたよ', storyTask === 0 ? '1,2,3,4,5 の じゅんに ならべてね' : '5,4,3,2,1 の じゅんに ならべてね', true); }
   else if(storyCh === 3){ storyStage([RECT_T[storyTask][0]]); storyZones(false, storyTask < 3); say('もどしたよ', storyTask < 3 ? 'ミラーで ふやして 12 を つくろう' : '12 を はんぶんこ してね', true); }
+  else if(storyCh === 4){ storyStage([[6, 7, 8, 9][storyTask]]); say('もどしたよ', 'はんぶんこ してね', true); }
+  else if(storyCh === 5){ storyStage([storyTask === 3 ? 2.5 : 4]); storyZones(false, true); say('もどしたよ', 'ミラーで ふやしてね', true); }
+  else if(storyCh === 6){ if(storyTask <= 2) storyStage([7.5]); else if(storyTask === 3) storyStage([1]); else { storyStage([2.75, 2.5]); storyTapSet([275], '水の 高さが 高いほうが 大きいよ', () => storyStamp()); } say('もどしたよ', '', true); }
+  else if(storyCh === 7){ if(storyTask === 0){ storyStage([14, 16, 18]); storyTapSet([1600], 'ヒント：ぐうすう・しかくに なれる・10と 20の あいだ', storyDetective1); } else { storyStage([4]); storyZones(true, false); } say('もどしたよ', '', true); }
+  else if(storyCh === 8){ if(storyTask === 0){ storyStage([4]); storyZones(true, false); } else if(storyTask === 1){ storyStage([16]); storyZones(false, false); } else if(storyTask === 2){ storyStage([4]); storyZones(false, true); } else { storyStage([8]); storyZones(false, true); } say('もどしたよ', '', true); }
 }
 function storySquareDone(from, to){
-  if(!STORY || storyCh !== 1 || storyDone || storyBusy) return;
+  if(!STORY || storyDone || storyBusy) return;
+  if(storyCh === 7 && storyTask === 1 && to === 16){ storyStamp(); return; }
+  if(storyCh === 8 && storyTask === 0 && to === 16){
+    storyTask = 1; say('しかくクラブ ✓', '4 の しかく で 16！', true);
+    storyPause(() => { storyStage([16]); storyZones(false, false); say('つぎ：ぐうすうクラブ。16 を はんぶんこ', '', true); storyCard('🎉 つぎ：16 を はんぶんこ してね（ぐうすう）', ''); });
+    return;
+  }
+  if(storyCh !== 1) return;
   if(from === SQ_T[storyTask][0] && to === SQ_T[storyTask][1]){
     storyTask++;
     if(storyTask < SQ_T.length){ say(fmt(to) + ' できた！', 'やった！', true); storyPause(() => { storyStage([SQ_T[storyTask][0]]); say('つぎは ' + SQ_T[storyTask][0] + ' を しかく', 'しかくゾーンへ もっていってね', true); }); }
@@ -836,7 +874,10 @@ function storyStamp(){
   burst(W/2, H*0.4, 60, true);
   const n = storyProg.done.length;
   say('できた！ スタンプ ' + n + 'こめ ゲット ⭐', storyCh === 1 ? 'しかく の れつ：1, 4, 9, 16, 25！' : 'すごい！', true);
-  storyCard('⭐ スタンプ ' + n + 'こめ！' + (storyCh === 3 ? ' ここまで ぜんぶ クリア 🎉 つづきは おたのしみ' : ''), storyCh < 3 ? 'つぎの クラブへ ▶' : 'おわる ▶');
+  storyCard(storyCh === 8 ? '🎉 ぜんぶ クリア！ クラブまつり かんりょう！' : '⭐ スタンプ ' + n + 'こめ！', storyCh < 8 ? 'つぎの クラブへ ▶' : 'おわる ▶');
+  clearTimeout(storyAutoTimer);
+  const chS = storyCh;
+  storyAutoTimer = setTimeout(() => { if(storyDone && storyCh === chS && !storySelect) storyNext(); }, 3600);   // ボタンを 押さなくても 数秒で つぎへ
 }
 const storyKey = () => chars.map(c => hund(c.v)).sort((a, b) => a - b).join(',');
 const storySum = () => chars.reduce((a, c) => a + hund(c.v), 0);
@@ -853,12 +894,49 @@ function storyCheck(){
     const k = storyKey();
     if(k === '100,200,300,400,500') storyPrevOrder = chars.map(c => c.v);
     else if(storyPrevKey === '100,200,300,400,500' && k === '1500'){
-      const want = storyTask === 0 ? '1,2,3,4,5' : '5,4,3,2,1';
-      if(storyPrevOrder.join(',') === want){
-        if(storyTask === 0){ storyTask = 1; storyPrevOrder = []; say('15 たんじょう！', 'やった！ 15 が できた', true); storyPause(() => { storyStage([]); say('こんどは 5,4,3,2,1 の じゅんに ならべて みよう', '15 が できるかな', true); storyCard('🔺 つぎ：5,4,3,2,1 の じゅんに ならべて、なわで かこんでね', ''); }); }
-        else storyStamp();
-      } else say('15 になった！', 'でも じゅんばん が ちがうみたい。「もどす」で やりなおせるよ', true);
+      if(storyPrevOrder.join(',') === '1,2,3,4,5') storyStamp();
+      else say('15 になった！', 'でも じゅんばん が ちがうみたい。「もどす」で やりなおせるよ', true);
     }
+    storyPrevKey = k; return;
+  }
+  if(storyCh === 4){
+    const G = [6, 7, 8, 9][storyTask], k = storyKey(), h = G*50;
+    if(storyPrevKey === String(G*100) && k === h + ',' + h){
+      const odd = G % 2 === 1;
+      say(G + (odd ? ' は きすう！' : ' は ぐうすう！'), odd ? '.5 が うまれた（' + fmt(G/2) + ' と ' + fmt(G/2) + '）' : 'せいすう どうしに われた（' + (G/2) + ' と ' + (G/2) + '）', true);
+      storyTask++;
+      if(storyTask < 4) storyPause(() => { storyStage([[6, 7, 8, 9][storyTask]]); say('つぎは ' + [6, 7, 8, 9][storyTask] + ' を はんぶんこ', '', true); });
+      else storyStamp();
+    }
+    storyPrevKey = k; return;
+  }
+  if(storyCh === 5){
+    const T = [[800, 1], [1200, 2], [1600, 3], [500, 1]][storyTask], k = storyKey();
+    if(k === String(T[0]) && storyOps.filter(o => o === 'mirror').length >= T[1]){
+      say(fmt(T[0]/100) + ' できた！', 'やった！', true);
+      storyTask++;
+      if(storyTask === 1 || storyTask === 2) storyPause(() => { storyStage([4]); say('つぎは ' + fmt([[800, 1], [1200, 2], [1600, 3], [500, 1]][storyTask][0]/100) + ' を 作ろう', 'ミラーで ふやしてね', true); });
+      else if(storyTask === 3) storyPause(() => { storyStage([2.5]); say('さいご：2.5 を ミラーで ふやして 5 に', '', true); });
+      else storyStamp();
+    }
+    return;
+  }
+  if(storyCh === 6){
+    const k = storyKey();
+    if(storyTask === 0 && storyPrevKey === '750' && k === '375,375'){ say('7.5 が 3.75 と 3.75！', 'やった！', true); storyTask = 1; storyPause(() => { storyStage([7.5]); say('つぎ：7 ＋ 0.5 で 7.5 を 作ってね', 'おうちと ボタンを つかってね', true); storyCard('🍓 つぎ：7 ＋ 0.5 で 7.5', ''); }); }
+    else if(storyTask === 1 && k === '50,700'){ say('7 ＋ 0.5 ＝ 7.5！', 'やった！', true); storyTask = 2; storyPause(() => { storyStage([7.5]); say('つぎ：5 ＋ 2.5 で 7.5 を 作ってね', '', true); storyCard('🍓 つぎ：5 ＋ 2.5 で 7.5', ''); }); }
+    else if(storyTask === 2 && k === '250,500'){ say('5 ＋ 2.5 ＝ 7.5！', 'やった！', true); storyTask = 3; storyPause(() => { storyStage([1]); say('つぎ：1 を パラパラ（ダブルタップ）して 0.1 に', '', true); storyCard('🍓 つぎ：1 を パラパラ → 0.1 を あつめて 1 に もどしてね', ''); }); }
+    else if(storyTask === 3){
+      if(k === '10,10,10,10,10,10,10,10,10,10' && !storyOps.includes('scat')) storyOps.push('scat');
+      else if(k === '100' && storyOps.includes('scat')){ say('0.1 が 10こ で 1！', 'やった！', true); storyTask = 4; storyPause(() => { storyStage([2.75, 2.5]); storyTapSet([275], '水の 高さが 高いほうが 大きいよ', () => storyStamp()); say('さいご：どっちが 大きい？', '大きいほうを タップしてね', true); storyCard('🍓 さいご：2.75 と 2.5、どっちが 大きい？ タップしてね', ''); }); }
+    }
+    storyPrevKey = k; return;
+  }
+  if(storyCh === 8){
+    const k = storyKey();
+    if(storyTask === 1 && storyPrevKey === '1600' && k === '800,800'){ say('ぐうすうクラブ ✓', '8 と 8 に われた！', true); storyTask = 2; storyPause(() => { storyStage([4]); storyZones(false, true); say('つぎ：ながしかくクラブ。4 を ミラーで 3かい ふやして 16', '', true); storyCard('🎉 つぎ：4 を 4つ にして 16（ながしかく）', ''); }); }
+    else if(storyTask === 2 && k === '1600' && storyOps.filter(o => o === 'mirror').length >= 3){ say('ながしかくクラブ ✓', '4 が 4つ で 16！', true); storyTask = 3; storyPause(() => { storyStage([8]); say('さいご：ダブルクラブ。8 を ミラーで ふやして 16', '', true); storyCard('🎉 さいご：8 を ミラーで ふやして 16（ダブル）', ''); }); }
+    else if(storyTask === 3 && k === '1600' && storyOps.filter(o => o === 'mirror').length >= 1) storyStamp();
     storyPrevKey = k; return;
   }
   if(storyCh === 3){
@@ -896,7 +974,7 @@ window.hanbun = { chars: () => chars.map(c => c.v), add: v => addChar(v), split:
   at: i => { const c = chars[i], r = rect(c); return { x: c.x, y: r.y + r.h/2, w: r.w, h: r.h }; }, bs: () => bs, say: () => sayBig.textContent + '｜' + saySub.textContent,
   water: i => chars[i].w, goalDone: () => goalDone, mergeMany: idx => mergeMany(idx.map(i => chars[i])), lastTalk: () => lastTalk, preview: () => pinch && pinch.pv ? [pinch.pv.a, pinch.pv.b].map(c => { const r = rect(c); return { v: c.v, x: c.x, y: r.y + r.h/2 }; }) : null, clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]),
   story: () => STORY ? { ch: storyCh, step: storyStep, task: storyTask, done: storyDone, busy: storyBusy, select: storySelect, prog: storyProg.done.slice() } : null, storyNext: () => storyNext(),
-  square: i => applySquare(chars[i]), mirror: i => applyMirror(chars[i]) };
+  square: i => applySquare(chars[i]), mirror: i => applyMirror(chars[i]), tap: i => storyTapHit(chars[i]) };
 </script>
 </body>
 </html>

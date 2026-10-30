@@ -227,7 +227,7 @@ module.exports = {
     t.eq(r.e, 'れい てん れい いち', 'よみあげ が ちがう');
   },
 
-  'ストーリー（ためし）：クラブまつりの 導入。おてほん（5→2.5と2.5→5）→ じゆうに わけると スタンプ。nb_hanbun は かわらない': async t => {
+  'ストーリー（ためし）：クラブまつりの 導入。はじめから じゆうに わけると スタンプ（お手本なし）。nb_hanbun は かわらない': async t => {
     const p = await t.open({ storage: { nb_hanbun: JSON.stringify({ chars: [3] }) } });
     await tapTab(p, 'story');
     await p.waitForFunction(() => { const f = document.querySelector('iframe[src^="hanbun.html"]'); return f && f.contentWindow && f.contentWindow.hanbun && f.contentWindow.hanbun.story(); }, null, { timeout: 5000 });
@@ -273,10 +273,6 @@ module.exports = {
     t.eq(await vals(f), [], 'ステップ：からっぽ から ではない');
     await f.evaluate(() => { for(const v of [1, 2, 3, 4, 5]) hanbun.add(v); });
     await f.evaluate(() => hanbun.mergeMany([0, 1, 2, 3, 4]));
-    t.eq((await f.evaluate(() => hanbun.story())).task, 1, 'ステップ：15 が できない');
-    await f.waitForFunction(() => hanbun.chars().length === 0, null, { timeout: 5000 });
-    await f.evaluate(() => { for(const v of [5, 4, 3, 2, 1]) hanbun.add(v); });
-    await f.evaluate(() => hanbun.mergeMany([0, 1, 2, 3, 4]));
     t.eq((await f.evaluate(() => hanbun.story())).done, true, 'ステップ：スタンプが つかない');
     await f.evaluate(() => hanbun.storyNext());
     t.eq(await vals(f), [6], 'ながしかく：6 から ではない');
@@ -311,5 +307,66 @@ module.exports = {
     const s2 = await f.evaluate(() => hanbun.story());
     t.eq([s2.ch, s2.step, s2.prog.length], [0, 0, 0], 'はじめからに ならない');
     t.eq(await f.evaluate(() => JSON.parse(localStorage.getItem('nb_story')).done), [], 'nb_story が けえていない');
+  },
+
+  'ストーリー 後半：第4章〜フィナーレ（ピクニック）が スタンプまで すすむ': async t => {
+    const p = await t.open({ storage: { nb_story: JSON.stringify({ done: [0, 1, 2, 3] }) } });
+    await tapTab(p, 'story');
+    await p.waitForFunction(() => { const f = document.querySelector('iframe[src^="hanbun.html"]'); return f && f.contentWindow && f.contentWindow.hanbun && f.contentWindow.hanbun.story(); }, null, { timeout: 5000 });
+    const f = p.frames().find(x => x.url().includes('story=1'));
+    await f.waitForTimeout(300);
+    await f.evaluate(() => hanbun.storyNext());
+    t.eq((await f.evaluate(() => hanbun.story())).ch, 4, '第4章から はじまらない');
+    for(const [v, nx] of [[6, 7], [7, 8], [8, 9], [9, 0]]){
+      await f.evaluate(() => hanbun.split(0));
+      if(nx) await f.waitForFunction(n => hanbun.chars()[0] === n, nx, { timeout: 5000 });
+    }
+    t.eq((await f.evaluate(() => hanbun.story())).done, true, 'きすう・ぐうすう：スタンプが つかない');
+    await f.evaluate(() => hanbun.storyNext());
+    t.eq(await vals(f), [4], 'ダブル：4 から ではない');
+    await f.evaluate(() => hanbun.mirror(0));
+    await f.evaluate(() => hanbun.merge(0, 1));
+    await f.waitForFunction(() => hanbun.chars()[0] === 4 && !hanbun.story().busy, null, { timeout: 5000 });
+    await f.evaluate(() => { hanbun.mirror(0); hanbun.mirror(0); });
+    await f.evaluate(() => hanbun.mergeMany([0, 1, 2]));
+    await f.waitForFunction(() => hanbun.chars()[0] === 4 && !hanbun.story().busy, null, { timeout: 5000 });
+    await f.evaluate(() => { hanbun.mirror(0); hanbun.mirror(0); hanbun.mirror(0); });
+    await f.evaluate(() => hanbun.mergeMany([0, 1, 2, 3]));
+    await f.waitForFunction(() => hanbun.chars()[0] === 2.5, null, { timeout: 5000 });
+    await f.evaluate(() => hanbun.mirror(0));
+    await f.evaluate(() => hanbun.merge(0, 1));
+    t.eq((await f.evaluate(() => hanbun.story())).done, true, 'ダブル：スタンプが つかない');
+    await f.evaluate(() => hanbun.storyNext());
+    t.eq(await vals(f), [7.5], 'サラダ：7.5 から ではない');
+    await f.evaluate(() => hanbun.split(0));
+    await f.waitForFunction(() => hanbun.chars()[0] === 7.5 && !hanbun.story().busy, null, { timeout: 5000 });
+    await f.evaluate(() => { hanbun.clear(); hanbun.add(7); hanbun.add(0.5); });
+    await f.waitForFunction(() => hanbun.chars()[0] === 7.5 && !hanbun.story().busy, null, { timeout: 5000 });
+    await f.evaluate(() => { hanbun.clear(); hanbun.add(5); hanbun.add(2.5); });
+    await f.waitForFunction(() => hanbun.chars()[0] === 1, null, { timeout: 5000 });
+    await f.evaluate(() => hanbun.scatter(0));
+    await f.waitForTimeout(400);
+    await f.evaluate(() => hanbun.mergeMany([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]));
+    await f.waitForFunction(() => hanbun.chars()[0] === 2.75, null, { timeout: 5000 });
+    await f.evaluate(() => hanbun.tap(0));
+    t.eq((await f.evaluate(() => hanbun.story())).done, true, 'サラダ：スタンプが つかない');
+    await f.evaluate(() => hanbun.storyNext());
+    await f.evaluate(() => hanbun.tap(1));
+    await f.waitForFunction(() => hanbun.chars()[0] === 4, null, { timeout: 5000 });
+    await f.evaluate(() => hanbun.square(0));
+    t.eq((await f.evaluate(() => hanbun.story())).done, true, 'たんてい：スタンプが つかない');
+    await f.evaluate(() => hanbun.storyNext());
+    t.eq((await f.evaluate(() => hanbun.story())).ch, 8, 'フィナーレに すすまない');
+    await f.evaluate(() => hanbun.square(0));
+    await f.waitForFunction(() => !hanbun.story().busy, null, { timeout: 5000 });
+    await f.evaluate(() => hanbun.split(0));
+    await f.waitForFunction(() => hanbun.chars()[0] === 4, null, { timeout: 5000 });
+    await f.evaluate(() => { hanbun.mirror(0); hanbun.mirror(0); hanbun.mirror(0); });
+    await f.evaluate(() => hanbun.mergeMany([0, 1, 2, 3]));
+    await f.waitForFunction(() => hanbun.chars()[0] === 8 && !hanbun.story().busy, null, { timeout: 5000 });
+    await f.evaluate(() => hanbun.mirror(0));
+    await f.evaluate(() => hanbun.merge(0, 1));
+    t.eq((await f.evaluate(() => hanbun.story())).done, true, 'ピクニック：スタンプが つかない');
+    t.eq(await f.evaluate(() => hanbun.story().prog), [0, 1, 2, 3, 4, 5, 6, 7, 8], 'スタンプ帳が そろわない');
   },
 };
