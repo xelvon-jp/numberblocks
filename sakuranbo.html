@@ -131,7 +131,11 @@ function layout(){
   gy = H - 64;
   const sp = spec(P.a);
   bs = Math.max(15, Math.min(42, (W * 0.40) / sp.cols, (H * 0.55) / sp.rows));
-  for(const c of chars){ c.tx = homeX(c.role); }
+  for(const c of chars){
+    c.tx = homeX(c.role); c.ty = gy;
+    if(c.x < -60 || c.x > W + 60) c.x = c.tx;
+    if(c.y < -40 || c.y > H + 40) c.y = gy;
+  }
 }
 function homeX(role){
   if(role === 'a') return W * 0.40;
@@ -349,7 +353,7 @@ function drawFrame(){
       ctx.font = '900 46px "Hiragino Maru Gothic ProN",sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.lineJoin = 'round'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 7;
-      const mx = (fr.r + br.l) / 2, my = gy - bs * 2.4;
+      const mx = (fr.r + br.l) / 2, my = (br.t + br.b) / 2;
       ctx.strokeText('−', mx, my); ctx.fillStyle = '#333'; ctx.fillText('−', mx, my);
       ctx.restore();
     }
@@ -393,7 +397,7 @@ requestAnimationFrame(drawFrame);
 
 // テスト・デバッグ用
 window.sakura = {
-  state: () => ({ a: P.a, b: P.b, rest: P.rest, r: P.r, ans: P.ans, step, tree: store.tree, total: store.total,
+  state: () => ({ a: P.a, b: P.b, rest: P.rest, r: P.r, ans: P.ans, step, tree: store.tree, total: store.total, gy: Math.round(gy), stageH: Math.round(H),
                   eqAns: $('eqAns').textContent, predQ: $('predQ').textContent,
                   frame: !!frameRect(), minus: minusShown(),
                   pred: $('predict').classList.contains('on'), choices: predChoices.slice(),

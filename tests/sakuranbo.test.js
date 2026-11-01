@@ -108,4 +108,16 @@ module.exports = {
     await f.waitForFunction(() => sakura.state().step === 'done', null, { timeout: 5000 });
     t.eq((await st(f)).eqAns, String(s.ans));
   },
+
+  'よそう パネルで ステージが 縮んでも キャラは 地面から ずれない': async t => {
+    const { f } = await openSakura(t);
+    await f.evaluate(() => sakura.split());
+    await f.waitForTimeout(800);
+    const s = await st(f);
+    t.ok(s.chars.length >= 3, 'キャラが たりない ' + JSON.stringify(s.chars));
+    for(const c of s.chars){
+      t.ok(c.y > 0 && c.y <= s.stageH, 'キャラが 画面の 外に いる v=' + c.v + ' y=' + c.y + ' stageH=' + s.stageH);
+      t.ok(Math.abs(c.y - s.gy) <= 2, 'キャラの 足もとが 地面と ずれている v=' + c.v + ' y=' + c.y + ' gy=' + s.gy);
+    }
+  },
 };
