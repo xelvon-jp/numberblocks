@@ -21,7 +21,8 @@ module.exports = {
     t.ok(s.a >= 11 && s.a <= 18, 'a が 11〜18 でない ' + s.a);
     t.ok(s.b > s.a - 10 && s.b <= 9, 'くり下がりに なっていない a=' + s.a + ' b=' + s.b);
     t.eq(s.rest, s.a - 10); t.eq(s.r, 10 - s.b); t.eq(s.ans, s.a - s.b);
-    t.eq(s.chars.map(c => c.v), [s.a]);
+    t.eq(s.chars.map(c => c.v), [s.a, s.b], 'はじめから a と b が いない');
+    t.ok(s.frame && s.minus, 'はじめから 枠と − が ない');
     t.eq(s.eqAns, '？');
   },
 
@@ -33,16 +34,18 @@ module.exports = {
     t.eq(s.step, 'predict');
     t.ok(s.frame, '引かれる数の 枠が 出ていない');
     t.ok(s.minus, '引く数との あいだの − が 出ていない');
-    t.ok(s.predQ.includes('ひいたら'), 'よそうの 文が ひいたら でない: ' + s.predQ);
-    t.ok(s.pred, 'よそう パネルが 出ていない');
-    t.ok(s.choices.includes(s.r), 'よそうの こうほに せいかいが ない ' + JSON.stringify(s.choices));
+    t.ok(s.write, '手書き パネルが 出ていない');
+    t.ok(s.writeQ.includes('こたえは いくつ'), '手書きの もんが おかしい: ' + s.writeQ);
     t.eq(s.chars.map(c => c.role).sort().join(','), 'b,rest,ten');
-    // まちがった よそう → すすまない
-    const wrong = s.choices.find(v => v !== s.r);
+    // 10 と 残りが 隣り合っている（あいだが あきすぎない）
+    const ten = s.chars.find(c => c.role === 'ten'), rest = s.chars.find(c => c.role === 'rest');
+    t.ok(rest.x - rest.w / 2 - (ten.x + ten.w / 2) <= 14, '10 と 残りの あいだが あきすぎ ' + JSON.stringify(s.chars));
+    // まちがった こたえ → すすまない
+    const wrong = s.ans === 9 ? 8 : s.ans + 1;
     t.eq(await f.evaluate(v => sakura.predict(v), wrong), false);
     t.eq((await st(f)).step, 'predict');
-    // せいかいの よそう → とる へ
-    t.eq(await f.evaluate(v => sakura.predict(v), s.r), true);
+    // せいかいの こたえ → とる へ
+    t.eq(await f.evaluate(v => sakura.predict(v), s.ans), true);
     t.eq((await st(f)).step, 'take');
     await f.evaluate(() => sakura.take());
     await f.waitForFunction(() => sakura.state().step === 'merge', null, { timeout: 4000 });
@@ -66,7 +69,7 @@ module.exports = {
     await f.evaluate(() => sakura.split());
     await f.evaluate(() => sakura.reset());
     s = await st(f);
-    t.eq([s.a, s.b], ab); t.eq(s.step, 'ask'); t.eq(s.frame, false);
+    t.eq([s.a, s.b], ab); t.eq(s.step, 'ask'); t.ok(s.frame, 'もどしても 枠が ない');
   },
 
   'ほんものの ピンチ（ゆび 2ほん）でも わけられる': async t => {
@@ -90,7 +93,7 @@ module.exports = {
     await f.evaluate(() => sakura.split());
     await f.waitForTimeout(450);
     const s = await st(f);
-    await f.evaluate(v => sakura.predict(v), s.r);
+    await f.evaluate(v => sakura.predict(v), s.ans);
     const dragTo = async (fromRole, toRole) => {
       await f.evaluate(({ fr, to }) => {
         const cs = sakura.state().chars;
@@ -119,5 +122,25 @@ module.exports = {
       t.ok(c.y > 0 && c.y <= s.stageH, 'キャラが 画面の 外に いる v=' + c.v + ' y=' + c.y + ' stageH=' + s.stageH);
       t.ok(Math.abs(c.y - s.gy) <= 2, 'キャラの 足もとが 地面と ずれている v=' + c.v + ' y=' + c.y + ' gy=' + s.gy);
     }
+  },
+
+  'こたえを ゆびで 書くと よみとって すすむ（手書き）': async t => {
+    const { f } = await openSakura(t);
+    await f.evaluate(() => sakura.split());
+    await f.waitForTimeout(350);
+    const s = await st(f);
+    await f.evaluate(d => {
+      const cvEl = document.getElementById('inkCv'), r = cvEl.getBoundingClientRect(), m = 0.2;
+      const paths = Ink.BASE[d][0].map(stroke => stroke.map(([x, y]) =>
+        [r.left + r.width * (m + (1 - 2 * m) * x), r.top + r.height * (m + (1 - 2 * m) * y)]));
+      for(const path of paths){
+        const ev = (type, x, y) => cvEl.dispatchEvent(new PointerEvent(type, { pointerId: 31, bubbles: true, cancelable: true, isPrimary: true, clientX: x, clientY: y }));
+        ev('pointerdown', path[0][0], path[0][1]);
+        for(let i = 1; i < path.length; i++) ev('pointermove', path[i][0], path[i][1]);
+        ev('pointerup', path[path.length - 1][0], path[path.length - 1][1]);
+      }
+    }, s.ans);
+    await f.waitForFunction(() => sakura.state().step === 'take', null, { timeout: 5000 });
+    t.eq((await st(f)).lastInk, s.ans);
   },
 };
