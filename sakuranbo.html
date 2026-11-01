@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-512.png">
+<title>さくらんぼ の へや（ためし）</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { width:100%; height:100%; overflow:hidden; background:#ffeef2;
+               overscroll-behavior:none; touch-action:none; user-select:none; -webkit-user-select:none;
+               font-family:"Hiragino Maru Gothic ProN","Hiragino Sans",sans-serif; }
+  #app { display:flex; flex-direction:column; height:100%; }
+  /* ── うえ：しき カード と さくらんぼの き ── */
+  #top { display:flex; align-items:center; gap:8px; padding:calc(6px + env(safe-area-inset-top)) 10px 2px; }
+  #eq { flex:1; background:#fff; border:3px solid #e2543e; border-radius:16px; padding:6px 4px;
+        text-align:center; font-weight:900; color:#333; font-size:30px; letter-spacing:1px;
+        box-shadow:0 2px 0 rgba(0,0,0,0.08); }
+  #eqAns { color:#d99a06; }
+  #eqAns.done { color:#e2543e; }
+  #treeBox { position:relative; width:86px; height:74px; flex:none; }
+  #treeFace { position:absolute; left:50%; top:26px; transform:translateX(-50%); font-size:44px; line-height:1; }
+  #cherries { position:absolute; inset:0; }
+  #cherries .ch { position:absolute; font-size:14px; transform:translate(-50%,-50%); animation:pop .35s ease; }
+  @keyframes pop { 0% { transform:translate(-50%,-50%) scale(0.2); } 70% { transform:translate(-50%,-50%) scale(1.35); } }
+  #treeCnt { position:absolute; left:0; right:0; bottom:-4px; text-align:center; font-size:11px; font-weight:700; color:#a33; }
+  /* ── さくらんぼ ず ── */
+  #dia { display:flex; flex-direction:column; align-items:center; padding:2px 0 0; }
+  #diaRoot { background:#e2543e; color:#fff; font-weight:900; font-size:20px; min-width:52px; text-align:center;
+             padding:3px 10px; border-radius:12px; }
+  #diaSvg { width:170px; height:30px; display:block; }
+  #diaRow { display:flex; gap:64px; margin-top:-4px; }
+  .diaC { width:52px; height:52px; border-radius:50%; background:#fff; border:3px solid #e2543e;
+          display:flex; align-items:center; justify-content:center; font-weight:900; font-size:22px; color:#e2543e; }
+  .diaC.filled { background:#ffe3e3; }
+  #lines { display:flex; gap:14px; margin-top:4px; font-size:16px; font-weight:800; color:#555; min-height:22px; }
+  #lines .fill { color:#e2543e; }
+  /* ── せつめい ── */
+  #say { text-align:center; padding:4px 10px 2px; }
+  #sayBig { font-size:21px; font-weight:900; color:#333; }
+  /* ── よそう パネル ── */
+  #predict { display:none; margin:4px 12px 0; background:#fff8e1; border:3px solid #f2b705; border-radius:16px;
+             padding:8px; text-align:center; }
+  #predict.on { display:block; }
+  #predQ { font-size:18px; font-weight:900; color:#7a5200; margin-bottom:8px; }
+  #predBtns { display:flex; gap:14px; justify-content:center; }
+  .predBtn { width:86px; height:60px; border-radius:14px; border:3px solid #f2b705; background:#fff;
+             font-size:30px; font-weight:900; color:#333; cursor:pointer; }
+  .predBtn.ng { animation:shk .4s ease; border-color:#c00; color:#c00; }
+  @keyframes shk { 25% { transform:translateX(-7px); } 75% { transform:translateX(7px); } }
+  /* ── ぶたい ── */
+  #stage { flex:1; position:relative; min-height:0; }
+  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  /* ── した ── */
+  #bar { display:flex; gap:10px; padding:8px 12px calc(10px + env(safe-area-inset-bottom)); }
+  .barBtn { flex:1; height:52px; border-radius:14px; border:3px solid #999; background:#fff; font-size:17px;
+            font-weight:900; color:#555; cursor:pointer; font-family:inherit; }
+  #bNext { display:none; border-color:#e2543e; background:#e2543e; color:#fff; flex:2; }
+  #bNext.on { display:block; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <div id="eq"><span id="eqA">13</span> − <span id="eqB">8</span> ＝ <span id="eqAns">？</span></div>
+    <div id="treeBox"><div id="treeFace">🌳</div><div id="cherries"></div><div id="treeCnt">🍒 0こ</div></div>
+  </div>
+  <div id="dia">
+    <div id="diaRoot">13</div>
+    <svg id="diaSvg" viewBox="0 0 170 30"><path d="M85 2 C 70 14, 52 18, 38 27" stroke="#58a34c" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M85 2 C 100 14, 118 18, 132 27" stroke="#58a34c" stroke-width="4" fill="none" stroke-linecap="round"/></svg>
+    <div id="diaRow"><div class="diaC" id="cL">？</div><div class="diaC" id="cR">？</div></div>
+    <div id="lines"><span id="line1">10 − 8 ＝ <b>□</b></span><span id="line2"><b>□</b> ＋ 3 ＝ <b>□</b></span></div>
+  </div>
+  <div id="say"><div id="sayBig"></div></div>
+  <div id="predict"><div id="predQ"></div><div id="predBtns"></div></div>
+  <div id="stage"><canvas id="cv"></canvas></div>
+  <div id="bar">
+    <button class="barBtn" id="bReset">↩ もどす</button>
+    <button class="barBtn" id="bNext">つぎの もんだい ▶</button>
+  </div>
+</div>
+<script>
+// ページと いっしょに 新しい スクリプトを 読む（index.html と おなじ しくみ）
+(function(){
+  var v = encodeURIComponent(document.lastModified);
+  ['overrides.js', 'engine.js'].forEach(function(f){ document.write('<script src="' + f + '?v=' + v + '"><\/script>'); });
+})();
+</script>
+<script>
+// ─── さくらんぼ の へや（ためし）段階1：見て・さわって わかる ──────────
+// くり下がりの ある ひき算を「ひいて たす」で：a を 10 と (a−10) に わける → 10 から b を とる
+// → のこり どうしを くっつける。あそび要素（Nagato 指定 2026-11-01）：
+//   ① おまかせ もんだい（11〜18 − 2〜9・くり下がり、36パターンから ランダム）
+//   ② キャラクターからの 依頼（a が「b を とって！」と たのむ）
+//   ③ よそうしてから 見る（10 − b の こたえを 2たくで よそう → あたると とる アニメ）
+//   ④ さくらんぼの 木（1もん ごとに 実が 1つ、10こで まんかい 🌸）
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+let W = 0, H = 0;
+function resize(){
+  const dpr = Math.min(3, window.devicePixelRatio || 1);
+  const r = $('stage').getBoundingClientRect();
+  W = r.width; H = r.height;
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  layout();
+}
+window.addEventListener('resize', resize);
+
+// ── ほぞん：きの 実と といた かず ──
+let store = { tree: 0, total: 0 };
+try { const s = JSON.parse(localStorage.getItem('nb_sakuranbo') || 'null'); if(s && typeof s.tree === 'number') store = s; } catch(e) {}
+function saveStore(){ try { localStorage.setItem('nb_sakuranbo', JSON.stringify(store)); } catch(e) {} }
+const CHERRY_POS = [[30,18],[52,8],[70,20],[22,38],[45,30],[66,42],[82,34],[35,52],[58,55],[76,58]];   // 木の 実の ばしょ（%）
+function renderTree(bloom){
+  $('treeFace').textContent = bloom ? '🌸' : '🌳';
+  $('cherries').innerHTML = CHERRY_POS.slice(0, store.tree).map(p =>
+    '<span class="ch" style="left:' + p[0] + '%;top:' + p[1] + '%">🍒</span>').join('');
+  $('treeCnt').textContent = '🍒 ' + store.total + 'もん';
+}
+
+// ── もんだい ──
+let P = null;              // { a, b, rest, r, ans }
+let step = 'ask';          // ask → predict → take → merge → anim / done
+let chars = [];            // { v, role, x, y, tx, ty, born }
+let bs = 30, gy = 0;
+let fx = [];               // おいわい パーティクル
+let takeAnim = null;       // { until }
+let autoTimer = null;
+let predChoices = [];
+
+function genProblem(){
+  let a, b;
+  do {
+    a = 11 + Math.floor(Math.random() * 8);          // 11〜18
+    const lo = (a - 10) + 1, hi = 9;                  // くり下がり：b > a−10
+    b = lo + Math.floor(Math.random() * (hi - lo + 1));
+  } while(P && a === P.a && b === P.b);
+  return { a, b, rest: a - 10, r: 10 - b, ans: a - b };
+}
+function spec(v){ return blockSpec(v); }
+function layout(){
+  if(!P) return;
+  gy = H - 64;
+  const sp = spec(P.a);
+  bs = Math.max(15, Math.min(42, (W * 0.40) / sp.cols, (H * 0.55) / sp.rows));
+  for(const c of chars){ c.tx = homeX(c.role); }
+}
+function homeX(role){
+  if(role === 'a') return W * 0.40;
+  if(role === 'ten') return W * 0.28;
+  if(role === 'rest' || role === 'r') return W * 0.60;
+  if(role === 'b') return W * 0.86;
+  return W * 0.44;
+}
+function mkChar(v, role, x){
+  const c = { v, role, x: x != null ? x : homeX(role), y: gy, tx: homeX(role), ty: gy, born: performance.now() };
+  chars.push(c); return c;
+}
+function say(t){ $('sayBig').textContent = t; }
+
+function startProblem(keep){
+  if(!keep) P = genProblem();
+  chars = []; fx = []; takeAnim = null;
+  clearTimeout(autoTimer);
+  $('eqA').textContent = P.a; $('eqB').textContent = P.b;
+  $('eqAns').textContent = '？'; $('eqAns').className = '';
+  $('diaRoot').textContent = P.a;
+  $('cL').textContent = '？'; $('cL').classList.remove('filled');
+  $('cR').textContent = '？'; $('cR').classList.remove('filled');
+  $('line1').innerHTML = '10 − ' + P.b + ' ＝ <b>□</b>';
+  $('line2').innerHTML = '<b>□</b> ＋ ' + P.rest + ' ＝ <b>□</b>';
+  $('predict').classList.remove('on');
+  $('bNext').classList.remove('on');
+  mkChar(P.a, 'a');
+  step = 'ask';
+  layout();
+  say(P.a + ' を ゆび 2ほんで ひろげて わけてね');
+  renderTree(false);
+}
+function doSplit(){
+  if(step !== 'ask') return;
+  const a = chars.find(c => c.role === 'a'); if(!a) return;
+  chars = chars.filter(c => c !== a);
+  const ten = mkChar(10, 'ten', a.x - bs); ten.x = a.x; ten.tx = homeX('ten');
+  const rest = mkChar(P.rest, 'rest', a.x + bs); rest.x = a.x; rest.tx = homeX('rest');
+  burst(a.x, gy - bs * 2, '#e2543e');
+  $('cL').textContent = '10'; $('cL').classList.add('filled');
+  $('cR').textContent = P.rest; $('cR').classList.add('filled');
+  mkChar(P.b, 'b', W + bs * 2);   // b が あるいて くる
+  step = 'predict';
+  // よそう：せいかい と まちがい 1つ
+  let d = P.r === 1 ? 2 : P.r === 9 ? 8 : (Math.random() < 0.5 ? P.r + 1 : P.r - 1);
+  predChoices = Math.random() < 0.5 ? [P.r, d] : [d, P.r];
+  $('predQ').textContent = 'よそう：10 から ' + P.b + ' を とったら、いくつ のこる？';
+  $('predBtns').innerHTML = '';
+  for(const v of predChoices){
+    const btn = document.createElement('button');
+    btn.className = 'predBtn'; btn.textContent = v;
+    btn.onclick = () => predict(v, btn);
+    $('predBtns').appendChild(btn);
+  }
+  $('predict').classList.add('on');
+  say(P.b + ' が きたよ。まず よそう してね');
+}
+function predict(v, btn){
+  if(step !== 'predict') return false;
+  if(v === P.r){
+    $('predict').classList.remove('on');
+    step = 'take';
+    say('その とおり！ ' + P.b + ' を 10 に かさねてね');
+    return true;
+  }
+  if(btn){ btn.classList.remove('ng'); void btn.offsetWidth; btn.classList.add('ng'); }
+  say('うーん、10 の なかよしを かんがえてね（' + P.b + ' と あわせて 10）');
+  return false;
+}
+function doTake(){
+  if(step !== 'take') return;
+  step = 'anim';
+  takeAnim = { until: performance.now() + 800 };
+  setTimeout(() => {
+    chars = chars.filter(c => c.role !== 'b');
+    const ten = chars.find(c => c.role === 'ten');
+    if(ten){ ten.v = P.r; ten.role = 'r'; burst(ten.x, gy - bs * 2, '#f2b705'); }
+    $('line1').innerHTML = '10 − ' + P.b + ' ＝ <b class="fill">' + P.r + '</b>';
+    takeAnim = null;
+    step = 'merge';
+    say('のこりは ' + P.r + '！ ' + P.rest + ' と くっつけてね');
+  }, 820);
+}
+function doMerge(){
+  if(step !== 'merge') return;
+  const r = chars.find(c => c.role === 'r'), rest = chars.find(c => c.role === 'rest');
+  if(!r || !rest) return;
+  step = 'anim';
+  const mx = (r.x + rest.x) / 2;
+  r.tx = mx; rest.tx = mx;
+  setTimeout(() => {
+    chars = chars.filter(c => c !== r && c !== rest);
+    const ans = mkChar(P.ans, 'ans', mx); ans.x = mx;
+    burst(mx, gy - bs * 2, '#f2b705'); burst(mx, gy - bs * 3, '#e2543e');
+    $('line2').innerHTML = '<b class="fill">' + P.r + '</b> ＋ ' + P.rest + ' ＝ <b class="fill">' + P.ans + '</b>';
+    $('eqAns').textContent = P.ans; $('eqAns').className = 'done';
+    store.total++; store.tree++;
+    const bloom = store.tree >= 10;
+    if(bloom) store.tree = 0;
+    saveStore(); renderTree(bloom);
+    say(bloom ? '🌸 まんかい！ 10もん できた！ ' + P.a + ' − ' + P.b + ' ＝ ' + P.ans
+              : 'できた！ ' + P.a + ' − ' + P.b + ' ＝ ' + P.ans + '　🍒 が 1つ なったよ');
+    step = 'done';
+    $('bNext').classList.add('on');
+    clearTimeout(autoTimer);
+    autoTimer = setTimeout(() => { if(step === 'done') startProblem(false); }, 8000);
+  }, 380);
+}
+
+// ── おいわい ──
+function burst(x, y, col){
+  for(let i = 0; i < 14; i++){
+    const a = Math.random() * Math.PI * 2, s = 1 + Math.random() * 2.6;
+    fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 1.6, life: 1, col });
+  }
+}
+
+// ── さわる ──
+const ptrs = new Map();
+let drag = null, pinch0 = 0;
+function pos(e){ const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+function charAt(p){
+  for(let i = chars.length - 1; i >= 0; i--){
+    const c = chars[i], sp = spec(c.v);
+    if(Math.abs(p.x - c.x) < sp.cols * bs / 2 + 16 && p.y > c.y - sp.rows * bs - 24 && p.y < c.y + 26) return c;
+  }
+  return null;
+}
+cv.addEventListener('pointerdown', e => {
+  clearTimeout(autoTimer);
+  const p = pos(e); ptrs.set(e.pointerId, p);
+  if(step === 'ask' && ptrs.size === 2){
+    const [p1, p2] = [...ptrs.values()];
+    pinch0 = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+  }
+  if(ptrs.size === 1){
+    const c = charAt(p);
+    const draggable = c && ((step === 'take' && c.role === 'b') || (step === 'merge' && (c.role === 'r' || c.role === 'rest')));
+    if(draggable) drag = { c, dx: p.x - c.x, dy: p.y - c.y };
+  }
+});
+cv.addEventListener('pointermove', e => {
+  if(!ptrs.has(e.pointerId)) return;
+  const p = pos(e); ptrs.set(e.pointerId, p);
+  if(step === 'ask' && ptrs.size === 2 && pinch0){
+    const [p1, p2] = [...ptrs.values()];
+    if(Math.hypot(p1.x - p2.x, p1.y - p2.y) - pinch0 > 55){ pinch0 = 0; doSplit(); }
+    return;
+  }
+  if(drag){ drag.c.x = p.x - drag.dx; drag.c.y = p.y - drag.dy; drag.c.tx = drag.c.x; drag.c.ty = drag.c.y; }
+});
+function ptrUp(e){
+  ptrs.delete(e.pointerId);
+  if(ptrs.size < 2) pinch0 = 0;
+  if(!drag) return;
+  const c = drag.c; drag = null;
+  c.ty = gy;
+  if(step === 'take' && c.role === 'b'){
+    const ten = chars.find(q => q.role === 'ten');
+    if(ten && Math.abs(c.x - ten.x) < bs * 1.5 && Math.abs(c.y - ten.y) < bs * 2.6){ doTake(); return; }
+    c.tx = homeX('b');
+  } else if(step === 'merge'){
+    const other = chars.find(q => (q.role === 'r' || q.role === 'rest') && q !== c);
+    if(other && Math.abs(c.x - other.x) < bs * 1.5 && Math.abs(c.y - other.y) < bs * 2.6){ doMerge(); return; }
+    c.tx = homeX(c.role);
+  }
+}
+cv.addEventListener('pointerup', ptrUp);
+cv.addEventListener('pointercancel', ptrUp);
+$('bReset').onclick = () => startProblem(true);
+$('bNext').onclick = () => startProblem(false);
+
+// ── えがく ──
+function drawBubble(c, text, t){
+  ctx.save();
+  ctx.font = '900 17px "Hiragino Maru Gothic ProN",sans-serif';
+  const w = ctx.measureText(text).width + 26, h = 34;
+  const x = Math.max(6, Math.min(W - w - 6, c.x - w / 2)), y = Math.max(4, c.y - spec(c.v).rows * bs - h - 26 + Math.sin(t * 0.004) * 2);
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = '#e2543e'; ctx.lineWidth = 2.5;
+  ctx.beginPath(); ctx.roundRect(x, y, w, h, 12); ctx.fill(); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(c.x - 7, y + h - 1); ctx.lineTo(c.x + 7, y + h - 1); ctx.lineTo(c.x, y + h + 10); ctx.closePath();
+  ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = '#e2543e'; ctx.stroke();
+  ctx.fillStyle = '#e2543e'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, x + w / 2, y + h / 2 + 1);
+  ctx.restore();
+}
+function drawFrame(){
+  const t = performance.now();
+  ctx.clearRect(0, 0, W, H);
+  const g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#bfe8f0'); g.addColorStop(0.72, '#dff6e3'); g.addColorStop(0.721, '#8fd07a'); g.addColorStop(1, '#6cb85c');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // キャラ
+  for(const c of chars){
+    if(!drag || drag.c !== c){ c.x += (c.tx - c.x) * 0.16; c.y += (c.ty - c.y) * 0.3; }
+    const sp = spec(c.v);
+    const hop = (step === 'done' && c.role === 'ans') ? Math.abs(Math.sin(t * 0.008)) * 12 : Math.sin(t * 0.003 + c.x) * 1.5;
+    drawNumberblock(ctx, c.v, c.x - sp.cols * bs / 2, c.y - hop - sp.rows * bs, bs, { t, animate: true });
+    // とる アニメ：10 の うえ b こぶんを ゴーストで 見せる
+    if(takeAnim && c.role === 'ten'){
+      const hh = sp.rows * bs * (P.b / 10);
+      ctx.save();
+      ctx.setLineDash([5, 4]); ctx.strokeStyle = 'rgba(200,30,30,0.9)'; ctx.lineWidth = 2;
+      ctx.fillStyle = 'rgba(255,255,255,' + (0.45 + 0.3 * Math.sin(t * 0.03)) + ')';
+      const gx = c.x - sp.cols * bs / 2, gyy = c.y - hop - sp.rows * bs;
+      ctx.fillRect(gx, gyy, sp.cols * bs, hh); ctx.strokeRect(gx, gyy, sp.cols * bs, hh);
+      ctx.restore();
+      const bc = chars.find(q => q.role === 'b');
+      if(bc){ bc.tx = c.x; bc.ty = c.y; }
+    }
+  }
+  if(step === 'ask'){
+    const a = chars.find(c => c.role === 'a');
+    if(a) drawBubble(a, P.b + ' を とって！', t);
+  }
+  // パーティクル
+  fx = fx.filter(f => f.life > 0);
+  for(const f of fx){
+    f.x += f.vx; f.y += f.vy; f.vy += 0.09; f.life -= 0.022;
+    ctx.save(); ctx.globalAlpha = Math.max(0, f.life); ctx.fillStyle = f.col;
+    ctx.beginPath(); ctx.arc(f.x, f.y, 3.4, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
+  requestAnimationFrame(drawFrame);
+}
+
+startProblem(false);
+resize();
+requestAnimationFrame(drawFrame);
+
+// テスト・デバッグ用
+window.sakura = {
+  state: () => ({ a: P.a, b: P.b, rest: P.rest, r: P.r, ans: P.ans, step, tree: store.tree, total: store.total,
+                  eqAns: $('eqAns').textContent, cL: $('cL').textContent, cR: $('cR').textContent,
+                  line1: $('line1').textContent.replace(/\s+/g, ' ').trim(), line2: $('line2').textContent.replace(/\s+/g, ' ').trim(),
+                  pred: $('predict').classList.contains('on'), choices: predChoices.slice(),
+                  chars: chars.map(c => ({ v: c.v, role: c.role })) }),
+  split: doSplit, predict, take: doTake, merge: doMerge,
+  next: () => startProblem(false), reset: () => startProblem(true),
+};
+</script>
+</body>
+</html>
