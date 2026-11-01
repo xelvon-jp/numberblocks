@@ -31,7 +31,9 @@ module.exports = {
     await f.evaluate(() => sakura.split());
     let s = await st(f);
     t.eq(s.step, 'predict');
-    t.eq(s.cL, '10'); t.eq(s.cR, String(s.rest));
+    t.ok(s.frame, '引かれる数の 枠が 出ていない');
+    t.ok(s.minus, '引く数との あいだの − が 出ていない');
+    t.ok(s.predQ.includes('ひいたら'), 'よそうの 文が ひいたら でない: ' + s.predQ);
     t.ok(s.pred, 'よそう パネルが 出ていない');
     t.ok(s.choices.includes(s.r), 'よそうの こうほに せいかいが ない ' + JSON.stringify(s.choices));
     t.eq(s.chars.map(c => c.role).sort().join(','), 'b,rest,ten');
@@ -45,13 +47,12 @@ module.exports = {
     await f.evaluate(() => sakura.take());
     await f.waitForFunction(() => sakura.state().step === 'merge', null, { timeout: 4000 });
     s = await st(f);
-    t.ok(s.line1.includes('＝ ' + s.r), '10−b の 行が うまっていない ' + s.line1);
+    t.eq(s.minus, false, 'とった あとも − が 出ている');
     t.eq(s.chars.map(c => c.role).sort().join(','), 'r,rest');
     await f.evaluate(() => sakura.merge());
     await f.waitForFunction(() => sakura.state().step === 'done', null, { timeout: 5000 });
     s = await st(f);
     t.eq(s.eqAns, String(s.ans));
-    t.ok(s.line2.includes('＝ ' + s.ans), 'さいごの 行が うまっていない ' + s.line2);
     t.eq(s.total, s0.total + 1);
     t.eq(s.tree, (s0.tree + 1) % 10);
     t.eq(s.chars.map(c => c.v), [s.ans]);
@@ -65,7 +66,7 @@ module.exports = {
     await f.evaluate(() => sakura.split());
     await f.evaluate(() => sakura.reset());
     s = await st(f);
-    t.eq([s.a, s.b], ab); t.eq(s.step, 'ask'); t.eq(s.cL, '？');
+    t.eq([s.a, s.b], ab); t.eq(s.step, 'ask'); t.eq(s.frame, false);
   },
 
   'ほんものの ピンチ（ゆび 2ほん）でも わけられる': async t => {
@@ -81,6 +82,30 @@ module.exports = {
       mk('pointermove', 12, 130);
     });
     await f.waitForFunction(() => sakura.state().step === 'predict', null, { timeout: 3000 });
-    t.eq((await st(f)).cL, '10');
+    t.ok((await st(f)).frame, 'ピンチで わけても 枠が 出ない');
+  },
+
+  'ほんものの ドラッグでも とる・くっつける が できる（当たり判定）': async t => {
+    const { f } = await openSakura(t);
+    await f.evaluate(() => sakura.split());
+    await f.waitForTimeout(450);
+    const s = await st(f);
+    await f.evaluate(v => sakura.predict(v), s.r);
+    const dragTo = async (fromRole, toRole) => {
+      await f.evaluate(({ fr, to }) => {
+        const cs = sakura.state().chars;
+        const a = cs.find(c => c.role === fr), b = cs.find(c => c.role === to);
+        const cv = document.getElementById('cv'), r = cv.getBoundingClientRect();
+        const ev = (type, x, y) => cv.dispatchEvent(new PointerEvent(type, { pointerId: 21, bubbles: true, cancelable: true, isPrimary: true, clientX: r.left + x, clientY: r.top + y }));
+        ev('pointerdown', a.x, a.y - 50);
+        ev('pointermove', b.x, b.y - 50);
+        ev('pointerup', b.x, b.y - 50);
+      }, { fr: fromRole, to: toRole });
+    };
+    await dragTo('b', 'ten');
+    await f.waitForFunction(() => sakura.state().step === 'merge', null, { timeout: 4000 });
+    await dragTo('rest', 'r');
+    await f.waitForFunction(() => sakura.state().step === 'done', null, { timeout: 5000 });
+    t.eq((await st(f)).eqAns, String(s.ans));
   },
 };

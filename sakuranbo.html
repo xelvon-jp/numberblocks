@@ -26,17 +26,6 @@
   #cherries .ch { position:absolute; font-size:14px; transform:translate(-50%,-50%); animation:pop .35s ease; }
   @keyframes pop { 0% { transform:translate(-50%,-50%) scale(0.2); } 70% { transform:translate(-50%,-50%) scale(1.35); } }
   #treeCnt { position:absolute; left:0; right:0; bottom:-4px; text-align:center; font-size:11px; font-weight:700; color:#a33; }
-  /* ── さくらんぼ ず ── */
-  #dia { display:flex; flex-direction:column; align-items:center; padding:2px 0 0; }
-  #diaRoot { background:#e2543e; color:#fff; font-weight:900; font-size:20px; min-width:52px; text-align:center;
-             padding:3px 10px; border-radius:12px; }
-  #diaSvg { width:170px; height:30px; display:block; }
-  #diaRow { display:flex; gap:64px; margin-top:-4px; }
-  .diaC { width:52px; height:52px; border-radius:50%; background:#fff; border:3px solid #e2543e;
-          display:flex; align-items:center; justify-content:center; font-weight:900; font-size:22px; color:#e2543e; }
-  .diaC.filled { background:#ffe3e3; }
-  #lines { display:flex; gap:14px; margin-top:4px; font-size:16px; font-weight:800; color:#555; min-height:22px; }
-  #lines .fill { color:#e2543e; }
   /* ── せつめい ── */
   #say { text-align:center; padding:4px 10px 2px; }
   #sayBig { font-size:21px; font-weight:900; color:#333; }
@@ -67,12 +56,6 @@
     <div id="eq"><span id="eqA">13</span> − <span id="eqB">8</span> ＝ <span id="eqAns">？</span></div>
     <div id="treeBox"><div id="treeFace">🌳</div><div id="cherries"></div><div id="treeCnt">🍒 0こ</div></div>
   </div>
-  <div id="dia">
-    <div id="diaRoot">13</div>
-    <svg id="diaSvg" viewBox="0 0 170 30"><path d="M85 2 C 70 14, 52 18, 38 27" stroke="#58a34c" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M85 2 C 100 14, 118 18, 132 27" stroke="#58a34c" stroke-width="4" fill="none" stroke-linecap="round"/></svg>
-    <div id="diaRow"><div class="diaC" id="cL">？</div><div class="diaC" id="cR">？</div></div>
-    <div id="lines"><span id="line1">10 − 8 ＝ <b>□</b></span><span id="line2"><b>□</b> ＋ 3 ＝ <b>□</b></span></div>
-  </div>
   <div id="say"><div id="sayBig"></div></div>
   <div id="predict"><div id="predQ"></div><div id="predBtns"></div></div>
   <div id="stage"><canvas id="cv"></canvas></div>
@@ -102,12 +85,14 @@ let W = 0, H = 0;
 function resize(){
   const dpr = Math.min(3, window.devicePixelRatio || 1);
   const r = $('stage').getBoundingClientRect();
+  if(Math.abs(r.width - W) < 0.5 && Math.abs(r.height - H) < 0.5 && W) return;
   W = r.width; H = r.height;
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   layout();
 }
 window.addEventListener('resize', resize);
+new ResizeObserver(() => resize()).observe($('stage'));
 
 // ── ほぞん：きの 実と といた かず ──
 let store = { tree: 0, total: 0 };
@@ -167,11 +152,6 @@ function startProblem(keep){
   clearTimeout(autoTimer);
   $('eqA').textContent = P.a; $('eqB').textContent = P.b;
   $('eqAns').textContent = '？'; $('eqAns').className = '';
-  $('diaRoot').textContent = P.a;
-  $('cL').textContent = '？'; $('cL').classList.remove('filled');
-  $('cR').textContent = '？'; $('cR').classList.remove('filled');
-  $('line1').innerHTML = '10 − ' + P.b + ' ＝ <b>□</b>';
-  $('line2').innerHTML = '<b>□</b> ＋ ' + P.rest + ' ＝ <b>□</b>';
   $('predict').classList.remove('on');
   $('bNext').classList.remove('on');
   mkChar(P.a, 'a');
@@ -187,14 +167,12 @@ function doSplit(){
   const ten = mkChar(10, 'ten', a.x - bs); ten.x = a.x; ten.tx = homeX('ten');
   const rest = mkChar(P.rest, 'rest', a.x + bs); rest.x = a.x; rest.tx = homeX('rest');
   burst(a.x, gy - bs * 2, '#e2543e');
-  $('cL').textContent = '10'; $('cL').classList.add('filled');
-  $('cR').textContent = P.rest; $('cR').classList.add('filled');
   mkChar(P.b, 'b', W + bs * 2);   // b が あるいて くる
   step = 'predict';
   // よそう：せいかい と まちがい 1つ
   let d = P.r === 1 ? 2 : P.r === 9 ? 8 : (Math.random() < 0.5 ? P.r + 1 : P.r - 1);
   predChoices = Math.random() < 0.5 ? [P.r, d] : [d, P.r];
-  $('predQ').textContent = 'よそう：10 から ' + P.b + ' を とったら、いくつ のこる？';
+  $('predQ').textContent = '10 から ' + P.b + ' を ひいたら、いくつ のこる？';
   $('predBtns').innerHTML = '';
   for(const v of predChoices){
     const btn = document.createElement('button');
@@ -225,7 +203,6 @@ function doTake(){
     chars = chars.filter(c => c.role !== 'b');
     const ten = chars.find(c => c.role === 'ten');
     if(ten){ ten.v = P.r; ten.role = 'r'; burst(ten.x, gy - bs * 2, '#f2b705'); }
-    $('line1').innerHTML = '10 − ' + P.b + ' ＝ <b class="fill">' + P.r + '</b>';
     takeAnim = null;
     step = 'merge';
     say('のこりは ' + P.r + '！ ' + P.rest + ' と くっつけてね');
@@ -242,7 +219,6 @@ function doMerge(){
     chars = chars.filter(c => c !== r && c !== rest);
     const ans = mkChar(P.ans, 'ans', mx); ans.x = mx;
     burst(mx, gy - bs * 2, '#f2b705'); burst(mx, gy - bs * 3, '#e2543e');
-    $('line2').innerHTML = '<b class="fill">' + P.r + '</b> ＋ ' + P.rest + ' ＝ <b class="fill">' + P.ans + '</b>';
     $('eqAns').textContent = P.ans; $('eqAns').className = 'done';
     store.total++; store.tree++;
     const bloom = store.tree >= 10;
@@ -269,6 +245,14 @@ function burst(x, y, col){
 const ptrs = new Map();
 let drag = null, pinch0 = 0;
 function pos(e){ const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+function charRect(c){
+  const sp = spec(c.v);
+  return { l: c.x - sp.cols * bs / 2, r: c.x + sp.cols * bs / 2, t: c.y - sp.rows * bs, b: c.y };
+}
+function rectsOverlap(c1, c2, pad){
+  const a = charRect(c1), b = charRect(c2);
+  return a.l - pad < b.r && a.r + pad > b.l && a.t - pad < b.b && a.b + pad > b.t;
+}
 function charAt(p){
   for(let i = chars.length - 1; i >= 0; i--){
     const c = chars[i], sp = spec(c.v);
@@ -307,11 +291,11 @@ function ptrUp(e){
   c.ty = gy;
   if(step === 'take' && c.role === 'b'){
     const ten = chars.find(q => q.role === 'ten');
-    if(ten && Math.abs(c.x - ten.x) < bs * 1.5 && Math.abs(c.y - ten.y) < bs * 2.6){ doTake(); return; }
+    if(ten && rectsOverlap(c, ten, 4)){ doTake(); return; }
     c.tx = homeX('b');
   } else if(step === 'merge'){
     const other = chars.find(q => (q.role === 'r' || q.role === 'rest') && q !== c);
-    if(other && Math.abs(c.x - other.x) < bs * 1.5 && Math.abs(c.y - other.y) < bs * 2.6){ doMerge(); return; }
+    if(other && rectsOverlap(c, other, 4)){ doMerge(); return; }
     c.tx = homeX(c.role);
   }
 }
@@ -334,12 +318,42 @@ function drawBubble(c, text, t){
   ctx.fillText(text, x + w / 2, y + h / 2 + 1);
   ctx.restore();
 }
+// 引かれる数（わけた 2人）を 枠で かこむ。引く数との あいだに − を 出す
+function frameRect(){
+  const pieces = chars.filter(c => c.role === 'ten' || c.role === 'rest' || c.role === 'r');
+  if(!pieces.length || step === 'ask' || step === 'done') return null;
+  let l = 1e9, r = -1e9, t = 1e9;
+  for(const c of pieces){ const rc = charRect(c); l = Math.min(l, rc.l); r = Math.max(r, rc.r); t = Math.min(t, rc.t); }
+  return { l: l - 12, r: r + 12, t: t - 16, b: gy + 10 };
+}
+function minusShown(){
+  const f = frameRect(), b = chars.find(c => c.role === 'b');
+  return !!(f && b && !takeAnim && (step === 'predict' || step === 'take'));
+}
 function drawFrame(){
   const t = performance.now();
   ctx.clearRect(0, 0, W, H);
   const g = ctx.createLinearGradient(0, 0, 0, H);
   g.addColorStop(0, '#bfe8f0'); g.addColorStop(0.72, '#dff6e3'); g.addColorStop(0.721, '#8fd07a'); g.addColorStop(1, '#6cb85c');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  // 引かれる数の 枠と、引く数との あいだの −
+  const fr = frameRect();
+  if(fr){
+    ctx.save();
+    ctx.fillStyle = 'rgba(255,255,255,0.22)'; ctx.strokeStyle = 'rgba(226,84,62,0.8)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.roundRect(fr.l, fr.t, fr.r - fr.l, fr.b - fr.t, 16); ctx.fill(); ctx.stroke();
+    ctx.restore();
+    if(minusShown()){
+      const bc = chars.find(c => c.role === 'b'), br = charRect(bc);
+      ctx.save();
+      ctx.font = '900 46px "Hiragino Maru Gothic ProN",sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineJoin = 'round'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 7;
+      const mx = (fr.r + br.l) / 2, my = gy - bs * 2.4;
+      ctx.strokeText('−', mx, my); ctx.fillStyle = '#333'; ctx.fillText('−', mx, my);
+      ctx.restore();
+    }
+  }
   // キャラ
   for(const c of chars){
     if(!drag || drag.c !== c){ c.x += (c.tx - c.x) * 0.16; c.y += (c.ty - c.y) * 0.3; }
@@ -380,10 +394,10 @@ requestAnimationFrame(drawFrame);
 // テスト・デバッグ用
 window.sakura = {
   state: () => ({ a: P.a, b: P.b, rest: P.rest, r: P.r, ans: P.ans, step, tree: store.tree, total: store.total,
-                  eqAns: $('eqAns').textContent, cL: $('cL').textContent, cR: $('cR').textContent,
-                  line1: $('line1').textContent.replace(/\s+/g, ' ').trim(), line2: $('line2').textContent.replace(/\s+/g, ' ').trim(),
+                  eqAns: $('eqAns').textContent, predQ: $('predQ').textContent,
+                  frame: !!frameRect(), minus: minusShown(),
                   pred: $('predict').classList.contains('on'), choices: predChoices.slice(),
-                  chars: chars.map(c => ({ v: c.v, role: c.role })) }),
+                  chars: chars.map(c => ({ v: c.v, role: c.role, x: Math.round(c.x), y: Math.round(c.y) })) }),
   split: doSplit, predict, take: doTake, merge: doMerge,
   next: () => startProblem(false), reset: () => startProblem(true),
 };
