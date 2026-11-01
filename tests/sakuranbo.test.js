@@ -39,6 +39,14 @@ module.exports = {
     // 10 と 残りが 隣り合っている（あいだが あきすぎない）
     const ten = s.chars.find(c => c.role === 'ten'), rest = s.chars.find(c => c.role === 'rest');
     t.ok(rest.x - rest.w / 2 - (ten.x + ten.w / 2) <= 14, '10 と 残りの あいだが あきすぎ ' + JSON.stringify(s.chars));
+    // ならび全体が 画面の まんなか 付近に あり、矢印が 出ている
+    await f.waitForTimeout(500);
+    const sc = await st(f);
+    const pcs = sc.chars.filter(c => c.role === 'ten' || c.role === 'rest');
+    const bch = sc.chars.find(c => c.role === 'b');
+    const cl = Math.min(...pcs.map(c => c.x - c.w / 2)) - 12, cr = Math.max(bch.x + bch.w / 2, ...pcs.map(c => c.x + c.w / 2));
+    t.ok(Math.abs((cl + cr) / 2 - sc.stageW / 2) <= 30, 'ならびが 中央に ない center=' + Math.round((cl + cr) / 2) + ' W=' + sc.stageW);
+    t.ok(sc.arrow, '取る ステップで 矢印が 出ていない');
     // よそうを 書いても すすみは 止まらない（まちがい→書き直し できる）
     const wrong = s.ans === 9 ? 8 : s.ans + 1;
     await f.evaluate(v => sakura.predict(v), wrong);
@@ -128,7 +136,7 @@ module.exports = {
     const { f } = await openSakura(t);
     const s = await st(f);
     const wh = await f.evaluate(() => { const r = document.getElementById('inkCv').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
-    t.ok(wh[0] <= 70 && wh[1] <= 70, '回答ますが 大きい ' + wh.join('x'));
+    t.ok(wh[0] >= 84 && wh[0] <= 110 && wh[1] >= 84 && wh[1] <= 110, '回答ますの 大きさが 想定外 ' + wh.join('x'));
     await f.evaluate(d => {
       const cvEl = document.getElementById('inkCv'), r = cvEl.getBoundingClientRect(), m = 0.18;
       const paths = Ink.BASE[d][0].map(stroke => stroke.map(([x, y]) =>

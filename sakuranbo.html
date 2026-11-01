@@ -17,10 +17,10 @@
   #top { display:flex; align-items:center; gap:8px; padding:calc(6px + env(safe-area-inset-top)) 10px 2px; }
   #eq { flex:1; background:#fff; border:3px solid #e2543e; border-radius:16px; padding:6px 4px;
         display:flex; align-items:center; justify-content:center; gap:7px;
-        font-weight:900; color:#333; font-size:30px; letter-spacing:1px;
+        font-weight:900; color:#333; font-size:28px; letter-spacing:1px;
         box-shadow:0 2px 0 rgba(0,0,0,0.08); }
-  #inkBox { position:relative; width:58px; height:58px; flex:none; }
-  #inkCv { width:58px; height:58px; background:#fffbe8; border:3px dashed #d8b13a; border-radius:10px; touch-action:none; display:block; }
+  #inkBox { position:relative; width:96px; height:96px; flex:none; }
+  #inkCv { width:96px; height:96px; background:#fffbe8; border:3px dashed #d8b13a; border-radius:10px; touch-action:none; display:block; }
   #inkCv.has { border-style:solid; border-color:#58a34c; }
   #inkCv.ng { animation:shk .4s ease; border-color:#c00; }
   #bInkClear { position:absolute; right:-4px; bottom:-9px; height:20px; padding:0 7px; border-radius:8px;
@@ -50,7 +50,7 @@
 <body>
 <div id="app">
   <div id="top">
-    <div id="eq"><span id="eqA">13</span><span>−</span><span id="eqB">8</span><span>＝</span><span id="inkBox"><canvas id="inkCv" width="64" height="64"></canvas><button id="bInkClear" title="けす">けす</button></span></div>
+    <div id="eq"><span id="eqA">13</span><span>−</span><span id="eqB">8</span><span>＝</span><span id="inkBox"><canvas id="inkCv" width="96" height="96"></canvas><button id="bInkClear" title="けす">けす</button></span></div>
     <div id="treeBox"><div id="treeFace">🌳</div><div id="cherries"></div><div id="treeCnt">🍒 0こ</div></div>
   </div>
   <div id="say"><div id="sayBig"></div></div>
@@ -131,6 +131,17 @@ function layout(){
     c.tx = homeX(c.role); c.ty = gy;
     if(c.x < -60 || c.x > W + 60) c.x = c.tx;
     if(c.y < -40 || c.y > H + 40) c.y = gy;
+  }
+  // ならび全体（[引かれる数] − b）が 画面の まんなかに くるよう 寄せる
+  const pieces = chars.filter(c => c.role === 'a' || c.role === 'ten' || c.role === 'rest' || c.role === 'r');
+  const bc = chars.find(c => c.role === 'b');
+  if(pieces.length && bc && W){
+    let l = 1e9, r = -1e9;
+    for(const c of pieces){ const w = spec(c.v).cols * bs; l = Math.min(l, c.tx - w / 2); r = Math.max(r, c.tx + w / 2); }
+    r = Math.max(r + 12, bc.tx + spec(bc.v).cols * bs / 2);
+    l -= 12;
+    const shift = (W - (r - l)) / 2 - l;
+    if(Math.abs(shift) > 2 && Math.abs(shift) < W * 0.3) for(const c of chars) if(c.role !== 'ans') c.tx += shift;
   }
 }
 function pairHome(){
@@ -418,20 +429,26 @@ function drawFrame(){
     }
   }
   if(step === 'take'){
-    // 6 → 10 への 矢印（ドロップの 誘導）
+    // b から 10 へ アーチ状の 矢印（10 の あたまを 指す）＋ 10 を 光らせる
     const bc = chars.find(c => c.role === 'b'), tc = chars.find(c => c.role === 'ten');
     if(bc && tc && (!drag || drag.c !== bc)){
-      const br = charRect(bc), tr = charRect(tc);
-      const x1 = br.l - 10, x2 = tr.r + 12, y = gy - bs * 2.1;
-      if(x1 - x2 > 34){
-        ctx.save();
-        ctx.strokeStyle = '#e2543e'; ctx.fillStyle = '#e2543e'; ctx.lineWidth = 5; ctx.lineCap = 'round';
-        ctx.setLineDash([14, 10]); ctx.lineDashOffset = -(t / 28) % 24;
-        ctx.beginPath(); ctx.moveTo(x1, y); ctx.lineTo(x2 + 14, y); ctx.stroke();
-        ctx.setLineDash([]);
-        ctx.beginPath(); ctx.moveTo(x2, y); ctx.lineTo(x2 + 18, y - 10); ctx.lineTo(x2 + 18, y + 10); ctx.closePath(); ctx.fill();
-        ctx.restore();
-      }
+      const tr = charRect(tc);
+      ctx.save();
+      ctx.strokeStyle = 'rgba(226,84,62,' + (0.5 + 0.3 * Math.sin(t * 0.006)) + ')'; ctx.lineWidth = 3.5;
+      ctx.beginPath(); ctx.roundRect(tr.l - 7, tr.t - 7, (tr.r - tr.l) + 14, (tr.b - tr.t) + 14, 12); ctx.stroke();
+      const sx = bc.x, sy = bc.y - spec(bc.v).rows * bs - 14;
+      const ex = tc.x, ey = tr.t - 16;
+      const mx = (sx + ex) / 2, my = Math.min(sy, ey) - 105;
+      ctx.strokeStyle = '#e2543e'; ctx.fillStyle = '#e2543e'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+      ctx.setLineDash([15, 11]); ctx.lineDashOffset = -(t / 26) % 26;
+      ctx.beginPath(); ctx.moveTo(sx, sy);
+      ctx.quadraticCurveTo(mx, my, ex, ey);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      const ang = Math.atan2(ey - my, ex - mx);
+      ctx.translate(ex, ey); ctx.rotate(ang);
+      ctx.beginPath(); ctx.moveTo(4, 0); ctx.lineTo(-20, -10); ctx.lineTo(-20, 10); ctx.closePath(); ctx.fill();
+      ctx.restore();
     }
   }
   // パーティクル
@@ -452,7 +469,7 @@ requestAnimationFrame(drawFrame);
 // テスト・デバッグ用
 window.sakura = {
   state: () => ({ a: P.a, b: P.b, rest: P.rest, r: P.r, ans: P.ans, step, tree: store.tree, total: store.total, gy: Math.round(gy), stageH: Math.round(H),
-                  eqAns: step === 'done' ? String(P.ans) : (predAns !== null ? String(predAns) : '？'), predAns,
+                  eqAns: step === 'done' ? String(P.ans) : (predAns !== null ? String(predAns) : '？'), predAns, stageW: Math.round(W), arrow: step === 'take' && !!chars.find(c => c.role === 'b') && !!chars.find(c => c.role === 'ten'),
                   frame: !!frameRect(), minus: minusShown(), lastInk,
                   chars: chars.map(c => ({ v: c.v, role: c.role, x: Math.round(c.x), y: Math.round(c.y), w: Math.round(spec(c.v).cols * bs) })) }),
   split: doSplit, predict, take: doTake, merge: doMerge,
