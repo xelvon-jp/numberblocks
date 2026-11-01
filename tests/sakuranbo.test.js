@@ -26,27 +26,26 @@ module.exports = {
     t.eq(s.eqAns, '？');
   },
 
-  'わける→よそう→とる→くっつける で こたえに なり、木に 実が なる': async t => {
+  'わける→とる→くっつける で こたえに なり、木に 実が なる（よそうは 止めない）': async t => {
     const { f } = await openSakura(t);
     const s0 = await st(f);
     await f.evaluate(() => sakura.split());
     let s = await st(f);
-    t.eq(s.step, 'predict');
+    t.eq(s.step, 'take', 'わけたら そのまま 取る ステップでない');
+    t.eq(s.predAns, null);
     t.ok(s.frame, '引かれる数の 枠が 出ていない');
     t.ok(s.minus, '引く数との あいだの − が 出ていない');
-    t.ok(s.write, '手書き パネルが 出ていない');
-    t.ok(s.writeQ.includes('こたえは いくつ'), '手書きの もんが おかしい: ' + s.writeQ);
     t.eq(s.chars.map(c => c.role).sort().join(','), 'b,rest,ten');
     // 10 と 残りが 隣り合っている（あいだが あきすぎない）
     const ten = s.chars.find(c => c.role === 'ten'), rest = s.chars.find(c => c.role === 'rest');
     t.ok(rest.x - rest.w / 2 - (ten.x + ten.w / 2) <= 14, '10 と 残りの あいだが あきすぎ ' + JSON.stringify(s.chars));
-    // まちがった こたえ → すすまない
+    // よそうを 書いても すすみは 止まらない（まちがい→書き直し できる）
     const wrong = s.ans === 9 ? 8 : s.ans + 1;
-    t.eq(await f.evaluate(v => sakura.predict(v), wrong), false);
-    t.eq((await st(f)).step, 'predict');
-    // せいかいの こたえ → とる へ
-    t.eq(await f.evaluate(v => sakura.predict(v), s.ans), true);
-    t.eq((await st(f)).step, 'take');
+    await f.evaluate(v => sakura.predict(v), wrong);
+    s = await st(f);
+    t.eq(s.predAns, wrong); t.eq(s.step, 'take');
+    await f.evaluate(v => sakura.predict(v), s.ans);
+    t.eq((await st(f)).predAns, s.ans);
     await f.evaluate(() => sakura.take());
     await f.waitForFunction(() => sakura.state().step === 'merge', null, { timeout: 4000 });
     s = await st(f);
@@ -63,6 +62,7 @@ module.exports = {
     await f.evaluate(() => sakura.next());
     s = await st(f);
     t.eq(s.step, 'ask');
+    t.eq(s.predAns, null, 'つぎの もんだいで よそうが 残っている');
     t.ok(s.b > s.a - 10, 'つぎも くり下がりでない');
     // もどす：おなじ もんだいで はじめから
     const ab = [s.a, s.b];
@@ -84,7 +84,7 @@ module.exports = {
       mk('pointerdown', 11, -14); mk('pointerdown', 12, 14);
       mk('pointermove', 12, 130);
     });
-    await f.waitForFunction(() => sakura.state().step === 'predict', null, { timeout: 3000 });
+    await f.waitForFunction(() => sakura.state().step === 'take', null, { timeout: 3000 });
     t.ok((await st(f)).frame, 'ピンチで わけても 枠が 出ない');
   },
 
@@ -124,13 +124,13 @@ module.exports = {
     }
   },
 
-  'こたえを ゆびで 書くと よみとって すすむ（手書き）': async t => {
+  'こたえは いつでも ゆびで 書ける（小さな ます・止めない）': async t => {
     const { f } = await openSakura(t);
-    await f.evaluate(() => sakura.split());
-    await f.waitForTimeout(350);
     const s = await st(f);
+    const wh = await f.evaluate(() => { const r = document.getElementById('inkCv').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; });
+    t.ok(wh[0] <= 70 && wh[1] <= 70, '回答ますが 大きい ' + wh.join('x'));
     await f.evaluate(d => {
-      const cvEl = document.getElementById('inkCv'), r = cvEl.getBoundingClientRect(), m = 0.2;
+      const cvEl = document.getElementById('inkCv'), r = cvEl.getBoundingClientRect(), m = 0.18;
       const paths = Ink.BASE[d][0].map(stroke => stroke.map(([x, y]) =>
         [r.left + r.width * (m + (1 - 2 * m) * x), r.top + r.height * (m + (1 - 2 * m) * y)]));
       for(const path of paths){
@@ -140,7 +140,10 @@ module.exports = {
         ev('pointerup', path[path.length - 1][0], path[path.length - 1][1]);
       }
     }, s.ans);
-    await f.waitForFunction(() => sakura.state().step === 'take', null, { timeout: 5000 });
-    t.eq((await st(f)).lastInk, s.ans);
-  },
+    await f.waitForFunction(() => sakura.state().predAns !== null, null, { timeout: 5000 });
+    const s2 = await st(f);
+    t.eq(s2.predAns, s.ans);
+    t.eq(s2.step, 'ask', '書いても すすみは 止まらない はずが 止まった');
+    t.eq(s2.lastInk, s.ans);
+  }
 };

@@ -16,10 +16,17 @@
   /* ── うえ：しき カード と さくらんぼの き ── */
   #top { display:flex; align-items:center; gap:8px; padding:calc(6px + env(safe-area-inset-top)) 10px 2px; }
   #eq { flex:1; background:#fff; border:3px solid #e2543e; border-radius:16px; padding:6px 4px;
-        text-align:center; font-weight:900; color:#333; font-size:30px; letter-spacing:1px;
+        display:flex; align-items:center; justify-content:center; gap:7px;
+        font-weight:900; color:#333; font-size:30px; letter-spacing:1px;
         box-shadow:0 2px 0 rgba(0,0,0,0.08); }
-  #eqAns { color:#d99a06; }
-  #eqAns.done { color:#e2543e; }
+  #inkBox { position:relative; width:58px; height:58px; flex:none; }
+  #inkCv { width:58px; height:58px; background:#fffbe8; border:3px dashed #d8b13a; border-radius:10px; touch-action:none; display:block; }
+  #inkCv.has { border-style:solid; border-color:#58a34c; }
+  #inkCv.ng { animation:shk .4s ease; border-color:#c00; }
+  #bInkClear { position:absolute; right:-4px; bottom:-9px; height:20px; padding:0 7px; border-radius:8px;
+               border:2px solid #bbb; background:#fff; font-size:11px; font-weight:900; color:#888;
+               cursor:pointer; font-family:inherit; display:none; }
+  #bInkClear.on { display:block; }
   #treeBox { position:relative; width:86px; height:74px; flex:none; }
   #treeFace { position:absolute; left:50%; top:26px; transform:translateX(-50%); font-size:44px; line-height:1; }
   #cherries { position:absolute; inset:0; }
@@ -29,19 +36,9 @@
   /* ── せつめい ── */
   #say { text-align:center; padding:4px 10px 2px; }
   #sayBig { font-size:21px; font-weight:900; color:#333; }
-  /* ── 手書き パネル（こたえの よそう） ── */
-  #write { display:none; margin:4px 12px 0; background:#fff8e1; border:3px solid #f2b705; border-radius:16px;
-           padding:8px; text-align:center; }
-  #write.on { display:block; }
-  #writeQ { font-size:18px; font-weight:900; color:#7a5200; margin-bottom:6px; }
-  #inkCv { width:100%; height:118px; background:#fff; border:3px dashed #d8b13a; border-radius:12px; touch-action:none; display:block; }
-  #inkCv.ng { animation:shk .4s ease; border-color:#c00; }
-  #writeBtns { margin-top:6px; }
-  #bInkClear { height:38px; padding:0 22px; border-radius:10px; border:2px solid #999; background:#fff;
-               font-size:15px; font-weight:900; color:#555; cursor:pointer; font-family:inherit; }
   /* ── ぶたい ── */
   #stage { flex:1; position:relative; min-height:0; }
-  canvas { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
+  #cv { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
   /* ── した ── */
   #bar { display:flex; gap:10px; padding:8px 12px calc(10px + env(safe-area-inset-bottom)); }
   .barBtn { flex:1; height:52px; border-radius:14px; border:3px solid #999; background:#fff; font-size:17px;
@@ -53,11 +50,10 @@
 <body>
 <div id="app">
   <div id="top">
-    <div id="eq"><span id="eqA">13</span> − <span id="eqB">8</span> ＝ <span id="eqAns">？</span></div>
+    <div id="eq"><span id="eqA">13</span><span>−</span><span id="eqB">8</span><span>＝</span><span id="inkBox"><canvas id="inkCv" width="64" height="64"></canvas><button id="bInkClear" title="けす">けす</button></span></div>
     <div id="treeBox"><div id="treeFace">🌳</div><div id="cherries"></div><div id="treeCnt">🍒 0こ</div></div>
   </div>
   <div id="say"><div id="sayBig"></div></div>
-  <div id="write"><div id="writeQ"></div><canvas id="inkCv"></canvas><div id="writeBtns"><button id="bInkClear">けす</button></div></div>
   <div id="stage"><canvas id="cv"></canvas></div>
   <div id="bar">
     <button class="barBtn" id="bReset">↩ もどす</button>
@@ -113,7 +109,7 @@ let chars = [];            // { v, role, x, y, tx, ty, born }
 let bs = 30, gy = 0;
 let fx = [];               // おいわい パーティクル
 let takeAnim = null;       // { until }
-let inkStrokes = [], inkPen = null, inkTimer = null, lastInk = null;
+let inkStrokes = [], inkPen = null, inkTimer = null, lastInk = null, predAns = null;
 let autoTimer = null;
 
 function genProblem(){
@@ -163,8 +159,8 @@ function startProblem(keep){
   chars = []; fx = []; takeAnim = null;
   clearTimeout(autoTimer);
   $('eqA').textContent = P.a; $('eqB').textContent = P.b;
-  $('eqAns').textContent = '？'; $('eqAns').className = '';
-  $('write').classList.remove('on'); inkClear();
+  predAns = null;
+  inkClear();
   $('bNext').classList.remove('on');
   mkChar(P.a, 'a');
   mkChar(P.b, 'b');
@@ -181,36 +177,22 @@ function doSplit(){
   const rest = mkChar(P.rest, 'rest', a.x + bs); rest.x = a.x;
   layout();
   burst(a.x, gy - bs * 2, '#e2543e');
-  step = 'predict';
-  $('writeQ').textContent = P.a + ' − ' + P.b + ' の こたえは いくつ？ かいてね';
-  inkClear();
-  $('write').classList.add('on');
-  requestAnimationFrame(inkResize);
-  say('');
-}
-// 手書きの こたえを しらべる（ひっさんと おなじ Ink。ねらいとの さが 小さければ せいかい）
-function judgeInk(){
-  if(step !== 'predict' || !inkStrokes.length) return;
-  const r = (typeof Ink !== 'undefined') ? Ink.recognize(inkStrokes) : null;
-  lastInk = r ? Number(r.digit) : null;
-  const ok = !!r && (lastInk === P.ans || (r.gap && r.gap[P.ans] !== undefined && r.gap[P.ans] <= 0.3));
-  if(ok){ predictOk(); return; }
-  const cvEl = $('inkCv'); cvEl.classList.remove('ng'); void cvEl.offsetWidth; cvEl.classList.add('ng');
-  say(r ? 'ちがうみたい。もう いちど かいてね' : 'よめなかった。ゆっくり おおきく かいてね');
-  inkClear();
-}
-function predictOk(){
-  $('write').classList.remove('on');
   step = 'take';
   say(P.b + ' を 10 に かさねてね');
 }
+// 手書きの こたえ（よそう）：いつでも 書ける。読めたら おぼえるだけ（すすみは 止めない）
+function judgeInk(){
+  if(step === 'done' || !inkStrokes.length) return;
+  const r = (typeof Ink !== 'undefined') ? Ink.recognize(inkStrokes) : null;
+  if(r){ predAns = Number(r.digit); lastInk = predAns; $('inkCv').classList.add('has'); $('bInkClear').classList.add('on'); return; }
+  const cvEl = $('inkCv'); cvEl.classList.remove('ng'); void cvEl.offsetWidth; cvEl.classList.add('ng');
+  inkClearStrokes();
+}
 // テスト用：書いた ことに する
 function predict(v){
-  if(step !== 'predict') return false;
-  lastInk = v;
-  if(v === P.ans){ predictOk(); return true; }
-  say('ちがうみたい。もう いちど かいてね');
-  return false;
+  predAns = v; lastInk = v;
+  $('inkCv').classList.add('has'); $('bInkClear').classList.add('on');
+  return true;
 }
 function doTake(){
   if(step !== 'take') return;
@@ -236,13 +218,14 @@ function doMerge(){
     chars = chars.filter(c => c !== r && c !== rest);
     const ans = mkChar(P.ans, 'ans', mx); ans.x = mx;
     burst(mx, gy - bs * 2, '#f2b705'); burst(mx, gy - bs * 3, '#e2543e');
-    $('eqAns').textContent = P.ans; $('eqAns').className = 'done';
     store.total++; store.tree++;
     const bloom = store.tree >= 10;
     if(bloom) store.tree = 0;
     saveStore(); renderTree(bloom);
-    say(bloom ? '🌸 まんかい！ 10もん できた！ ' + P.a + ' − ' + P.b + ' ＝ ' + P.ans
-              : 'できた！ ' + P.a + ' − ' + P.b + ' ＝ ' + P.ans + '　🍒 が 1つ なったよ');
+    if(predAns === null) drawAnsDigit();
+    const predMsg = predAns === null ? '' : (predAns === P.ans ? '　よそうも あたり！🎯' : '　よそうは ' + predAns + ' だったね');
+    say(bloom ? '🌸 まんかい！ 10もん できた！ ' + P.a + ' − ' + P.b + ' ＝ ' + P.ans + predMsg
+              : 'できた！ ' + P.a + ' − ' + P.b + ' ＝ ' + P.ans + '　🍒 が 1つ なったよ' + predMsg);
     step = 'done';
     $('bNext').classList.add('on');
     clearTimeout(autoTimer);
@@ -258,7 +241,17 @@ function inkResize(){
   inkCv.width = Math.round(r.width * dpr); inkCv.height = Math.round(r.height * dpr);
   ictx.setTransform(dpr, 0, 0, dpr, 0, 0); inkRedraw();
 }
-function inkClear(){ inkStrokes = []; inkPen = null; clearTimeout(inkTimer); inkTimer = null; inkRedraw(); }
+function inkClearStrokes(){ inkStrokes = []; inkPen = null; clearTimeout(inkTimer); inkTimer = null; inkRedraw(); }
+function inkClear(){ inkClearStrokes(); predAns = null; lastInk = null; const el = $('inkCv'); if(el) el.classList.remove('has'); const b = $('bInkClear'); if(b) b.classList.remove('on'); inkRedraw(); }
+// 書かなかった ときは、こたえの 数字を ますに 見せる
+function drawAnsDigit(){
+  const r = inkCv.getBoundingClientRect(); if(!r.width) return;
+  ictx.save();
+  ictx.fillStyle = '#e2543e'; ictx.font = '900 ' + Math.round(r.height * 0.72) + 'px "Hiragino Maru Gothic ProN",sans-serif';
+  ictx.textAlign = 'center'; ictx.textBaseline = 'middle';
+  ictx.fillText(String(P.ans), r.width / 2, r.height / 2 + 2);
+  ictx.restore();
+}
 function inkRedraw(){
   const r = inkCv.getBoundingClientRect();
   ictx.clearRect(0, 0, r.width, r.height);
@@ -270,12 +263,12 @@ function inkRedraw(){
   }
 }
 function inkPos(e){ const r = inkCv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-inkCv.addEventListener('pointerdown', e => { e.preventDefault(); clearTimeout(inkTimer); inkTimer = null; inkPen = [inkPos(e)]; inkStrokes.push(inkPen); inkRedraw(); });
+inkCv.addEventListener('pointerdown', e => { e.preventDefault(); if(step === 'done') return; if(predAns !== null || inkStrokes.length) inkClear(); clearTimeout(inkTimer); inkTimer = null; inkPen = [inkPos(e)]; inkStrokes.push(inkPen); inkRedraw(); });
 inkCv.addEventListener('pointermove', e => { if(!inkPen) return; inkPen.push(inkPos(e)); inkRedraw(); });
 const inkUp = () => { if(!inkPen) return; inkPen = null; clearTimeout(inkTimer); inkTimer = setTimeout(judgeInk, 750); };
 inkCv.addEventListener('pointerup', inkUp);
 inkCv.addEventListener('pointercancel', inkUp);
-$('bInkClear').onclick = () => inkClear();
+$('bInkClear').onclick = () => { if(step !== 'done') inkClear(); };
 
 // ── おいわい ──
 function burst(x, y, col){
@@ -453,14 +446,14 @@ function drawFrame(){
 
 startProblem(false);
 resize();
+inkResize();
 requestAnimationFrame(drawFrame);
 
 // テスト・デバッグ用
 window.sakura = {
   state: () => ({ a: P.a, b: P.b, rest: P.rest, r: P.r, ans: P.ans, step, tree: store.tree, total: store.total, gy: Math.round(gy), stageH: Math.round(H),
-                  eqAns: $('eqAns').textContent, writeQ: $('writeQ').textContent,
-                  frame: !!frameRect(), minus: minusShown(),
-                  write: $('write').classList.contains('on'), lastInk,
+                  eqAns: step === 'done' ? String(P.ans) : (predAns !== null ? String(predAns) : '？'), predAns,
+                  frame: !!frameRect(), minus: minusShown(), lastInk,
                   chars: chars.map(c => ({ v: c.v, role: c.role, x: Math.round(c.x), y: Math.round(c.y), w: Math.round(spec(c.v).cols * bs) })) }),
   split: doSplit, predict, take: doTake, merge: doMerge,
   next: () => startProblem(false), reset: () => startProblem(true),
