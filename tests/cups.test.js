@@ -113,6 +113,32 @@ module.exports = {
     t.eq((await st(p1)).ticks, 0, '値そのものは 目盛り（0）に なっていない');
   },
 
+  'デバッグ表示と 符号反転・基準リセットが 効く': async t => {
+    const p1 = await openCup(t);
+    await p1.click('#dbgBtn');
+    await p1.waitForTimeout(250);
+    const vis = await p1.evaluate(() => document.getElementById('dbg').classList.contains('on'));
+    t.ok(vis, 'デバッグパネルが 開かない');
+    const txt = await p1.evaluate(() => document.getElementById('dbgTxt').textContent);
+    t.ok(txt.includes('roll=') && txt.includes('beta='), 'デバッグに 値が 出ていない: ' + txt.slice(0, 60));
+    // 右へ 14° → roll +14。符号反転すると -14 になる
+    await p1.evaluate(() => cups.tilt(true));
+    await rollRight(p1, 14, 10);
+    const r1 = (await st(p1)).roll;
+    t.ok(r1 > 9, '前提の roll が 取れていない: ' + r1);
+    await p1.click('#dbgFlip');
+    await rollRight(p1, 14, 4);
+    const r2 = (await st(p1)).roll;
+    t.ok(r2 < -9, '符号反転が 効いていない: ' + r2);
+    t.eq((await st(p1)).sign, -1, '符号が 保存されていない');
+    // 基準リセット：その姿勢のまま roll が 0 に戻る
+    await p1.click('#calBtn');
+    await rollRight(p1, 14, 4);
+    await p1.waitForTimeout(150);
+    const r3 = (await st(p1)).roll;
+    t.ok(Math.abs(r3) < 5, '基準リセット後に roll が 0 近くに ならない: ' + r3);
+  },
+
   'そそぐボタンでも ゆっくり 1目盛りずつ うつる': async t => {
     const p1 = await openCup(t), p2 = await openCup2(p1);
     await p2.waitForFunction(() => cups.state().partnerSeen === true, null, { timeout: 6000 });

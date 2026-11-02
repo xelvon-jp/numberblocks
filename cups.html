@@ -36,6 +36,14 @@
   #menu { position:absolute; left:10px; right:10px; bottom:10px; background:rgba(255,255,255,0.97); border:3px solid #2f7fd0;
           border-radius:18px; padding:12px; display:none; z-index:5; box-shadow:0 8px 24px rgba(31,102,171,0.25); }
   #menu.on { display:block; }
+  #dbg { position:fixed; left:8px; right:8px; bottom:74px; z-index:9; display:none;
+         background:rgba(16,26,36,0.94); color:#bfe3ff; border-radius:12px; padding:10px 12px;
+         font-family:ui-monospace,Menlo,monospace; font-size:12.5px; line-height:1.55; }
+  #dbg.on { display:block; }
+  #dbg .row { display:flex; gap:10px; align-items:flex-start; }
+  #dbgTxt { white-space:pre-wrap; word-break:break-all; flex:1; }
+  #dbg button { border:1.5px solid #7fb2dd; background:transparent; color:#bfe3ff; border-radius:8px;
+                padding:4px 10px; font-size:12px; font-family:inherit; cursor:pointer; margin-top:6px; margin-right:6px; }
   #menu .mt { font-size:14px; font-weight:900; color:#40627a; margin-bottom:8px; }
   #menuGrid { display:flex; flex-wrap:wrap; gap:7px; }
   .mbtn { border:2.5px solid #9db8c9; background:#fff; color:#1f66ab; border-radius:12px; min-width:56px;
@@ -56,6 +64,8 @@
       <div id="dot"></div><div id="status">つなぎ中…</div>
       <button class="btn sub" id="retryBtn">つなぎなおす</button>
       <button class="btn sub" id="tiltBtn">かたむき：OFF</button>
+      <button class="btn sub" id="dbgBtn">デバッグ</button>
+      <button class="btn sub" id="calBtn">基準リセット</button>
     </div>
   </div>
   <div id="unitRow">
@@ -77,6 +87,17 @@
         <button class="mbtn" id="stepUp">＋</button>
         <button class="mbtn" id="menuClose">とじる</button>
       </div>
+    </div>
+  </div>
+  <div id="dbg">
+    <div class="row">
+      <div id="dbgTxt">…</div>
+      <canvas id="dbgCv" width="92" height="92" style="flex:none;background:rgba(255,255,255,0.06);border-radius:8px"></canvas>
+    </div>
+    <div>
+      <button id="dbgRecal">基準を 取り直す</button>
+      <button id="dbgFlip">符号を 反転</button>
+      <button id="dbgClose">閉じる</button>
     </div>
   </div>
   <div id="bar">
@@ -186,6 +207,8 @@ function levelYc(){ const g = cupGeom(); return g.inB - (dispTicks / totalTicks(
 /* ── 傾きと 流れ ── */
 let tiltEnabled = false, tiltSm = 0;
 let gSm = { x: 0, y: -1, z: 0 }, g0 = null, rollDeg = 0;
+let lastOri = { a: null, b: null, g: null, n: 0, at: 0 };
+let rollSign = 1; try{ rollSign = parseFloat(localStorage.getItem('cupsRollSign') || '1') || 1; }catch(_){}
 /* ロールは「ON にした ときの 重力ベクトル g0」からの 相対角度で 出す。
    Euler角の 絶対値や プラットフォームごとの 符号差（iOS は beta の 符号が 逆）に
    左右されず、立てた 姿勢でも 暴れない。 */
@@ -195,7 +218,7 @@ function computeRoll(){
   if(m < 0.35 || m0 < 0.35) return 0;              // ほぼ 水平に 置いたら 水面は 水平
   const dot = (gSm.x * g0.x + gSm.y * g0.y) / (m * m0);
   const cross = (g0.x * gSm.y - g0.y * gSm.x) / (m * m0);
-  return -Math.atan2(cross, dot) * 180 / Math.PI; // 右に 倒す = +
+  return rollSign * -Math.atan2(cross, dot) * 180 / Math.PI; // 右に 倒す = +
 }
 let btnPour = false, spillAcc = 0, spilling = 0, recvUntil = 0, drops = [], slosh = 0, sloshV = 0;
 const TILT_AMP = 2.2;
@@ -330,10 +353,11 @@ function tick(t){
     spillAcc += rate * dt;
     while(spillAcc >= 1){ spillAcc -= 1; if(!transferTick()){ spillAcc = 0; break; } }
   } else spillAcc = Math.max(0, spillAcc - dt * 2);
-  draw(t);
+  draw(t); drawDbg(t);
   requestAnimationFrame(tick);
 }
 window.addEventListener('deviceorientation', e => {
+  lastOri = { a: e.alpha, b: e.beta, g: e.gamma, n: lastOri.n + 1, at: performance.now() };
   if(e.beta === null || e.beta === undefined || e.gamma === null || e.gamma === undefined) return;
   const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
   // 重力ベクトル（端末座標・下向き）。alpha に 依存しない 形
@@ -422,8 +446,44 @@ try{ if(localStorage.getItem('cupsTilt')) tiltBtn.textContent = 'かたむき：
 layout(); buildMenu();
 connectAuto();
 requestAnimationFrame(tick);
+/* ── デバッグ ── */
+const dbgEl = document.getElementById('dbg'), dbgTxt = document.getElementById('dbgTxt'), dbgCv = document.getElementById('dbgCv');
+let dbgLast = 0;
+function setDbg(on){ dbgEl.classList.toggle('on', !!on); }
+document.getElementById('dbgBtn').onclick = () => setDbg(!dbgEl.classList.contains('on'));
+document.getElementById('dbgClose').onclick = () => setDbg(false);
+function recalibrate(){ g0 = { x: gSm.x, y: gSm.y, z: gSm.z }; tiltSm = 0; rollDeg = 0; }
+document.getElementById('dbgRecal').onclick = recalibrate;
+document.getElementById('calBtn').onclick = () => { recalibrate(); setStatus('いまの 姿勢を まっすぐに した', connected); };
+document.getElementById('dbgFlip').onclick = () => { rollSign = -rollSign; try{ localStorage.setItem('cupsRollSign', String(rollSign)); }catch(_){} };
+if(/[?&]debug=1/.test(location.search)) setDbg(true);
+function drawDbg(t){
+  if(!dbgEl.classList.contains('on') || t - dbgLast < 120) return;
+  dbgLast = t;
+  const f = (v, d) => v === null || v === undefined ? '—' : Number(v).toFixed(d === undefined ? 2 : d);
+  dbgTxt.textContent =
+    'ev n=' + lastOri.n + '  前回から ' + (lastOri.at ? Math.round(t - lastOri.at) : '—') + 'ms\n' +
+    'beta=' + f(lastOri.b, 1) + '  gamma=' + f(lastOri.g, 1) + '  alpha=' + f(lastOri.a, 1) + '\n' +
+    'g  = (' + f(gSm.x) + ', ' + f(gSm.y) + ', ' + f(gSm.z) + ')\n' +
+    'g0 = ' + (g0 ? '(' + f(g0.x) + ', ' + f(g0.y) + ', ' + f(g0.z) + ')' : 'なし') + '\n' +
+    'roll=' + f(rollDeg, 1) + '°  tiltSm=' + f(tiltSm, 1) + '°  符号=' + (rollSign > 0 ? '+1' : '-1') + '\n' +
+    'spill=' + spilling + '  ticks=' + myTicks + '  disp=' + f(dispTicks) + '  mode=' + mode + '\n' +
+    'tilt=' + (tiltEnabled ? 'ON' : 'OFF') + '  perm=' + (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function' ? '要許可' : '不要') + '  conn=' + (connected ? 'Peer' : (partnerSeen ? 'BC/同期' : '未'));
+  const c = dbgCv.getContext('2d');
+  c.clearRect(0, 0, 92, 92);
+  c.strokeStyle = 'rgba(255,255,255,0.35)'; c.beginPath(); c.arc(46, 46, 34, 0, 6.29); c.stroke();
+  c.beginPath(); c.moveTo(46, 6); c.lineTo(46, 86); c.moveTo(6, 46); c.lineTo(86, 46); c.stroke();
+  c.fillStyle = '#ffd34d';
+  c.beginPath(); c.arc(46 + gSm.x * 32, 46 - gSm.y * 32, 6, 0, 6.29); c.fill();
+  if(g0){ c.fillStyle = '#7fb2dd'; c.beginPath(); c.arc(46 + g0.x * 32, 46 - g0.y * 32, 4, 0, 6.29); c.fill(); }
+  const a = tiltSm * TILT_AMP * Math.PI / 180;
+  c.strokeStyle = '#58c6f0'; c.lineWidth = 2.5;
+  c.beginPath(); c.moveTo(46 - 30 * Math.cos(a), 46 - 30 * Math.sin(a)); c.lineTo(46 + 30 * Math.cos(a), 46 + 30 * Math.sin(a)); c.stroke();
+  c.lineWidth = 1;
+}
 window.cups = {
-  state(){ return { mode, ticks: myTicks, disp: Math.round(dispTicks * 100) / 100, total: totalTicks(), partnerTicks, partnerSeen, connected, tilt: tiltEnabled, gamma: Math.round(tiltSm * 10) / 10, roll: Math.round(rollDeg * 10) / 10, spilling }; },
+  state(){ return { mode, ticks: myTicks, disp: Math.round(dispTicks * 100) / 100, total: totalTicks(), partnerTicks, partnerSeen, connected, tilt: tiltEnabled, gamma: Math.round(tiltSm * 10) / 10, roll: Math.round(rollDeg * 10) / 10, sign: rollSign, spilling }; },
+  debug(on){ setDbg(on !== false); },
   setTicks: setMyTicks, setMode, tilt(on){ setTilt(!!on); },
   pour(on){ btnPour = !!on; },
   connect: connectAuto,
