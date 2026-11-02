@@ -97,25 +97,30 @@
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 "use strict";
-/* ================= かぞくチャット v1 (PeerJS mesh, members fixed) ================= */
+/* ================= かぞくチャット v2 (Supabase mailbox + E2E encryption) ================= */
 const MEMBERS = {
   papa: { name: "パパ", icon: "👨" },
   mama: { name: "ママ", icon: "👩" },
   boku: { name: "ぼく", icon: "👦" },
 };
 const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","😭","🚗","🚃","🍓","🍙","⚽","🎈","🐱","🐶","🌟","💤","⭕","❌","❓","❗"];
-const PEER_PREFIX = "famchat1-";
+const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
+const SERVER_TABLE = "famchat_messages";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
 const $ = s => document.querySelector(s);
 let cfg = null;            // {member, code}
 let roomKey = "";          // hash of code
-let peer = null;
-let conns = {};            // memberId -> DataConnection
+let sb = null;             // supabase client
+let roomServer = "";       // SHA-256 hex of the code (server-side room id)
+let encKey = null;         // AES-GCM key derived from the code
+let serverOk = false;
+let outbox = [];           // encrypted rows waiting to be inserted
 let msgs = [];             // sorted by ts, id
 let msgIds = new Set();
 let bc = null;
@@ -132,7 +137,7 @@ function hashStr(s) {
   h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
   return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
 }
-function peerIdFor(member) { return PEER_PREFIX + roomKey + "-" + member; }
+function lsOutboxKey() { return "famchat_outbox_" + roomKey; }
 function lsHistoryKey() { return "famchat_hist_" + roomKey; }
 
 /* ================= setup screen ================= */
@@ -173,18 +178,18 @@ function saveHistory() {
     try { localStorage.setItem(lsHistoryKey(), JSON.stringify(msgs)); } catch (e2) {}
   }
 }
-function addMsg(m, fromNetwork) {
+function addMsg(m) {
   if (!m || !m.id || msgIds.has(m.id)) return false;
   if (!MEMBERS[m.from] || !["text", "stamp", "photo"].includes(m.type)) return false;
   msgs.push(m); msgIds.add(m.id);
   saveHistory(); renderMsg(m); scrollBottom();
-  if (!fromNetwork) broadcast({ kind: "chat", msg: m });
   return true;
 }
 function sendMsg(type, body) {
   const m = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), from: cfg.member, type, body, ts: Date.now() };
-  addMsg(m, false);
+  addMsg(m);
   if (bc) bc.postMessage({ kind: "chat", msg: m });
+  queueServerSend(m);
 }
 
 /* ---------- rendering ---------- */
@@ -221,76 +226,90 @@ function renderMsg(m) {
 function renderAll() { msgsEl.innerHTML = ""; lastDay = ""; msgs.forEach(renderMsg); scrollBottom(); }
 function scrollBottom() { requestAnimationFrame(() => { msgsEl.scrollTop = msgsEl.scrollHeight; }); }
 
-/* ---------- transport: PeerJS mesh + BroadcastChannel ---------- */
-function broadcast(obj) { Object.values(conns).forEach(c => { if (c && c.open) { try { c.send(obj); } catch (e) {} } }); }
+/* ---------- crypto: key + room from the family code (WebCrypto) ---------- */
+const te = new TextEncoder(), td = new TextDecoder();
+function u8ToB64(u8) { let bin = ""; for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(bin); }
+function b64ToU8(b64) { const bin = atob(b64); const u8 = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i); return u8; }
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest("SHA-256", te.encode(text));
+  return [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, "0")).join("");
+}
+async function deriveKey(code) {
+  const base = await crypto.subtle.importKey("raw", te.encode(code), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: te.encode("famchat-enc-salt-v2"), iterations: 120000, hash: "SHA-256" },
+    base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+}
+async function encryptMsg(m) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, encKey, te.encode(JSON.stringify(m)));
+  return { id: m.id, room: roomServer, iv: u8ToB64(iv), data: u8ToB64(new Uint8Array(ct)), ts: m.ts };
+}
+async function decryptRow(row) {
+  try {
+    const pt = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64ToU8(row.iv) }, encKey, b64ToU8(row.data));
+    const m = JSON.parse(td.decode(pt));
+    return (m && m.id) ? m : null;
+  } catch (e) { return null; }  // different code / damaged row: silently skip
+}
+
+/* ---------- transport: Supabase mailbox + BroadcastChannel (same device) ---------- */
+function serverConfigured() { return SUPABASE_URL.startsWith("https://") && SUPABASE_ANON_KEY.length > 20; }
 function updateStatus() {
-  const n = Object.values(conns).filter(c => c && c.open).length;
-  $("#status").classList.toggle("on", n > 0);
-  $("#statusText").textContent = n > 0 ? n + "人と接続中" : "相手を待っています…";
+  if (!serverConfigured()) { $("#status").classList.remove("on"); $("#statusText").textContent = "サーバ未設定（この端末のみ）"; return; }
+  $("#status").classList.toggle("on", serverOk);
+  $("#statusText").textContent = serverOk ? (outbox.length ? "送信待ち " + outbox.length + "件" : "サーバと同期中") : "サーバに接続中…";
 }
-function hookConn(c, member) {
-  conns[member] = c;
-  c.on("open", () => {
-    updateStatus();
-    c.send({ kind: "hello", from: cfg.member, ids: [...msgIds] });
-  });
-  c.on("data", d => onData(c, d));
-  c.on("close", () => { if (conns[member] === c) delete conns[member]; updateStatus(); });
-  c.on("error", () => {});
-}
-function onData(c, d) {
-  if (!d || typeof d !== "object") return;
-  if (d.kind === "hello") {
-    const theirs = new Set(d.ids || []);
-    const missing = msgs.filter(m => !theirs.has(m.id));
-    if (missing.length) c.send({ kind: "msgs", msgs: missing });
-    // answer with my hello once per connection
-    if (!c._helloSent) { c._helloSent = true; try { c.send({ kind: "hello", from: cfg.member, ids: [...msgIds] }); } catch (e) {} }
-  } else if (d.kind === "msgs" && Array.isArray(d.msgs)) {
-    d.msgs.forEach(m => addMsg(m, true));
-  } else if (d.kind === "chat") {
-    addMsg(d.msg, true);
+function loadOutbox() { try { outbox = JSON.parse(localStorage.getItem(lsOutboxKey()) || "[]"); } catch (e) { outbox = []; } if (!Array.isArray(outbox)) outbox = []; }
+function saveOutbox() { try { localStorage.setItem(lsOutboxKey(), JSON.stringify(outbox)); } catch (e) {} }
+async function flushOutbox() {
+  if (!sb || !outbox.length) return;
+  const rows = outbox.slice();
+  const { error } = await sb.from(SERVER_TABLE).insert(rows);
+  if (!error) {
+    const sent = new Set(rows.map(r => r.id));
+    outbox = outbox.filter(r => !sent.has(r.id));
+    saveOutbox(); serverOk = true;
   }
+  updateStatus();
 }
-function connectToOthers() {
-  if (!peer || peer.destroyed) return;
-  Object.keys(MEMBERS).forEach(member => {
-    if (member === cfg.member) return;
-    const cur = conns[member];
-    if (cur && (cur.open || cur._pending)) return;
-    try {
-      const c = peer.connect(peerIdFor(member), { reliable: true });
-      c._pending = true;
-      c.on("open", () => { c._pending = false; });
-      hookConn(c, member);
-    } catch (e) {}
-  });
+async function queueServerSend(m) {
+  if (!serverConfigured()) return;
+  const row = await encryptMsg(m);
+  outbox.push(row); saveOutbox();
+  flushOutbox();
+}
+let fetching = false;
+async function fetchMissed() {
+  if (!sb || fetching) return;
+  fetching = true;
+  try {
+    const { data, error } = await sb.from(SERVER_TABLE)
+      .select("id,iv,data,ts").eq("room", roomServer)
+      .order("ts", { ascending: true }).limit(500);
+    if (!error && Array.isArray(data)) {
+      serverOk = true;
+      for (const row of data) { if (!msgIds.has(row.id)) { const m = await decryptRow(row); if (m) addMsg(m); } }
+    } else if (error) { serverOk = false; }
+  } catch (e) { serverOk = false; }
+  fetching = false;
+  updateStatus();
+  flushOutbox();
 }
 function startTransport() {
-  try { bc = new BroadcastChannel("famchat_" + roomKey); bc.onmessage = e => onData({ send() {} }, e.data); } catch (e) {}
-  if (typeof Peer === "undefined") { updateStatus(); return; }
-  const myId = peerIdFor(cfg.member);
-  peer = new Peer(myId);
-  peer.on("open", () => { connectToOthers(); updateStatus(); });
-  peer.on("connection", c => {
-    // incoming: figure out who from the peer id suffix
-    const member = Object.keys(MEMBERS).find(m => c.peer === peerIdFor(m)) || c.peer;
-    hookConn(c, member);
-  });
-  peer.on("error", err => {
-    if (err.type === "unavailable-id") {
-      // same member already open somewhere (e.g. another tab): join with a suffix id
-      try { peer.destroy(); } catch (e) {}
-      peer = new Peer(myId + "-" + Math.random().toString(36).slice(2, 6));
-      peer.on("open", () => { connectToOthers(); updateStatus(); });
-      peer.on("connection", c => hookConn(c, Object.keys(MEMBERS).find(m => c.peer.startsWith(PEER_PREFIX + roomKey + "-" + m)) || c.peer));
-      peer.on("error", () => {});
-    } else if (err.type === "peer-unavailable") {
-      // the other phone is simply not open right now; retry loop handles it
-    }
-  });
-  setInterval(connectToOthers, 5000);
-  setInterval(() => broadcast({ kind: "hello", from: cfg.member, ids: [...msgIds] }), 15000);
+  try { bc = new BroadcastChannel("famchat_" + roomKey); bc.onmessage = e => { if (e.data && e.data.kind === "chat") addMsg(e.data.msg); }; } catch (e) {}
+  if (!serverConfigured() || typeof supabase === "undefined") { updateStatus(); return; }
+  sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  fetchMissed();
+  try {
+    sb.channel("famchat-live")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: SERVER_TABLE, filter: "room=eq." + roomServer },
+        async payload => { const row = payload.new; if (row && !msgIds.has(row.id)) { const m = await decryptRow(row); if (m) addMsg(m); } serverOk = true; updateStatus(); })
+      .subscribe();
+  } catch (e) {}
+  setInterval(fetchMissed, 10000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) fetchMissed(); });
+  window.addEventListener("online", fetchMissed);
 }
 
 /* ================= inputs ================= */
@@ -332,11 +351,13 @@ $("#photoInput").addEventListener("change", e => {
 });
 
 /* ================= boot ================= */
-function startChat() {
+async function startChat() {
   roomKey = hashStr("famchat:" + cfg.code);
   $("#setup").style.display = "none";
   $("#chat").style.display = "flex";
-  loadHistory(); renderAll();
+  loadHistory(); renderAll(); loadOutbox();
+  roomServer = await sha256Hex("famchat-room-v2:" + cfg.code);
+  encKey = await deriveKey(cfg.code);
   startTransport(); updateStatus();
 }
 try {
