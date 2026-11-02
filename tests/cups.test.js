@@ -86,21 +86,27 @@ module.exports = {
     t.eq((await st(p1)).ticks, c1, '戻しても 流れが 止まっていない');
   },
 
-  'iOS式の符号でも 立てて傾ければ 流れる': async t => {
+  'iOS実測エンコーディング：符号反転で 一致し、傾ければ 流れる': async t => {
+    // 実機デバッグ実測（2026-11-02）：立てた姿勢 beta≈91.7/gamma≈26 → g≈(0,-1,0)。
+    // 右へ45°：beta≈133.4 / gamma≈-88.1 → g≈(0.69,-0.73)。このとき 素の roll は -44 になり、
+    // 符号 -1 で +44 に 一致した（Nagato 実機確認）。その流れを 再現する。
     const p1 = await openCup(t), p2 = await openCup2(p1);
     await p2.waitForFunction(() => cups.state().partnerSeen === true, null, { timeout: 6000 });
-    // iOS は beta の符号が逆：立てた姿勢 = beta -90。その姿勢で ON にして基準を取る
-    await evt(p1, -90, 0, 8);
+    await evt(p1, 90, 0, 8);
     await p1.evaluate(() => { cups.setTicks(11); cups.tilt(true); });
     await p2.waitForFunction(() => cups.state().ticks === 1, null, { timeout: 5000 });
-    await evt(p1, -104, -90, 10);   // iOS式に 右へ 14°
-    const s = await st(p1);
-    t.ok(s.roll > 9 && s.roll < 19, 'iOS式で ロールが 取れていない: ' + s.roll);
+    await evt(p1, 104, -90, 10);   // 実測どおり 右へ 14°
+    let s = await st(p1);
+    t.ok(s.roll < -9, 'iOS実測では 素の roll が 負になるはず: ' + s.roll);
+    await p1.evaluate(() => document.getElementById('dbgFlip').click());
+    await evt(p1, 104, -90, 4);
+    s = await st(p1);
+    t.ok(s.roll > 9 && s.roll < 19, '反転後に roll が 一致しない: ' + s.roll);
     await p1.waitForFunction(() => cups.state().spilling === 1, null, { timeout: 4000 });
     await p1.waitForFunction(() => cups.state().ticks <= 10, null, { timeout: 6000 });
     const a = await st(p1), b = await st(p2);
-    t.eq(a.ticks + b.ticks, 12, 'iOS式でも 和が 一定でない');
-    t.ok(b.ticks >= 2, 'iOS式で 相手に 届いていない: ' + b.ticks);
+    t.eq(a.ticks + b.ticks, 12, '和が 一定でない');
+    t.ok(b.ticks >= 2, '相手に 届いていない: ' + b.ticks);
   },
 
   '水面は アナログに 動く（値は 目盛りのまま）': async t => {

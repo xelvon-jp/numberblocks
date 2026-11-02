@@ -208,7 +208,12 @@ function levelYc(){ const g = cupGeom(); return g.inB - (dispTicks / totalTicks(
 let tiltEnabled = false, tiltSm = 0;
 let gSm = { x: 0, y: -1, z: 0 }, g0 = null, rollDeg = 0;
 let lastOri = { a: null, b: null, g: null, n: 0, at: 0 };
-let rollSign = 1; try{ rollSign = parseFloat(localStorage.getItem('cupsRollSign') || '1') || 1; }catch(_){}
+let rollSign = 1;
+try{
+  const saved = localStorage.getItem('cupsRollSign');
+  if(saved) rollSign = parseFloat(saved) || 1;
+  else rollSign = /iPhone|iPad|iPod/.test(navigator.userAgent) ? -1 : 1;   // 実機検証：iOS は -1 が 正しい
+}catch(_){}
 /* ロールは「ON にした ときの 重力ベクトル g0」からの 相対角度で 出す。
    Euler角の 絶対値や プラットフォームごとの 符号差（iOS は beta の 符号が 逆）に
    左右されず、立てた 姿勢でも 暴れない。 */
@@ -221,7 +226,7 @@ function computeRoll(){
   return rollSign * -Math.atan2(cross, dot) * 180 / Math.PI; // 右に 倒す = +
 }
 let btnPour = false, spillAcc = 0, spilling = 0, recvUntil = 0, drops = [], slosh = 0, sloshV = 0;
-const TILT_AMP = 2.2;
+const TILT_AMP = 1.0;   // 水面の 角度は 端末の 傾き そのまま（実機フィードバックで 増幅は 廃止）
 function surfInfo(){
   const g = cupGeom(), cx = (g.inL + g.inR) / 2, yc = levelYc();
   const ang = Math.max(-72, Math.min(72, tiltSm * TILT_AMP)) * Math.PI / 180;
@@ -268,7 +273,7 @@ function draw(t){
     const N = 22;
     for(let i = 0; i <= N; i++){
       const x = g.inL + (g.inR - g.inL) * i / N;
-      const y = si.yAt(x) + Math.sin(t * 0.006 + i * 0.8) * (1.1 + Math.abs(slosh) * 3.4) * Math.sin(Math.PI * i / N) + slosh * 5 * (i / N - 0.5);
+      const y = Math.max(g.inT - 1, si.yAt(x) + Math.sin(t * 0.006 + i * 0.8) * (1.1 + Math.abs(slosh) * 3.4) * Math.sin(Math.PI * i / N) + slosh * 5 * (i / N - 0.5));
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     }
     ctx.lineTo(g.inR, g.inB); ctx.lineTo(g.inL, g.inB); ctx.closePath();
