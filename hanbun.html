@@ -47,6 +47,8 @@
   #zmirror { right:10px; border-color:#2a9ab8; color:#146a84; }
   #goal #gskip.hint { background:#ffcf3f; box-shadow:0 0 0 3px #f0a020; }   /* つまった ときは「もどす」を 目立たせる */
   #ztent { left:50%; transform:translateX(-50%); border-color:#e07b2a; color:#a34d00; font-size:22px; }
+  #zdiv10 { left:10px; top:80px; border-color:#2f7fd0; color:#1f66ab; }
+  #zmul10 { right:10px; top:80px; border-color:#ef6224; color:#c94f16; }
   #ztent.ready { background:#ffe9a8; animation:tpulse .6s ease-in-out infinite alternate; }
   @keyframes tpulse { from { transform:translateX(-50%) scale(1); } to { transform:translateX(-50%) scale(1.16); } }
 </style>
@@ -54,7 +56,7 @@
 <body>
 <div id="goal"><div class="t"></div><button id="gnext">つぎ ▶</button><button id="gskip">もどる</button></div>
 <div id="say"><div class="big"></div><div class="sub"></div></div>
-<div id="stage"><canvas id="c"></canvas><div id="zsquare" class="zone">しかく<sup>2</sup></div><div id="zmirror" class="zone">🪞 ミラー</div><div id="ztent" class="zone">🎪</div></div>
+<div id="stage"><canvas id="c"></canvas><div id="zsquare" class="zone">しかく<sup>2</sup></div><div id="zmirror" class="zone">🪞 ミラー</div><div id="ztent" class="zone">🎪</div><div id="zdiv10" class="zone">÷10</div><div id="zmul10" class="zone">×10</div></div>
 <div id="bar">
   <button id="home" aria-label="おうち"><svg viewBox="0 0 40 40" width="32" height="32"><path d="M20 5 L37 19 L32 19 L32 35 L8 35 L8 19 L3 19 Z" fill="#e8a04a" stroke="#8a5a20" stroke-width="2.4" stroke-linejoin="round"/><rect x="16" y="23" width="8" height="12" rx="1.5" fill="#8a5a20"/><path d="M20 5 L37 19 L3 19 Z" fill="#d0503c" stroke="#8a3020" stroke-width="2.4" stroke-linejoin="round"/></svg></button>
   <div id="nums"><button id="clear">かたづける</button></div>
@@ -620,6 +622,8 @@ function up(e){
   const c = q.c; if(!c) return;
   c.drag = null;
   if(e.type === 'pointercancel') return;
+  if(!STORY && !GOAL && overZone(document.getElementById('zdiv10'), c, q)){ applyScale10(c, false); return; }
+  if(!STORY && !GOAL && overZone(document.getElementById('zmul10'), c, q)){ applyScale10(c, true); return; }
   if(STORY && overZone(document.getElementById('zsquare'), c, q)){ applySquare(c); return; }
   if(STORY && overZone(document.getElementById('zmirror'), c, q)){ applyMirror(c); return; }
   if(STORY && storyReady && overZone(document.getElementById('ztent'), c, q)){ storyDeliver(c); return; }
@@ -727,6 +731,17 @@ function applySquare(c){
   burst(c.x, c.y - dims(to).rows*bs/2, 26, true);
   say(from + ' の しかく → ' + to, from + ' × ' + from + ' ＝ ' + to, true);
   storySquareDone(from, to);
+  save(); return true;
+}
+// ×10／÷10 ゾーン（自由あそび）：値は 0.01 きざみ・100 まで の ルール（okV）に 収まるときだけ
+function applyScale10(c, mul){
+  const t = now0(), exact = mul ? c.v * 10 : c.v / 10;
+  if(!okV(exact)){ c.shake = t; say(fmt(c.v) + ' は ' + (mul ? '×10' : '÷10') + ' できないよ', mul ? '100 より おおきく なっちゃう' : '0.01 より こまかく なっちゃう'); return false; }
+  const nv = norm(exact);
+  const from = c.v;
+  c.v = nv; c.hop = t; holdUntil = t + HOLD_MS; bs = Math.min(bs, targetBs());
+  burst(c.x, c.y - dims(nv).rows * bs / 2, 26, true);
+  say(fmt(from) + (mul ? ' ×10 → ' : ' ÷10 → ') + fmt(nv), fmt(from) + (mul ? ' を 10倍' : ' を 10で わる') + ' と ' + fmt(nv), true);
   save(); return true;
 }
 function applyMirror(c){
@@ -1049,6 +1064,7 @@ if(GOAL){
 }
 bs = targetBs();
 sayIdle(); checkTen();
+if(!STORY && !GOAL){ document.getElementById('zdiv10').classList.add('on'); document.getElementById('zmul10').classList.add('on'); }
 if(STORY) storyStart();
 Mizu.autoStart();       // センサーは はじめから オン（iPhone は さいしょに さわった とき に ゆるしを きく）
 requestAnimationFrame(frame);
@@ -1058,7 +1074,8 @@ window.hanbun = { chars: () => chars.map(c => c.v), add: v => addChar(v), split:
   at: i => { const c = chars[i], r = rect(c); return { x: c.x, y: r.y + r.h/2, w: r.w, h: r.h }; }, bs: () => bs, say: () => sayBig.textContent + '｜' + saySub.textContent,
   water: i => chars[i].w, goalDone: () => goalDone, mergeMany: idx => mergeMany(idx.map(i => chars[i])), lastTalk: () => lastTalk, preview: () => pinch && pinch.pv ? [pinch.pv.a, pinch.pv.b].map(c => { const r = rect(c); return { v: c.v, x: c.x, y: r.y + r.h/2 }; }) : null, clear: () => { chars = []; save(); }, scatter: i => scatter(chars[i]),
   story: () => STORY ? { ch: storyCh, step: storyStep, task: storyTask, done: storyDone, busy: storyBusy, ready: storyReady, select: storySelect, prog: storyProg.done.slice() } : null, storyNext: () => storyNext(),
-  square: i => applySquare(chars[i]), mirror: i => applyMirror(chars[i]), tap: i => storyTapHit(chars[i]), deliver: i => storyDeliver(chars[i]) };
+  square: i => applySquare(chars[i]), mirror: i => applyMirror(chars[i]), tap: i => storyTapHit(chars[i]), deliver: i => storyDeliver(chars[i]),
+  scale10: (i, mul) => applyScale10(chars[i], mul), zones10: () => [document.getElementById('zdiv10').classList.contains('on'), document.getElementById('zmul10').classList.contains('on')] };
 </script>
 </body>
 </html>
