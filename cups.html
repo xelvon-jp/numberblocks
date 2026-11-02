@@ -95,6 +95,7 @@ let mode = 'frac';
 let myTicks = 6;
 let col = [70, 150, 230];
 let partnerTicks = 6, partnerCol = [235, 90, 90], partnerSeen = false;
+let dispTicks = 6, partnerDisp = 6;   // 描画用：目盛りの 値へ ゆっくり 追いつく（アナログ表示）
 const totalTicks = () => mode === 'frac' ? 12 : 40;
 function gcd(a, b){ return b ? gcd(b, a % b) : a; }
 function fracOf(ticks){
@@ -177,15 +178,27 @@ setInterval(() => {
 }, 2500);
 /* ── コップ（円柱） ── */
 function cupGeom(){
-  const w = W * 0.76, x0 = (W - w) / 2;
-  const top = H * 0.21, bot = H * 0.90;
+  const w = W * 0.80, x0 = (W - w) / 2;
+  const top = H * 0.24, bot = H * 0.88;
   return { x0, w, top, bot, inL: x0 + 8, inR: x0 + w - 8, inT: top + 8, inB: bot - 8 };
 }
-function levelYc(){ const g = cupGeom(); return g.inB - (myTicks / totalTicks()) * (g.inB - g.inT); }
+function levelYc(){ const g = cupGeom(); return g.inB - (dispTicks / totalTicks()) * (g.inB - g.inT); }
 /* ── 傾きと 流れ ── */
 let tiltEnabled = false, tiltSm = 0;
+let gSm = { x: 0, y: -1, z: 0 }, g0 = null, rollDeg = 0;
+/* ロールは「ON にした ときの 重力ベクトル g0」からの 相対角度で 出す。
+   Euler角の 絶対値や プラットフォームごとの 符号差（iOS は beta の 符号が 逆）に
+   左右されず、立てた 姿勢でも 暴れない。 */
+function computeRoll(){
+  if(!g0) return 0;
+  const m = Math.hypot(gSm.x, gSm.y), m0 = Math.hypot(g0.x, g0.y);
+  if(m < 0.35 || m0 < 0.35) return 0;              // ほぼ 水平に 置いたら 水面は 水平
+  const dot = (gSm.x * g0.x + gSm.y * g0.y) / (m * m0);
+  const cross = (g0.x * gSm.y - g0.y * gSm.x) / (m * m0);
+  return -Math.atan2(cross, dot) * 180 / Math.PI; // 右に 倒す = +
+}
 let btnPour = false, spillAcc = 0, spilling = 0, recvUntil = 0, drops = [], slosh = 0, sloshV = 0;
-const TILT_AMP = 1.7;
+const TILT_AMP = 2.2;
 function surfInfo(){
   const g = cupGeom(), cx = (g.inL + g.inR) / 2, yc = levelYc();
   const ang = Math.max(-72, Math.min(72, tiltSm * TILT_AMP)) * Math.PI / 180;
@@ -227,7 +240,7 @@ function draw(t){
   ctx.fillStyle = '#dff4fa'; ctx.fillRect(0, 0, W, H);
   const si = surfInfo(), g = si.g;
   const colCss = a => 'rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',' + a + ')';
-  if(myTicks > 0){
+  if(dispTicks > 0.01){
     ctx.beginPath();
     const N = 22;
     for(let i = 0; i <= N; i++){
@@ -288,7 +301,7 @@ function draw(t){
   if(partnerSeen){
     const mw = 40, mh = 56, mx = W - mw - 10, my0 = 8;
     ctx.strokeStyle = '#40627a'; ctx.lineWidth = 2.5; ctx.strokeRect(mx, my0, mw, mh);
-    const ph = (partnerTicks / totalTicks()) * (mh - 6);
+    const ph = (partnerDisp / totalTicks()) * (mh - 6);
     ctx.fillStyle = 'rgba(' + partnerCol[0] + ',' + partnerCol[1] + ',' + partnerCol[2] + ',0.85)';
     ctx.fillRect(mx + 3, my0 + mh - 3 - ph, mw - 6, ph);
     ctx.fillStyle = '#40627a'; ctx.font = '900 11.5px sans-serif'; ctx.textAlign = 'center';
@@ -301,6 +314,9 @@ let lastT = 0;
 function tick(t){
   const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016); lastT = t;
   sloshV += (-slosh * 0.14 - sloshV * 0.16); slosh += sloshV * 0.06;
+  const ease = Math.min(1, dt * 4.2);
+  dispTicks += (myTicks - dispTicks) * ease; if(Math.abs(myTicks - dispTicks) < 0.003) dispTicks = myTicks;
+  partnerDisp += (partnerTicks - partnerDisp) * ease; if(Math.abs(partnerTicks - partnerDisp) < 0.003) partnerDisp = partnerTicks;
   const si = surfInfo();
   spilling = tiltEnabled ? si.side : 0;
   let rate = 0;
@@ -318,13 +334,17 @@ function tick(t){
   requestAnimationFrame(tick);
 }
 window.addEventListener('deviceorientation', e => {
-  if(e.gamma === null || e.gamma === undefined) return;
-  const landscape = window.screen && window.screen.orientation && Math.abs(window.screen.orientation.angle || 0) === 90;
-  const target = landscape ? (e.beta || 0) : e.gamma;
-  tiltSm += (target - tiltSm) * 0.25;
+  if(e.beta === null || e.beta === undefined || e.gamma === null || e.gamma === undefined) return;
+  const b = e.beta * Math.PI / 180, g = e.gamma * Math.PI / 180;
+  // 重力ベクトル（端末座標・下向き）。alpha に 依存しない 形
+  const gv = { x: Math.cos(b) * Math.sin(g), y: -Math.sin(b), z: -Math.cos(b) * Math.cos(g) };
+  gSm.x += (gv.x - gSm.x) * 0.3; gSm.y += (gv.y - gSm.y) * 0.3; gSm.z += (gv.z - gSm.z) * 0.3;
+  rollDeg = computeRoll();
+  tiltSm += (rollDeg - tiltSm) * 0.35;
 });
 const tiltBtn = document.getElementById('tiltBtn');
 function setTilt(on){
+  if(on){ g0 = { x: gSm.x, y: gSm.y, z: gSm.z }; try{ localStorage.setItem('cupsTilt', '1'); }catch(_){} }
   tiltEnabled = !!on;
   tiltBtn.textContent = 'かたむき：' + (tiltEnabled ? 'ON' : 'OFF');
   if(tiltEnabled) setStatus('かたむき ON：傾けて、口まで 水が きたら 流れるよ', connected);
@@ -398,11 +418,12 @@ function layout(){
 }
 new ResizeObserver(layout).observe(stage);
 window.addEventListener('resize', layout);
+try{ if(localStorage.getItem('cupsTilt')) tiltBtn.textContent = 'かたむき：押して ON に'; }catch(_){}
 layout(); buildMenu();
 connectAuto();
 requestAnimationFrame(tick);
 window.cups = {
-  state(){ return { mode, ticks: myTicks, total: totalTicks(), partnerTicks, partnerSeen, connected, tilt: tiltEnabled, gamma: Math.round(tiltSm * 10) / 10, spilling }; },
+  state(){ return { mode, ticks: myTicks, disp: Math.round(dispTicks * 100) / 100, total: totalTicks(), partnerTicks, partnerSeen, connected, tilt: tiltEnabled, gamma: Math.round(tiltSm * 10) / 10, roll: Math.round(rollDeg * 10) / 10, spilling }; },
   setTicks: setMyTicks, setMode, tilt(on){ setTilt(!!on); },
   pour(on){ btnPour = !!on; },
   connect: connectAuto,
