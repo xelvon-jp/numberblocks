@@ -1413,6 +1413,8 @@ function stepText(st){
   if(st.k==='new')    return st.a + ' をだした';
   if(st.k==='double') return st.a + ' を ×2 → ' + st.r;
   if(st.k==='half')   return st.a + ' を ÷2 → ' + st.r;
+  if(st.k==='mul10')  return st.a + ' を ×10 → ' + st.r;
+  if(st.k==='div10')  return st.a + ' を ÷10 → ' + st.r;
   if(st.k==='split')  return st.a + ' を はんぶんこ → ' + st.r + ' と ' + st.r;
   if(st.k==='square') return st.a + ' を しかく（' + st.a + '×' + st.a + '）→ ' + st.r;
   if(st.k==='copy')   return st.a + ' をコピー';
@@ -1574,10 +1576,10 @@ let homeAfter   = 0;      // おうちも同じ
 let mirrorReflect = 0;    // 鏡に映るキャラの出かた（0→1）
 let mirrorReflectNum = 0; // 今どのキャラが映っているか
 
-// ドロップ先は上部バーのすぐ下に4つ並べる。
-// 左から「おうち（帰る）」「÷2」「×2」「ミラー（ふえる）」。
+// ドロップ先は上部バーのすぐ下に並べる。
+// 左から「おうち（帰る）」「÷10」「÷2」「×2」「×10」「しかく」「ミラー（ふえる）」。
 // 減る側を左、増える側を右にまとめてあるので、押し間違えても大事にならない。
-const DROP_TARGETS = ['home','half','double','square','mirror'];
+const DROP_TARGETS = ['home','div10','half','double','mul10','square','mirror'];
 // おだい中は、おだいカードを上部バーのすぐ下に置き、アイコン列はその下へ下げる。
 // 「何をつくるか」を先に読ませて、道具はそのあとに見せる並びにしてある。
 function targetRowY(){
@@ -1586,8 +1588,9 @@ function targetRowY(){
 }
 function getTargetRect(id){
   if(mode==='factor'||mode==='quiz'||mode==='clock'||isFrameMode()) return null;
-  const w=51, h=60, n=DROP_TARGETS.length;
-  const gap = Math.min(40, Math.max(8, (sw - EDGE_MARGIN*2 - n*w)/(n-1)));
+  const n = DROP_TARGETS.length, availW = sw - EDGE_MARGIN * 2;
+  const w = Math.max(34, Math.min(51, Math.floor((availW - (n - 1) * 8) / n))), h = Math.round(w * 1.18);
+  const gap = Math.min(40, Math.max(4, (availW - n * w) / (n - 1)));
   const total = n*w + (n-1)*gap;
   const x0 = (sw - total)/2;
   const i = DROP_TARGETS.indexOf(id);
@@ -1617,7 +1620,7 @@ function isOverHome(x,y){   return isOverTarget('home',x,y); }
 
 // ×2 と ÷2 と しかく（2じょう）が使えるか（上限を超える／割り切れないときは受け付けない）
 // ×2・÷2・しかく。ふつうの かず でも Num でも うける。÷2 は きすう でも 0.01 きざみ なら うける（5 → 2.5）
-function scaledQ(id,n){ const q = Num.from(n); return id==='square' ? Num.mul(q,q) : id==='double' ? Num.mul(q, Num.make(2)) : Num.div(q, Num.make(2)); }
+function scaledQ(id,n){ const q = Num.from(n); return id==='square' ? Num.mul(q,q) : id==='double' ? Num.mul(q, Num.make(2)) : id==='mul10' ? Num.mul(q, Num.make(10)) : id==='div10' ? Num.div(q, Num.make(10)) : Num.div(q, Num.make(2)); }
 function canScale(id,n){
   const q = Num.from(n);
   if(id==='square' && Num.eq(q, Num.ONE)) return false;          // 1 の しかく は 1 の まま
@@ -1741,11 +1744,15 @@ function drawHomeSilhouette(ctx, dX, dY, dW, dH, num, ease, t){
 let tgtFx = {
   double:{ open:0, after:0, flash:0, num:0 },
   half:  { open:0, after:0, flash:0, num:0 },
+  mul10: { open:0, after:0, flash:0, num:0 },
+  div10: { open:0, after:0, flash:0, num:0 },
   square:{ open:0, after:0, flash:0, num:0 }
 };
 const SCALE_STYLE = {
   double:{ label:'×2', top:'#ffcf6b', bottom:'#f59331', edge:'#d9782a', glow:'255,200,120' },
   half:  { label:'÷2', top:'#a8e6ff', bottom:'#4aa8dd', edge:'#2f86ba', glow:'150,220,255' },
+  div10: { label:'÷10', top:'#7cc7ff', bottom:'#2f7fd0', edge:'#1f66ab', glow:'120,190,255' },
+  mul10: { label:'×10', top:'#ffab73', bottom:'#ef6224', edge:'#c94f16', glow:'255,170,110' },
   // しかく：おなじ数を たて・よこに ならべた 正方形（3 → 3×3 で 9）。アイコンは 3×3 の ます
   square:{ label:'²',  top:'#e3b5ff', bottom:'#a35ad8', edge:'#8442b8', glow:'215,160,255', grid:true }
 };
@@ -1808,7 +1815,7 @@ function drawScaleTarget(ctx, t, id){
     for(let i=0;i<k;i++) for(let j=0;j<k;j++){ ctx.beginPath(); ctx.rect(gx+i*cs+1, gy+j*cs+1, cs-2, cs-2); ctx.fill(); ctx.stroke(); }
     ctx.fillStyle='#fff'; ctx.font='bold 12px sans-serif'; ctx.fillText('しかく', m.x+m.w/2, m.y+m.h-8);
   } else {
-    ctx.fillStyle='#fff'; ctx.font='bold '+Math.round(m.h*0.42)+'px sans-serif';
+    ctx.fillStyle='#fff'; ctx.font='bold '+Math.round(m.h * (sty.label.length > 2 ? 0.33 : 0.42))+'px sans-serif';
     ctx.strokeStyle='rgba(0,0,0,0.22)'; ctx.lineWidth=3;
     ctx.strokeText(sty.label, m.x+m.w/2, m.y+m.h/2);
     ctx.fillText(sty.label,  m.x+m.w/2, m.y+m.h/2);
@@ -5384,7 +5391,7 @@ function handleEnd(x,y,pid){
   if(isOverHome(x,y)){ sendHome(b); return; }
   // ×2 / ÷2 の上で離した → そのキャラが2倍・半分になる。
   // できない組み合わせ（奇数の÷2など）は何も起きず、そのまま落ちる。
-  for(const id of ['double','half','square']){
+  for(const id of ['div10','half','double','mul10','square']){
     if(isOverTarget(id,x,y)){ if(canScale(id,b.q)) scaleBlock(b,id); updateTargets(); return; }
   }
   let best=null,bestD=Infinity;

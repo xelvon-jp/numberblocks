@@ -55,7 +55,7 @@ module.exports = {
     t.eq(await p.evaluate(i => taskLogs[i].length, TEN), 3, '遠回りした記録で上書きされている');
   },
 
-  'しかく（2じょう）：3 を おくと 9。32 は 1000 を こえるので できない。5つの おきばが 画面に おさまる': async t => {
+  'しかく（2じょう）：3 を おくと 9。32 は 1000 を こえるので できない。7つの おきばが 画面に おさまる': async t => {
     for(const [w, h] of [[320, 568], [393, 780]]){
       const p = await t.open({ width:w, height:h });
       const r = await p.evaluate(() => {
