@@ -16,20 +16,36 @@
   #dot { width:13px; height:13px; border-radius:50%; background:#c3ced4; flex:none; }
   #dot.on { background:#58a34c; }
   #status { font-size:13px; font-weight:800; color:#40627a; }
-  #code { width:74px; font-size:17px; font-weight:900; text-align:center; padding:4px 2px;
-          border:2.5px solid #9db8c9; border-radius:10px; font-family:inherit; color:#1f66ab; }
   .btn { border:2.5px solid #2f7fd0; background:#2f7fd0; color:#fff; border-radius:999px;
          padding:5px 14px; font-size:14.5px; font-weight:900; font-family:inherit; cursor:pointer; }
   .btn.sub { background:#fff; color:#2f7fd0; }
+  #unitRow { display:flex; align-items:center; gap:6px; padding:4px 10px 2px; }
+  .seg { display:flex; border:2.5px solid #2f7fd0; border-radius:999px; overflow:hidden; }
+  .seg button { border:none; background:#fff; color:#2f7fd0; font-family:inherit; font-weight:900;
+                font-size:14.5px; padding:5px 16px; cursor:pointer; }
+  .seg button.on { background:#2f7fd0; color:#fff; }
   #stage { position:relative; flex:1; min-height:0; }
   #cv { position:absolute; inset:0; }
   #bar { display:flex; align-items:center; gap:8px; padding:8px 10px 12px; }
-  #pour { flex:1; border:none; border-radius:18px; padding:15px 0; font-size:19px; font-weight:900;
+  #pour { flex:1; border:none; border-radius:18px; padding:14px 0; font-size:16.5px; font-weight:900;
           font-family:inherit; background:#2f7fd0; color:#fff; cursor:pointer; box-shadow:0 3px 0 #1f66ab; }
   #pour:active, #pour.held { background:#1f66ab; transform:translateY(2px); box-shadow:none; }
-  .chip { width:40px; height:40px; border-radius:50%; border:3px solid #fff; cursor:pointer; flex:none;
+  .chip { width:38px; height:38px; border-radius:50%; border:3px solid #fff; cursor:pointer; flex:none;
           box-shadow:0 0 0 2px #b9cdd8; }
   .chip.on { box-shadow:0 0 0 3.5px #40627a; }
+  #menu { position:absolute; left:10px; right:10px; bottom:10px; background:rgba(255,255,255,0.97); border:3px solid #2f7fd0;
+          border-radius:18px; padding:12px; display:none; z-index:5; box-shadow:0 8px 24px rgba(31,102,171,0.25); }
+  #menu.on { display:block; }
+  #menu .mt { font-size:14px; font-weight:900; color:#40627a; margin-bottom:8px; }
+  #menuGrid { display:flex; flex-wrap:wrap; gap:7px; }
+  .mbtn { border:2.5px solid #9db8c9; background:#fff; color:#1f66ab; border-radius:12px; min-width:56px;
+          padding:6px 4px; font-size:16px; font-weight:900; font-family:inherit; cursor:pointer; text-align:center; }
+  .mbtn.on { background:#2f7fd0; border-color:#2f7fd0; color:#fff; }
+  #menuStep { display:flex; gap:7px; margin-top:9px; }
+  #menuStep .mbtn { flex:1; padding:9px 4px; }
+  .frac { display:inline-flex; flex-direction:column; text-align:center; vertical-align:middle; line-height:1.05; font-size:0.92em; }
+  .frac .den { border-top:2.2px solid currentColor; padding:0 3px; }
+  .frac .num { padding:0 3px; }
 </style>
 </head>
 <body>
@@ -37,18 +53,34 @@
   <div id="head">
     <div id="title">🥤 みずのコップ（2台デモ）</div>
     <div id="conn">
-      <div id="dot"></div><div id="status">あいことば を あわせて「つなぐ」</div>
-      <input id="code" type="text" inputmode="numeric" maxlength="3" value="">
-      <button class="btn" id="connectBtn">つなぐ</button>
+      <div id="dot"></div><div id="status">つなぎ中…</div>
+      <button class="btn sub" id="retryBtn">つなぎなおす</button>
       <button class="btn sub" id="tiltBtn">かたむき：OFF</button>
     </div>
   </div>
-  <div id="stage"><canvas id="cv"></canvas></div>
-  <div id="bar">
-    <button id="pour">そそぐ（おしながら）→</button>
+  <div id="unitRow">
+    <div class="seg">
+      <button id="uFrac" class="on">ぶんすう</button><button id="uMl">ml</button>
+    </div>
+    <button class="btn" id="amtBtn">りょう を えらぶ</button>
     <div class="chip on" data-col="70,150,230" style="background:rgb(70,150,230)"></div>
     <div class="chip" data-col="235,90,90" style="background:rgb(235,90,90)"></div>
     <div class="chip" data-col="245,190,60" style="background:rgb(245,190,60)"></div>
+  </div>
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div id="menu">
+      <div class="mt">じぶんの りょう（あいては のこり に なります）</div>
+      <div id="menuGrid"></div>
+      <div id="menuStep">
+        <button class="mbtn" id="stepDown">−</button>
+        <button class="mbtn" id="stepUp">＋</button>
+        <button class="mbtn" id="menuClose">とじる</button>
+      </div>
+    </div>
+  </div>
+  <div id="bar">
+    <button id="pour">そそぐ（おしながら）→</button>
   </div>
 </div>
 
@@ -57,49 +89,47 @@
 const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
 const stage = document.getElementById('stage');
 let W = 0, H = 0, DPR = 1;
-/* ── じょうたい ── */
+/* りょう：合計は いつも 一定。frac は 合計 12 目盛り（1目盛り=カップの 1/12）、
+   ml は 合計 40 目盛り（1目盛り=5ml、片側 最大 200ml） */
+let mode = 'frac';
+let myTicks = 6;
+let col = [70, 150, 230];
+let partnerTicks = 6, partnerCol = [235, 90, 90], partnerSeen = false;
+const totalTicks = () => mode === 'frac' ? 12 : 40;
+function gcd(a, b){ return b ? gcd(b, a % b) : a; }
+function fracOf(ticks){
+  if(ticks <= 0) return [0, 1];
+  if(ticks >= 12) return [1, 1];
+  const g = gcd(ticks, 12);
+  return [ticks / g, 12 / g];
+}
+/* ── つうしん：自動接続（固定の部屋）。タブ間は BroadcastChannel ── */
 const myId = Math.random().toString(36).slice(2, 9);
-let amt = 0.5;                       // じぶんの 量（0..1）
-let col = [70, 150, 230];            // じぶんの 色
-let partner = null;                  // { amt, col } あいての 最新
-let btnPour = false, recvUntil = 0, lastSend = 0;
-let tiltEnabled = false, tiltSm = 0, tiltPour = false, pourDir = 1;
-const isPouring = () => btnPour || tiltPour;
-const pourRate = () => tiltPour && !btnPour ? 0.30 * Math.min(1, (Math.abs(tiltSm) - 18) / 30 + 0.3) : 0.30;
-let slosh = 0, sloshV = 0, dragLevel = null, drops = [];
-const seen = new Set();
-/* ── つうしん（BroadcastChannel＝同じ端末のタブ / PeerJS＝2台の iPhone） ── */
-let bc = null, peer = null, conn = null, isHost = false;
+let sendSeq = 0; const seenMids = new Set();
+let bc = null, peer = null, conn = null, connected = false, retryAt = 0;
 const statusEl = document.getElementById('status'), dotEl = document.getElementById('dot');
-function setStatus(txt, on){ statusEl.textContent = txt; dotEl.className = on ? 'on' : ''; dotEl.id = 'dot'; }
+function setStatus(txt, on){ statusEl.textContent = txt; dotEl.classList.toggle('on', !!on); }
 function send(obj){
-  obj.from = myId;
+  obj.from = myId; obj.mid = myId + ':' + (++sendSeq);
   try{ if(bc) bc.postMessage(obj); }catch(_){}
   try{ if(conn && conn.open) conn.send(obj); }catch(_){}
 }
+function sendState(){ send({ t: 'state', mode, ticks: myTicks, col }); }
 function recv(obj){
   if(!obj || obj.from === myId) return;
-  if(obj.mid){ if(seen.has(obj.mid)) return; seen.add(obj.mid); if(seen.size > 400) seen.clear(); }
-  if(obj.t === 'hello' || obj.t === 'amt'){ partner = { amt: obj.v, col: obj.col }; if(obj.t === 'hello') send({ t: 'amt', v: amt, col }); }
-  else if(obj.t === 'xfer'){
-    const accept = Math.max(0, Math.min(obj.d, 1 - amt));
-    if(accept > 0){
-      col = mixCol(col, obj.col, amt, accept);
-      amt += accept;
-      recvUntil = performance.now() + 260;
-      for(let i = 0; i < 3; i++) drops.push({ x: cupGeom().x0 + 26 + Math.random() * 22, y: cupGeom().top + 8, vx: 1 + Math.random() * 1.6, vy: 2 + Math.random() * 2, life: 22 });
-      sloshV += 1.6;
-    }
-    if(accept < obj.d - 1e-9) send({ t: 'ret', d: obj.d - accept });
+  if(obj.mid){ if(seenMids.has(obj.mid)) return; seenMids.add(obj.mid); if(seenMids.size > 400){ const it = seenMids.values(); for(let i = 0; i < 200; i++) seenMids.delete(it.next().value); } }
+  if(obj.t === 'state'){
+    partnerSeen = true; partnerCol = obj.col || partnerCol;
+    if(obj.mode !== mode){ mode = obj.mode; syncUnitUI(); }
+    partnerTicks = obj.ticks;
+    myTicks = totalTicks() - obj.ticks;
+    buildMenu();
   }
-  else if(obj.t === 'ret'){ amt = Math.min(1, amt + obj.d); }
+  else if(obj.t === 'tick'){
+    if(myTicks < totalTicks()){ myTicks++; partnerTicks = totalTicks() - myTicks; recvFx(); }
+  }
+  else if(obj.t === 'col'){ partnerCol = obj.col; }
 }
-function mixCol(c1, c2, a1, a2){
-  const tot = a1 + a2; if(tot <= 0) return c2.slice();
-  return [0, 1, 2].map(i => Math.round((c1[i] * a1 + c2[i] * a2) / tot));
-}
-let midSeq = 0;
-function sendAmt(){ send({ t: 'amt', v: amt, col, mid: myId + ':' + (midSeq++) }); }
 function loadPeerJS(){
   return new Promise(res => {
     if(window.Peer) return res(true);
@@ -109,195 +139,184 @@ function loadPeerJS(){
     document.head.appendChild(s);
   });
 }
-async function connect(code){
-  code = String(code || '').trim() || '100';
-  try{ if(bc) bc.close(); }catch(_){}
-  try{ bc = new BroadcastChannel('nbcup-' + code); bc.onmessage = e => recv(e.data); setStatus('つなぎ中…（あいことば ' + code + '）', false); }catch(_){}
-  const ok = await loadPeerJS();
-  if(ok){
-    try{ if(peer) peer.destroy(); }catch(_){}
-    const mk = suffix => new Peer('nbcup1-' + code + '-' + suffix);
-    peer = mk('a'); isHost = true;
-    peer.on('error', e => {
-      if(e.type === 'unavailable-id' && isHost){
-        isHost = false;
-        try{ peer.destroy(); }catch(_){}
-        peer = mk('b');
-        peer.on('open', () => { conn = peer.connect('nbcup1-' + code + '-a', { reliable: true }); wireConn(); });
-        peer.on('error', () => setStatus('つなげなかった（あいことば を たしかめて）', false));
-      } else if(e.type !== 'peer-unavailable') setStatus('つうしん エラー： ' + e.type, false);
-    });
-    peer.on('connection', c => { conn = c; wireConn(); });
-    peer.on('open', () => { if(isHost) setStatus('まちうけ中… もう1台で おなじ あいことば で「つなぐ」', false); });
-  }
-  setTimeout(() => send({ t: 'hello', v: amt, col, mid: myId + ':h' + (midSeq++) }), 350);
-}
+const ROOM = 'nbcup2-sole';
 function wireConn(){
-  conn.on('open', () => { setStatus('つながった！', true); send({ t: 'hello', v: amt, col, mid: myId + ':h' + (midSeq++) }); });
+  conn.on('open', () => { connected = true; setStatus('つながった！', true); sendState(); });
   conn.on('data', recv);
-  conn.on('close', () => { setStatus('きれた。もういちど「つなぐ」', false); conn = null; });
+  conn.on('close', () => { connected = false; conn = null; setStatus('きれた。つなぎなおし中…', false); retryAt = performance.now() + 2500; });
 }
-document.getElementById('connectBtn').onclick = () => connect(document.getElementById('code').value);
-document.getElementById('code').value = String(100 + Math.floor(Math.random() * 900));
-/* ── コップの かたち ── */
+let roleFlipAt = 0;
+async function startPeer(role){
+  const ok = await loadPeerJS();
+  if(!ok){ setStatus('つうしんを 読みこめなかった', false); return; }
+  try{ if(peer) peer.destroy(); }catch(_){}
+  peer = new Peer(ROOM + '-' + role);
+  peer.on('error', e => {
+    if(e.type === 'unavailable-id'){ startPeer(role === 'a' ? 'b' : 'a'); }
+    else if(e.type === 'peer-unavailable' && performance.now() > roleFlipAt){ roleFlipAt = performance.now() + 6000; startPeer(role === 'a' ? 'b' : 'a'); }
+  });
+  if(role === 'a'){
+    peer.on('connection', c => { conn = c; wireConn(); });
+    peer.on('open', () => { if(!connected) setStatus('もう1台を まっている…', false); });
+  } else {
+    peer.on('open', () => { conn = peer.connect(ROOM + '-a', { reliable: true }); wireConn(); });
+  }
+}
+function connectAuto(){
+  try{ if(bc) bc.close(); }catch(_){}
+  try{ bc = new BroadcastChannel('nbcup-sole'); bc.onmessage = e => { partnerSeen = true; recv(e.data); }; }catch(_){}
+  setStatus('つなぎ中…', false);
+  startPeer('a');
+  setTimeout(sendState, 600);
+}
+document.getElementById('retryBtn').onclick = () => { connected = false; connectAuto(); };
+document.addEventListener('visibilitychange', () => { if(!document.hidden && !connected) connectAuto(); });
+setInterval(() => {
+  if(connected || bc) sendState();
+  if(!connected && retryAt > 0 && performance.now() > retryAt){ retryAt = 0; startPeer('a'); }
+}, 2500);
+/* ── コップ（円柱） ── */
 function cupGeom(){
-  const topW = W * 0.80, botW = W * 0.60;
-  const top = H * 0.17, bot = H * 0.88;
-  return { top, bot, x0: (W - topW) / 2, topW, botW, bx0: (W - botW) / 2 };
+  const w = W * 0.76, x0 = (W - w) / 2;
+  const top = H * 0.21, bot = H * 0.90;
+  return { x0, w, top, bot, inL: x0 + 8, inR: x0 + w - 8, inT: top + 8, inB: bot - 8 };
 }
-function innerAt(y, g){ // その 高さでの 内がわ （左・右）
-  const t = (y - g.top) / (g.bot - g.top);
-  const lx = g.x0 + (g.bx0 - g.x0) * t + 8, rx = (g.x0 + g.topW) - ((g.x0 + g.topW) - (g.bx0 + g.botW)) * t - 8;
-  return { lx, rx };
+function levelYc(){ const g = cupGeom(); return g.inB - (myTicks / totalTicks()) * (g.inB - g.inT); }
+/* ── 傾きと 流れ ── */
+let tiltEnabled = false, tiltSm = 0;
+let btnPour = false, spillAcc = 0, spilling = 0, recvUntil = 0, drops = [], slosh = 0, sloshV = 0;
+const TILT_AMP = 1.7;
+function surfInfo(){
+  const g = cupGeom(), cx = (g.inL + g.inR) / 2, yc = levelYc();
+  const ang = Math.max(-72, Math.min(72, tiltSm * TILT_AMP)) * Math.PI / 180;
+  const m = Math.tan(ang);
+  const yAt = x => yc - (x - cx) * m;
+  let side = 0;
+  if(tiltSm > 4 && yAt(g.inR) <= g.inT + 1) side = 1;
+  else if(tiltSm < -4 && yAt(g.inL) <= g.inT + 1) side = -1;
+  return { g, cx, yc, m, yAt, side };
 }
-function levelY(a, g){ return (g.bot - 9) - a * ((g.bot - 9) - (g.top + 9)); }
-function gcd(a, b){ return b ? gcd(b, a % b) : a; }
-function fracLabel(v){
-  const k = Math.round(v * 120);
-  if(k <= 0) return '0';
-  if(k >= 120) return '1';
-  const g = gcd(k, 120);
-  return (k / g) + '/' + (120 / g);
+function transferTick(){
+  if(myTicks <= 0) return false;
+  myTicks--; partnerTicks = totalTicks() - myTicks;
+  send({ t: 'tick' });
+  sloshV += 1.1;
+  return true;
 }
-function layout(){
-  const r = stage.getBoundingClientRect();
-  const nw = Math.max(280, r.width), nh = Math.max(280, r.height);
-  if(Math.abs(nw - W) < 2 && Math.abs(nh - H) < 2) return;
-  W = nw; H = nh; DPR = Math.min(2, window.devicePixelRatio || 1);
-  cv.width = W * DPR; cv.height = H * DPR;
-  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+function recvFx(){
+  partnerTicks = totalTicks() - myTicks;
+  recvUntil = performance.now() + 300;
+  sloshV -= 1.2;
+  const g = cupGeom();
+  for(let i = 0; i < 3; i++) drops.push({ x: g.inL + 16 + Math.random() * 20, y: g.inT + 2, vx: 1 + Math.random() * 1.4, vy: 2 + Math.random() * 2, life: 20 });
 }
 /* ── 描画 ── */
+function drawFrac(c, cx, cy, n, d, h, color){
+  c.save(); c.fillStyle = color; c.textAlign = 'center'; c.textBaseline = 'middle';
+  if(d === 1){ c.font = '900 ' + h + 'px "Hiragino Maru Gothic ProN",sans-serif'; c.fillText(String(n), cx, cy); c.restore(); return; }
+  const fh = h * 0.52;
+  c.font = '900 ' + fh + 'px "Hiragino Maru Gothic ProN",sans-serif';
+  const wdt = Math.max(c.measureText(String(n)).width, c.measureText(String(d)).width) + 8;
+  c.fillText(String(n), cx, cy - h * 0.27);
+  c.fillText(String(d), cx, cy + h * 0.27);
+  c.fillRect(cx - wdt / 2, cy - 1.4, wdt, 2.8);
+  c.restore();
+}
 function draw(t){
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = '#dff4fa'; ctx.fillRect(0, 0, W, H);
-  const g = cupGeom();
-  const sy = levelY(amt, g) + Math.sin(t * 0.004) * 1.6 + slosh * 6;
+  const si = surfInfo(), g = si.g;
   const colCss = a => 'rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',' + a + ')';
-  /* 液体 */
-  if(amt > 0.003){
-    const li = innerAt(sy, g), bi = innerAt(g.bot - 4, g);
+  if(myTicks > 0){
     ctx.beginPath();
-    const N = 26;
+    const N = 22;
     for(let i = 0; i <= N; i++){
-      const x = li.lx + (li.rx - li.lx) * i / N;
-      const y = sy + Math.sin(t * 0.006 + i * 0.85) * (1.5 + Math.abs(slosh) * 5) * Math.sin(Math.PI * i / N)
-                  + slosh * 9 * (i / N - 0.5) + tiltSm * 0.85 * (i / N - 0.5);
+      const x = g.inL + (g.inR - g.inL) * i / N;
+      const y = si.yAt(x) + Math.sin(t * 0.006 + i * 0.8) * (1.1 + Math.abs(slosh) * 3.4) * Math.sin(Math.PI * i / N) + slosh * 5 * (i / N - 0.5);
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     }
-    ctx.lineTo(bi.rx, g.bot - 6); ctx.lineTo(bi.lx, g.bot - 6); ctx.closePath();
-    const gr = ctx.createLinearGradient(0, sy, 0, g.bot);
-    gr.addColorStop(0, colCss(0.75)); gr.addColorStop(1, colCss(0.95));
+    ctx.lineTo(g.inR, g.inB); ctx.lineTo(g.inL, g.inB); ctx.closePath();
+    const gr = ctx.createLinearGradient(0, g.inT, 0, g.inB);
+    gr.addColorStop(0, colCss(0.72)); gr.addColorStop(1, colCss(0.95));
     ctx.fillStyle = gr; ctx.fill();
   }
-  /* 注がれている（入ってくる）流れ */
+  const flowing = (spilling !== 0 || btnPour) && myTicks > 0;
+  if(flowing){
+    const dir = spilling !== 0 ? spilling : 1;
+    ctx.strokeStyle = colCss(0.9); ctx.lineWidth = 9; ctx.lineCap = 'round';
+    if(dir > 0){ ctx.beginPath(); ctx.moveTo(g.inR + 2, g.inT + 2); ctx.quadraticCurveTo(W + 22, g.inT - 22, W + 38, g.inT + 40); ctx.stroke(); }
+    else { ctx.beginPath(); ctx.moveTo(g.inL - 2, g.inT + 2); ctx.quadraticCurveTo(-22, g.inT - 22, -38, g.inT + 40); ctx.stroke(); }
+  }
   if(t < recvUntil){
-    ctx.strokeStyle = colCss(0.85); ctx.lineWidth = 9; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(g.x0 - 26, g.top - 44);
-    ctx.quadraticCurveTo(g.x0 + 6, g.top - 30, g.x0 + 34, sy - 8); ctx.stroke();
+    ctx.strokeStyle = colCss(0.8); ctx.lineWidth = 8;
+    ctx.beginPath(); ctx.moveTo(g.inL - 30, g.inT - 40); ctx.quadraticCurveTo(g.inL - 2, g.inT - 24, g.inL + 22, si.yAt(g.inL + 22) - 6); ctx.stroke();
   }
-  /* 注いでいる流れ（傾けた側へ） */
-  if(isPouring() && amt > 0.003){
-    ctx.strokeStyle = colCss(0.9); ctx.lineWidth = 10;
-    if(pourDir >= 0){
-      ctx.beginPath(); ctx.moveTo(g.x0 + g.topW - 6, g.top + 2);
-      ctx.quadraticCurveTo(W + 26, g.top - 26, W + 44, g.top + 42); ctx.stroke();
-      for(let i = 0; i < 2; i++) drops.push({ x: W - 8, y: g.top + 16 + Math.random() * 16, vx: 2.4 + Math.random() * 1.6, vy: 0.4, life: 15 });
-    } else {
-      ctx.beginPath(); ctx.moveTo(g.x0 + 6, g.top + 2);
-      ctx.quadraticCurveTo(-26, g.top - 26, -44, g.top + 42); ctx.stroke();
-      for(let i = 0; i < 2; i++) drops.push({ x: 8, y: g.top + 16 + Math.random() * 16, vx: -2.4 - Math.random() * 1.6, vy: 0.4, life: 15 });
-    }
-  }
-  /* しずく */
   drops = drops.filter(d => d.life > 0);
   for(const d of drops){ d.x += d.vx; d.y += d.vy; d.vy += 0.35; d.life--;
-    ctx.fillStyle = colCss(0.8); ctx.beginPath(); ctx.arc(d.x, d.y, 3.2, 0, 6.29); ctx.fill(); }
-  /* ガラス */
-  ctx.strokeStyle = 'rgba(70,110,140,0.85)'; ctx.lineWidth = 5; ctx.lineJoin = 'round';
+    ctx.fillStyle = colCss(0.8); ctx.beginPath(); ctx.arc(d.x, d.y, 3.1, 0, 6.29); ctx.fill(); }
+  ctx.strokeStyle = 'rgba(70,110,140,0.88)'; ctx.lineWidth = 5; ctx.lineJoin = 'round';
   ctx.beginPath();
-  ctx.moveTo(g.x0, g.top); ctx.lineTo(g.bx0 + 9, g.bot - 12);
-  ctx.quadraticCurveTo(g.bx0 + 14, g.bot, g.bx0 + 30, g.bot);
-  ctx.lineTo(g.bx0 + g.botW - 30, g.bot);
-  ctx.quadraticCurveTo(g.bx0 + g.botW - 14, g.bot, g.bx0 + g.botW - 9, g.bot - 12);
-  ctx.lineTo(g.x0 + g.topW, g.top);
+  ctx.moveTo(g.x0, g.top); ctx.lineTo(g.x0, g.bot - 14);
+  ctx.quadraticCurveTo(g.x0, g.bot, g.x0 + 14, g.bot);
+  ctx.lineTo(g.x0 + g.w - 14, g.bot);
+  ctx.quadraticCurveTo(g.x0 + g.w, g.bot, g.x0 + g.w, g.bot - 14);
+  ctx.lineTo(g.x0 + g.w, g.top);
   ctx.stroke();
-  ctx.strokeStyle = 'rgba(255,255,255,0.65)'; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(g.x0 + 13, g.top + 14); ctx.lineTo(g.bx0 + 22, g.bot - 26); ctx.stroke();
-  /* 目盛り（右） */
-  const gx = g.x0 + g.topW + 12;
+  ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(g.x0 + 12, g.top + 16); ctx.lineTo(g.x0 + 12, g.bot - 30); ctx.stroke();
+  const gx = g.x0 + g.w + 10;
   ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-  for(let k = 0; k <= 12; k++){
-    const a = k / 12, y = levelY(a, g), major = k % 3 === 0;
-    ctx.strokeStyle = major ? '#40627a' : 'rgba(64,98,122,0.45)';
-    ctx.lineWidth = major ? 3 : 2;
-    ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx + (major ? 15 : 9), y); ctx.stroke();
-    if(major && k > 0){ ctx.fillStyle = '#40627a'; ctx.font = '900 16px sans-serif'; ctx.fillText(fracLabel(a), gx + 20, y); }
+  if(mode === 'frac'){
+    for(let k = 0; k <= 12; k++){
+      const y = g.inB - (k / 12) * (g.inB - g.inT), major = k % 3 === 0;
+      ctx.strokeStyle = major ? '#40627a' : 'rgba(64,98,122,0.4)'; ctx.lineWidth = major ? 3 : 2;
+      ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx + (major ? 13 : 8), y); ctx.stroke();
+      if(major && k > 0 && k < 12){ const f = fracOf(k); drawFrac(ctx, gx + 26, y, f[0], f[1], 21, '#40627a'); }
+    }
+    ctx.fillStyle = '#40627a'; ctx.font = '900 15px sans-serif';
+    ctx.fillText('1', gx + 19, g.inT); ctx.fillText('0', gx + 19, g.inB);
+  } else {
+    for(let ml = 0; ml <= 200; ml += 25){
+      const y = g.inB - (ml / 200) * (g.inB - g.inT), major = ml % 50 === 0;
+      ctx.strokeStyle = major ? '#40627a' : 'rgba(64,98,122,0.4)'; ctx.lineWidth = major ? 3 : 2;
+      ctx.beginPath(); ctx.moveTo(gx, y); ctx.lineTo(gx + (major ? 13 : 8), y); ctx.stroke();
+      if(major){ ctx.fillStyle = '#40627a'; ctx.font = '900 14.5px sans-serif'; ctx.fillText(String(ml), gx + 19, y); }
+    }
   }
-  ctx.fillStyle = '#40627a'; ctx.font = '900 16px sans-serif'; ctx.fillText('1', gx + 20, levelY(1, g));
-  ctx.fillText('0', gx + 20, levelY(0, g));
-  /* 量の ラベル */
-  ctx.textAlign = 'center';
-  ctx.font = '900 43px "Hiragino Maru Gothic ProN",sans-serif';
-  ctx.lineJoin = 'round'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 9;
-  const label = fracLabel(amt);
-  ctx.strokeText(label, W / 2, g.top - 34);
-  ctx.fillStyle = '#1f66ab'; ctx.fillText(label, W / 2, g.top - 34);
-  /* あいての ミニコップ */
-  if(partner){
-    const mw = 44, mh = 62, mx = W - mw - 12, my = 10;
-    ctx.strokeStyle = '#40627a'; ctx.lineWidth = 2.5;
-    ctx.strokeRect(mx, my, mw, mh);
-    const ph = partner.amt * (mh - 6);
-    ctx.fillStyle = 'rgba(' + partner.col[0] + ',' + partner.col[1] + ',' + partner.col[2] + ',0.85)';
-    ctx.fillRect(mx + 3, my + mh - 3 - ph, mw - 6, ph);
-    ctx.fillStyle = '#40627a'; ctx.font = '900 12.5px sans-serif';
-    ctx.fillText('あいて ' + fracLabel(partner.amt), mx + mw / 2, my + mh + 11);
+  if(mode === 'frac'){ const f = fracOf(myTicks); drawFrac(ctx, W / 2, g.top - 40, f[0], f[1], 52, '#1f66ab'); }
+  else { ctx.fillStyle = '#1f66ab'; ctx.font = '900 34px "Hiragino Maru Gothic ProN",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText((myTicks * 5) + ' ml', W / 2, g.top - 40); }
+  if(partnerSeen){
+    const mw = 40, mh = 56, mx = W - mw - 10, my0 = 8;
+    ctx.strokeStyle = '#40627a'; ctx.lineWidth = 2.5; ctx.strokeRect(mx, my0, mw, mh);
+    const ph = (partnerTicks / totalTicks()) * (mh - 6);
+    ctx.fillStyle = 'rgba(' + partnerCol[0] + ',' + partnerCol[1] + ',' + partnerCol[2] + ',0.85)';
+    ctx.fillRect(mx + 3, my0 + mh - 3 - ph, mw - 6, ph);
+    ctx.fillStyle = '#40627a'; ctx.font = '900 11.5px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('あいて', mx + mw / 2, my0 + mh + 10);
+    if(mode === 'frac'){ const f = fracOf(partnerTicks); drawFrac(ctx, mx + mw / 2, my0 + mh + 27, f[0], f[1], 19, '#40627a'); }
+    else ctx.fillText((partnerTicks * 5) + 'ml', mx + mw / 2, my0 + mh + 24);
   }
 }
-/* ── 更新 ── */
 let lastT = 0;
 function tick(t){
   const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016); lastT = t;
   sloshV += (-slosh * 0.14 - sloshV * 0.16); slosh += sloshV * 0.06;
-  tiltPour = tiltEnabled && Math.abs(tiltSm) > 18;
-  if(tiltPour) pourDir = tiltSm >= 0 ? 1 : -1; else if(btnPour) pourDir = 1;
-  if(isPouring() && amt > 0){
-    const room = partner ? 1 - partner.amt : 1;
-    const d = Math.min(pourRate() * dt, amt, Math.max(0, room));
-    if(d > 0){
-      amt -= d; sloshV -= 0.7;
-      send({ t: 'xfer', d, col, mid: myId + ':' + (midSeq++) });
-      if(partner) partner = { amt: Math.min(1, partner.amt + d), col: partner.col };
-    }
+  const si = surfInfo();
+  spilling = tiltEnabled ? si.side : 0;
+  let rate = 0;
+  if(spilling !== 0){
+    const over = Math.max(0, (Math.abs(tiltSm) - 6)) / 40;
+    rate = (mode === 'frac' ? 1.05 : 2.3) * Math.min(1, 0.3 + over);
+  } else if(btnPour){
+    rate = mode === 'frac' ? 0.9 : 2.0;
   }
-  if((isPouring() || dragLevel) && t - lastSend > 90){ lastSend = t; sendAmt(); }
+  if(rate > 0 && myTicks > 0){
+    spillAcc += rate * dt;
+    while(spillAcc >= 1){ spillAcc -= 1; if(!transferTick()){ spillAcc = 0; break; } }
+  } else spillAcc = Math.max(0, spillAcc - dt * 2);
   draw(t);
   requestAnimationFrame(tick);
 }
-/* ── 操作 ── */
-function ptr(e){ const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-cv.addEventListener('pointerdown', e => {
-  const p = ptr(e), g = cupGeom();
-  if(p.x > g.x0 - 16 && p.x < g.x0 + g.topW + 16 && p.y > g.top - 56 && p.y < g.bot + 8){
-    dragLevel = { dy: p.y - levelY(amt, g) };
-    setFromY(p.y - dragLevel.dy);
-    try{ cv.setPointerCapture(e.pointerId); }catch(_){}
-  }
-});
-cv.addEventListener('pointermove', e => { if(dragLevel) setFromY(ptr(e).y - dragLevel.dy); });
-function setFromY(y){
-  const g = cupGeom();
-  const a = ((g.bot - 9) - y) / ((g.bot - 9) - (g.top + 9));
-  const na = Math.max(0, Math.min(1, a));
-  if(Math.abs(na - amt) > 0.0005){ sloshV += (na - amt) * 22; amt = na; sendAmt(); }
-}
-cv.addEventListener('pointerup', () => { dragLevel = null; });
-cv.addEventListener('pointercancel', () => { dragLevel = null; });
-const pourBtn = document.getElementById('pour');
-pourBtn.addEventListener('pointerdown', e => { e.preventDefault(); btnPour = true; pourBtn.classList.add('held'); });
-['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => pourBtn.addEventListener(ev, () => { btnPour = false; pourBtn.classList.remove('held'); }));
-/* ── かたむき（DeviceOrientation）：右／左に かたむけると そっちへ 注ぐ ── */
 window.addEventListener('deviceorientation', e => {
   if(e.gamma === null || e.gamma === undefined) return;
   const landscape = window.screen && window.screen.orientation && Math.abs(window.screen.orientation.angle || 0) === 90;
@@ -308,34 +327,85 @@ const tiltBtn = document.getElementById('tiltBtn');
 function setTilt(on){
   tiltEnabled = !!on;
   tiltBtn.textContent = 'かたむき：' + (tiltEnabled ? 'ON' : 'OFF');
-  if(tiltEnabled) setStatus('かたむき ON：右か左に かたむけると 注ぐよ', partner !== null);
+  if(tiltEnabled) setStatus('かたむき ON：傾けて、口まで 水が きたら 流れるよ', connected);
 }
 tiltBtn.addEventListener('click', async () => {
   if(tiltEnabled){ setTilt(false); return; }
   try{
     if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
       const r = await DeviceOrientationEvent.requestPermission();
-      if(r !== 'granted'){ setStatus('かたむきの 許可が なかった', false); return; }
+      if(r !== 'granted'){ setStatus('かたむきの 許可が なかった', connected); return; }
     }
   }catch(_){}
   setTilt(true);
 });
+const menuEl = document.getElementById('menu'), gridEl = document.getElementById('menuGrid');
+function fracHTML(ticks){
+  const f = fracOf(ticks);
+  return f[1] === 1 ? String(f[0]) : '<span class="frac"><span class="num">' + f[0] + '</span><span class="den">' + f[1] + '</span></span>';
+}
+function buildMenu(){
+  gridEl.innerHTML = '';
+  const vals = mode === 'frac' ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [0, 5, 10, 15, 20, 25, 30, 35, 40];
+  for(const v of vals){
+    const b = document.createElement('button');
+    b.className = 'mbtn' + (v === myTicks ? ' on' : '');
+    b.innerHTML = mode === 'frac' ? fracHTML(v) : (v * 5) + ' ml';
+    b.onclick = () => setMyTicks(v);
+    gridEl.appendChild(b);
+  }
+  document.getElementById('stepDown').textContent = mode === 'frac' ? '− 1/12' : '− 5ml';
+  document.getElementById('stepUp').textContent = mode === 'frac' ? '＋ 1/12' : '＋ 5ml';
+}
+function setMyTicks(v){
+  myTicks = Math.max(0, Math.min(totalTicks(), Math.round(v)));
+  partnerTicks = totalTicks() - myTicks;
+  sendState(); buildMenu();
+}
+document.getElementById('stepDown').onclick = () => setMyTicks(myTicks - 1);
+document.getElementById('stepUp').onclick = () => setMyTicks(myTicks + 1);
+document.getElementById('menuClose').onclick = () => menuEl.classList.remove('on');
+document.getElementById('amtBtn').onclick = () => { buildMenu(); menuEl.classList.toggle('on'); };
+function syncUnitUI(){
+  document.getElementById('uFrac').classList.toggle('on', mode === 'frac');
+  document.getElementById('uMl').classList.toggle('on', mode === 'ml');
+  buildMenu();
+}
+function setMode(m){
+  if(m === mode) return;
+  const ratio = myTicks / totalTicks();
+  mode = m;
+  myTicks = Math.round(ratio * totalTicks());
+  partnerTicks = totalTicks() - myTicks;
+  syncUnitUI(); sendState();
+}
+document.getElementById('uFrac').onclick = () => setMode('frac');
+document.getElementById('uMl').onclick = () => setMode('ml');
 document.querySelectorAll('.chip').forEach(ch => ch.addEventListener('click', () => {
   document.querySelectorAll('.chip').forEach(o => o.classList.toggle('on', o === ch));
   col = ch.dataset.col.split(',').map(Number);
-  sendAmt();
+  send({ t: 'col', col }); sendState();
 }));
+const pourBtn = document.getElementById('pour');
+pourBtn.addEventListener('pointerdown', e => { e.preventDefault(); btnPour = true; pourBtn.classList.add('held'); });
+['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => pourBtn.addEventListener(ev, () => { btnPour = false; pourBtn.classList.remove('held'); }));
+function layout(){
+  const r = stage.getBoundingClientRect();
+  W = Math.max(280, r.width); H = Math.max(280, r.height);
+  DPR = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = W * DPR; cv.height = H * DPR;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+}
 new ResizeObserver(layout).observe(stage);
 window.addEventListener('resize', layout);
-layout();
+layout(); buildMenu();
+connectAuto();
 requestAnimationFrame(tick);
-/* ── テスト用 ── */
 window.cups = {
-  state(){ const g = cupGeom(); return { amt, col: col.slice(), partner: partner ? { amt: partner.amt, col: partner.col.slice() } : null, pouring: isPouring(), tilt: tiltEnabled, gamma: Math.round(tiltSm * 10) / 10,
-    y0: Math.round(levelY(0, g)), y1: Math.round(levelY(1, g)), cx: Math.round(W / 2) }; },
-  connect, setAmt(v){ amt = Math.max(0, Math.min(1, v)); sendAmt(); },
+  state(){ return { mode, ticks: myTicks, total: totalTicks(), partnerTicks, partnerSeen, connected, tilt: tiltEnabled, gamma: Math.round(tiltSm * 10) / 10, spilling }; },
+  setTicks: setMyTicks, setMode, tilt(on){ setTilt(!!on); },
   pour(on){ btnPour = !!on; },
-  tilt(on){ setTilt(!!on); },
+  connect: connectAuto,
 };
 </script>
 </body>

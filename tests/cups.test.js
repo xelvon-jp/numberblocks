@@ -1,5 +1,5 @@
-// みずのコップ（cups.html・2台デモ）：同じ あいことば で つながり、液体を 受け渡せる。
-// VM では BroadcastChannel（同じ ブラウザの 2ページ）で 検証する。実機の PeerJS 経路は 別。
+// みずのコップ（cups.html・2台デモ）v2：自動接続、和は一定、分数/ml、口まで来たら傾きで流れる。
+// VM では BroadcastChannel（同じブラウザの2ページ）で検証。実機の PeerJS 経路は別。
 async function openCup(t){
   const p = await t.open();
   const base = p.url().split('/').slice(0, 3).join('/');
@@ -8,7 +8,6 @@ async function openCup(t){
   await p.waitForTimeout(200);
   return p;
 }
-// 2ページ目は 同じ コンテキストに 作る（BroadcastChannel が 届くように）
 async function openCup2(p1){
   const base = p1.url().split('/').slice(0, 3).join('/');
   const p = await p1.context().newPage();
@@ -18,83 +17,73 @@ async function openCup2(p1){
   return p;
 }
 const st = p => p.evaluate(() => cups.state());
-
+const tiltTo = (p, g, n) => p.evaluate(({ g, n }) => { for(let i = 0; i < n; i++) window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { gamma: g, beta: 0, alpha: 0 })); }, { g, n });
 module.exports = {
-  '2ページが つながり、量が 同期する': async t => {
+  '自動で つながり、量を 決めると 相手は 残りになる': async t => {
     const p1 = await openCup(t), p2 = await openCup2(p1);
-    await p1.evaluate(() => cups.connect('123'));
-    await p2.evaluate(() => cups.connect('123'));
-    await p1.waitForFunction(() => cups.state().partner !== null, null, { timeout: 5000 });
-    await p2.waitForFunction(() => cups.state().partner !== null, null, { timeout: 5000 });
-    await p1.evaluate(() => cups.setAmt(0.75));
-    await p2.waitForFunction(() => Math.abs(cups.state().partner.amt - 0.75) < 0.01, null, { timeout: 4000 });
-    const s2 = await st(p2);
-    t.ok(Math.abs(s2.partner.amt - 0.75) < 0.01, 'あいての 量が 同期していない ' + s2.partner.amt);
+    await p2.waitForFunction(() => cups.state().partnerSeen === true, null, { timeout: 6000 });
+    await p1.evaluate(() => cups.setTicks(9));          // 3/4 にする
+    await p2.waitForFunction(() => cups.state().ticks === 3, null, { timeout: 5000 });
+    const a = await st(p1), b = await st(p2);
+    t.eq(a.ticks + b.ticks, 12, '分数モードの 和が 12 に なっていない');
+    t.eq(a.ticks, 9, '自分が 9（3/4）になっていない');
+    // ml に 切り替えると 合計 40 目盛り（200ml）、割合は 保たれる
+    await p1.evaluate(() => cups.setMode('ml'));
+    await p2.waitForFunction(() => cups.state().mode === 'ml', null, { timeout: 5000 });
+    const a2 = await st(p1), b2 = await st(p2);
+    t.eq(a2.total, 40, 'ml の 合計が 40 目盛りでない');
+    t.eq(a2.ticks + b2.ticks, 40, 'ml の 和が 一定でない');
+    t.eq(a2.ticks, 30, '3/4 が 150ml（30目盛り）に なっていない: ' + a2.ticks);
   },
 
-  'そそぐと 相手に うつり、合計が ほぼ 保たれる': async t => {
+  'メニューで 量を 選べる': async t => {
     const p1 = await openCup(t), p2 = await openCup2(p1);
-    await p1.evaluate(() => { cups.connect('777'); cups.setAmt(0.8); });
-    await p2.evaluate(() => { cups.connect('777'); cups.setAmt(0.2); });
-    await p1.waitForFunction(() => cups.state().partner !== null, null, { timeout: 5000 });
-    await p2.waitForFunction(() => cups.state().partner !== null, null, { timeout: 5000 });
-    await p1.waitForTimeout(200);
-    await p1.evaluate(() => cups.pour(true));
+    await p2.waitForFunction(() => cups.state().partnerSeen === true, null, { timeout: 6000 });
+    await p1.click('#amtBtn');
+    await p1.waitForTimeout(150);
+    const hasFrac = await p1.evaluate(() => [...document.querySelectorAll('#menuGrid .mbtn')].some(b => b.innerHTML.includes('frac')));
+    t.ok(hasFrac, 'メニューに 上下スタイルの 分数が ない');
+    // 12目盛り（満杯）の ボタンを 押す → 相手は 0
+    await p1.evaluate(() => { const bs = [...document.querySelectorAll('#menuGrid .mbtn')]; bs[bs.length - 1].click(); });
+    await p2.waitForFunction(() => cups.state().ticks === 0, null, { timeout: 5000 });
+    t.eq((await st(p1)).ticks, 12, '満杯に できていない');
+  },
+
+  '傾けても 口に 届くまでは 流れない／届いたら ゆっくり 流れる': async t => {
+    const p1 = await openCup(t), p2 = await openCup2(p1);
+    await p2.waitForFunction(() => cups.state().partnerSeen === true, null, { timeout: 6000 });
+    // 半分（6目盛り）で 浅く 傾けても 流れない
+    await p1.evaluate(() => { cups.setTicks(6); cups.tilt(true); });
+    await p2.waitForFunction(() => cups.state().ticks === 6, null, { timeout: 5000 });
+    await tiltTo(p1, 14, 10);
     await p1.waitForTimeout(1100);
-    await p1.evaluate(() => cups.pour(false));
-    await p1.waitForTimeout(300);
-    const s1 = await st(p1), s2 = await st(p2);
-    t.ok(s1.amt < 0.62, 'そそいだ側が 減っていない ' + s1.amt);
-    t.ok(s2.amt > 0.38, '受けた側が 増えていない ' + s2.amt);
-    t.ok(Math.abs((s1.amt + s2.amt) - 1.0) < 0.06, '合計が 保たれていない ' + (s1.amt + s2.amt));
-    // 逆向きも
-    await p2.evaluate(() => cups.pour(true));
-    await p2.waitForTimeout(700);
-    await p2.evaluate(() => cups.pour(false));
-    await p2.waitForTimeout(300);
-    const r1 = await st(p1), r2 = await st(p2);
-    t.ok(r1.amt > s1.amt + 0.08, '逆向きで 戻ってこない ' + r1.amt + ' vs ' + s1.amt);
-    t.ok(r2.amt < s2.amt - 0.08, '逆向きで 送り側が 減っていない');
-  },
-
-  'かたむけると 注げて、もどすと 止まる': async t => {
-    const p1 = await openCup(t), p2 = await openCup2(p1);
-    await p1.evaluate(() => { cups.connect('999'); cups.setAmt(0.8); cups.tilt(true); });
-    await p2.evaluate(() => { cups.connect('999'); cups.setAmt(0.2); });
-    await p1.waitForFunction(() => cups.state().partner !== null, null, { timeout: 5000 });
-    await p2.waitForFunction(() => cups.state().partner !== null, null, { timeout: 5000 });
-    const tiltTo = (p, g, n) => p.evaluate(({ g, n }) => { for(let i = 0; i < n; i++) window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { gamma: g, beta: 0, alpha: 0 })); }, { g, n });
-    await tiltTo(p1, 38, 8);
-    await p1.waitForFunction(() => cups.state().pouring === true, null, { timeout: 3000 });
-    await p1.waitForTimeout(900);
-    const s1 = await st(p1), s2 = await st(p2);
-    t.ok(s1.amt < 0.68, '傾けたのに 減っていない ' + s1.amt);
-    t.ok(s2.amt > 0.3, '傾け注ぎが 相手に 届いていない ' + s2.amt);
+    let s = await st(p1);
+    t.eq(s.spilling, 0, '口に 届いていないのに 流れている');
+    t.eq(s.ticks, 6, '浅い 傾きで 減ってしまった');
+    // たっぷり（11目盛り）なら 同じ 傾きでも 口に 届いて 流れる
+    await p1.evaluate(() => cups.setTicks(11));
+    await p2.waitForFunction(() => cups.state().ticks === 1, null, { timeout: 5000 });
+    await p1.waitForFunction(() => cups.state().spilling === 1, null, { timeout: 4000 });
+    await p1.waitForFunction(() => cups.state().ticks <= 10, null, { timeout: 6000 });
+    const a = await st(p1), b = await st(p2);
+    t.eq(a.ticks + b.ticks, 12, '流れたあとも 和が 一定でない');
+    t.ok(b.ticks >= 2, '相手に 流れが 届いていない: ' + b.ticks);
+    // 戻すと 止まる
     await tiltTo(p1, 0, 10);
-    await p1.waitForFunction(() => cups.state().pouring === false, null, { timeout: 3000 });
-    const a1 = (await st(p1)).amt;
-    await p1.waitForTimeout(500);
-    const a2 = (await st(p1)).amt;
-    t.ok(Math.abs(a1 - a2) < 0.01, '戻しても 注ぎが 止まっていない ' + a1 + ' → ' + a2);
+    await p1.waitForFunction(() => cups.state().spilling === 0, null, { timeout: 3000 });
+    const c1 = (await st(p1)).ticks;
+    await p1.waitForTimeout(600);
+    t.eq((await st(p1)).ticks, c1, '戻しても 流れが 止まっていない');
   },
 
-  '水面ドラッグで 量が 変わり、相手にも 伝わる': async t => {
+  'そそぐボタンでも ゆっくり 1目盛りずつ うつる': async t => {
     const p1 = await openCup(t), p2 = await openCup2(p1);
-    await p1.evaluate(() => { cups.connect('555'); cups.setAmt(0.3); });
-    await p2.evaluate(() => cups.connect('555'));
-    await p2.waitForFunction(() => cups.state().partner !== null, null, { timeout: 5000 });
-    const s = await st(p1);
-    const curY = s.y0 - 0.3 * (s.y0 - s.y1), ty = s.y0 - 0.85 * (s.y0 - s.y1);
-    await p1.evaluate(({ cx, curY, ty }) => {
-      const cvEl = document.getElementById('cv'), r = cvEl.getBoundingClientRect();
-      const ev = (type, x, y) => cvEl.dispatchEvent(new PointerEvent(type, { pointerId: 51, bubbles: true, cancelable: true, isPrimary: true, clientX: r.left + x, clientY: r.top + y }));
-      ev('pointerdown', cx, curY);
-      ev('pointermove', cx, ty);
-      ev('pointerup', cx, ty);
-    }, { cx: s.cx, curY, ty });
-    await p1.waitForTimeout(250);
-    const s1 = await st(p1);
-    t.ok(Math.abs(s1.amt - 0.85) < 0.05, 'ドラッグで 量が 変わっていない ' + s1.amt);
-    await p2.waitForFunction(() => Math.abs(cups.state().partner.amt - 0.85) < 0.05, null, { timeout: 4000 });
+    await p2.waitForFunction(() => cups.state().partnerSeen === true, null, { timeout: 6000 });
+    await p1.evaluate(() => { cups.setTicks(6); cups.pour(true); });
+    await p1.waitForTimeout(2400);
+    await p1.evaluate(() => cups.pour(false));
+    const a = await st(p1), b = await st(p2);
+    t.ok(a.ticks <= 4 && a.ticks >= 2, '2.4秒で 2〜4目盛りの 想定が 実際 ' + (6 - a.ticks));
+    t.eq(a.ticks + b.ticks, 12, 'ボタン注ぎでも 和が 一定でない');
   },
 };
