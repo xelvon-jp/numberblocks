@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>かぞくチャット</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin:0; padding:0; height:100%; }
+  body { font-family: -apple-system, "Hiragino Sans", sans-serif; background:#8fa8c8; display:flex; flex-direction:column; height:100dvh; }
+  button { font-family: inherit; }
+
+  /* ---------- setup ---------- */
+  #setup { flex:1; display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
+  .card { background:#fff; border-radius:16px; padding:24px 20px; width:100%; max-width:360px; box-shadow:0 4px 20px rgba(0,0,0,.18); }
+  .card h1 { margin:0 0 4px; font-size:22px; text-align:center; }
+  .card .sub { text-align:center; color:#666; font-size:13px; margin-bottom:20px; }
+  .card label { display:block; font-size:13px; font-weight:600; margin:16px 0 8px; color:#333; }
+  .members { display:flex; gap:8px; }
+  .members button { flex:1; padding:14px 4px; font-size:17px; border:2px solid #ddd; border-radius:12px; background:#fafafa; cursor:pointer; }
+  .members button.sel { border-color:#06c755; background:#e9fbef; font-weight:700; }
+  #codeInput { width:100%; padding:12px; font-size:16px; border:2px solid #ddd; border-radius:12px; }
+  .hint { font-size:12px; color:#888; margin-top:6px; line-height:1.5; }
+  #startBtn { width:100%; margin-top:20px; padding:14px; font-size:17px; font-weight:700; color:#fff; background:#06c755; border:none; border-radius:12px; cursor:pointer; }
+  #startBtn:disabled { background:#bbb; }
+
+  /* ---------- chat ---------- */
+  #chat { flex:1; display:none; flex-direction:column; min-height:0; }
+  header { background:#2f3e5c; color:#fff; padding:10px 14px; padding-top:calc(10px + env(safe-area-inset-top)); display:flex; align-items:center; gap:8px; }
+  header .title { font-size:17px; font-weight:700; flex:1; }
+  #status { font-size:12px; opacity:.9; }
+  #status .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#f66; margin-right:4px; vertical-align:middle; }
+  #status.on .dot { background:#06c755; }
+  #resetBtn { background:rgba(255,255,255,.15); color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:13px; cursor:pointer; }
+  #msgs { flex:1; overflow-y:auto; padding:12px 10px; -webkit-overflow-scrolling:touch; }
+  .day { text-align:center; margin:10px 0; }
+  .day span { background:rgba(0,0,0,.18); color:#fff; font-size:11px; padding:3px 10px; border-radius:10px; }
+  .row { display:flex; flex-direction:column; margin:2px 0 10px; }
+  .row.mine { align-items:flex-end; }
+  .row.theirs { align-items:flex-start; }
+  .who { font-size:11px; color:#fff; margin:0 2px 2px; text-shadow:0 1px 2px rgba(0,0,0,.25); }
+  .bubble { max-width:75%; padding:9px 12px; border-radius:16px; font-size:16px; line-height:1.45; word-break:break-word; white-space:pre-wrap; position:relative; }
+  .mine .bubble { background:#95ec69; border-top-right-radius:4px; }
+  .theirs .bubble { background:#fff; border-top-left-radius:4px; }
+  .bubble.stamp { background:none; font-size:64px; padding:0 4px; line-height:1.1; }
+  .bubble.photo { padding:4px; background:#fff; }
+  .mine .bubble.photo { background:#95ec69; }
+  .bubble.photo img { max-width:210px; max-height:260px; border-radius:12px; display:block; }
+  .time { font-size:10px; color:rgba(255,255,255,.85); margin:2px 2px 0; text-shadow:0 1px 2px rgba(0,0,0,.2); }
+  #stampPanel { display:none; background:#fff; padding:10px; grid-template-columns:repeat(6,1fr); gap:4px; border-top:1px solid #ddd; }
+  #stampPanel.open { display:grid; }
+  #stampPanel button { font-size:30px; padding:8px 0; background:none; border:none; cursor:pointer; border-radius:10px; }
+  #stampPanel button:active { background:#eee; }
+  #inputBar { background:#f6f6f6; border-top:1px solid #ddd; display:flex; align-items:flex-end; gap:6px; padding:8px; padding-bottom:calc(8px + env(safe-area-inset-bottom)); }
+  .iconBtn { flex:none; width:40px; height:40px; font-size:22px; background:none; border:none; cursor:pointer; border-radius:50%; }
+  .iconBtn:active { background:#e5e5e5; }
+  #textInput { flex:1; font-size:16px; padding:10px 12px; border:1px solid #ccc; border-radius:20px; resize:none; max-height:100px; outline:none; font-family:inherit; }
+  #sendBtn { flex:none; height:40px; padding:0 16px; font-size:15px; font-weight:700; color:#fff; background:#06c755; border:none; border-radius:20px; cursor:pointer; }
+  #sendBtn:disabled { background:#bbb; }
+</style>
+</head>
+<body>
+
+<div id="setup">
+  <div class="card">
+    <h1>💬 かぞくチャット</h1>
+    <div class="sub">家族3人だけのチャットです</div>
+    <label>あなたはだれ？</label>
+    <div class="members" id="memberBtns">
+      <button data-m="papa">👨<br>パパ</button>
+      <button data-m="mama">👩<br>ママ</button>
+      <button data-m="boku">👦<br>ぼく</button>
+    </div>
+    <label>家族の合言葉</label>
+    <input id="codeInput" type="text" autocomplete="off" placeholder="例： さくら123">
+    <div class="hint">3台とも同じ合言葉を入れてください。一度入れれば、次からはこの画面は出ません。</div>
+    <button id="startBtn" disabled>はじめる</button>
+  </div>
+</div>
+
+<div id="chat">
+  <header>
+    <div class="title">💬 かぞくチャット</div>
+    <div id="status"><span class="dot"></span><span id="statusText">接続中…</span></div>
+    <button id="resetBtn">設定</button>
+  </header>
+  <div id="msgs"></div>
+  <div id="stampPanel"></div>
+  <div id="inputBar">
+    <button class="iconBtn" id="photoBtn" title="写真">＋</button>
+    <input type="file" id="photoInput" accept="image/*" hidden>
+    <button class="iconBtn" id="stampBtn" title="スタンプ">😊</button>
+    <textarea id="textInput" rows="1" placeholder="メッセージ"></textarea>
+    <button id="sendBtn">送信</button>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+"use strict";
+/* ================= かぞくチャット v1 (PeerJS mesh, members fixed) ================= */
+const MEMBERS = {
+  papa: { name: "パパ", icon: "👨" },
+  mama: { name: "ママ", icon: "👩" },
+  boku: { name: "ぼく", icon: "👦" },
+};
+const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","😭","🚗","🚃","🍓","🍙","⚽","🎈","🐱","🐶","🌟","💤","⭕","❌","❓","❗"];
+const PEER_PREFIX = "famchat1-";
+const LS_CFG = "famchat_cfg";
+const MAX_KEEP = 300;
+
+const $ = s => document.querySelector(s);
+let cfg = null;            // {member, code}
+let roomKey = "";          // hash of code
+let peer = null;
+let conns = {};            // memberId -> DataConnection
+let msgs = [];             // sorted by ts, id
+let msgIds = new Set();
+let bc = null;
+
+/* ---------- tiny hash for the room id (obscuring only, not security) ---------- */
+function hashStr(s) {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+}
+function peerIdFor(member) { return PEER_PREFIX + roomKey + "-" + member; }
+function lsHistoryKey() { return "famchat_hist_" + roomKey; }
+
+/* ================= setup screen ================= */
+let selMember = null;
+$("#memberBtns").addEventListener("click", e => {
+  const b = e.target.closest("button"); if (!b) return;
+  selMember = b.dataset.m;
+  document.querySelectorAll("#memberBtns button").forEach(x => x.classList.toggle("sel", x === b));
+  validateSetup();
+});
+$("#codeInput").addEventListener("input", validateSetup);
+function validateSetup() { $("#startBtn").disabled = !(selMember && $("#codeInput").value.trim()); }
+$("#startBtn").addEventListener("click", () => {
+  cfg = { member: selMember, code: $("#codeInput").value.trim() };
+  localStorage.setItem(LS_CFG, JSON.stringify(cfg));
+  startChat();
+});
+$("#resetBtn").addEventListener("click", () => {
+  if (confirm("設定を消して、最初の画面に戻りますか？（履歴はこの端末に残ります）")) {
+    localStorage.removeItem(LS_CFG);
+    location.reload();
+  }
+});
+
+/* ================= chat core ================= */
+function loadHistory() {
+  try { msgs = JSON.parse(localStorage.getItem(lsHistoryKey()) || "[]"); }
+  catch (e) { msgs = []; }
+  if (!Array.isArray(msgs)) msgs = [];
+  msgIds = new Set(msgs.map(m => m.id));
+}
+function saveHistory() {
+  msgs.sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : 1));
+  if (msgs.length > MAX_KEEP) msgs = msgs.slice(-MAX_KEEP);
+  msgIds = new Set(msgs.map(m => m.id));
+  try { localStorage.setItem(lsHistoryKey(), JSON.stringify(msgs)); } catch (e) { /* photo may overflow; drop oldest photos */
+    msgs = msgs.filter(m => m.type !== "photo").concat(msgs.filter(m => m.type === "photo").slice(-10));
+    try { localStorage.setItem(lsHistoryKey(), JSON.stringify(msgs)); } catch (e2) {}
+  }
+}
+function addMsg(m, fromNetwork) {
+  if (!m || !m.id || msgIds.has(m.id)) return false;
+  if (!MEMBERS[m.from] || !["text", "stamp", "photo"].includes(m.type)) return false;
+  msgs.push(m); msgIds.add(m.id);
+  saveHistory(); renderMsg(m); scrollBottom();
+  if (!fromNetwork) broadcast({ kind: "chat", msg: m });
+  return true;
+}
+function sendMsg(type, body) {
+  const m = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), from: cfg.member, type, body, ts: Date.now() };
+  addMsg(m, false);
+  if (bc) bc.postMessage({ kind: "chat", msg: m });
+}
+
+/* ---------- rendering ---------- */
+const msgsEl = $("#msgs");
+let lastDay = "";
+function dayStr(ts) { const d = new Date(ts); return d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate(); }
+function timeStr(ts) { const d = new Date(ts); return d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0"); }
+function renderMsg(m) {
+  const ds = dayStr(m.ts);
+  if (ds !== lastDay) {
+    lastDay = ds;
+    const div = document.createElement("div"); div.className = "day";
+    div.innerHTML = "<span></span>"; div.firstChild.textContent = ds;
+    msgsEl.appendChild(div);
+  }
+  const mine = m.from === cfg.member;
+  const row = document.createElement("div"); row.className = "row " + (mine ? "mine" : "theirs");
+  if (!mine) {
+    const who = document.createElement("div"); who.className = "who";
+    who.textContent = MEMBERS[m.from].icon + " " + MEMBERS[m.from].name;
+    row.appendChild(who);
+  }
+  const b = document.createElement("div"); b.className = "bubble " + m.type;
+  if (m.type === "photo") {
+    const img = document.createElement("img"); img.src = m.body; img.alt = "写真"; b.appendChild(img);
+  } else {
+    b.textContent = m.body;
+  }
+  row.appendChild(b);
+  const t = document.createElement("div"); t.className = "time"; t.textContent = timeStr(m.ts);
+  row.appendChild(t);
+  msgsEl.appendChild(row);
+}
+function renderAll() { msgsEl.innerHTML = ""; lastDay = ""; msgs.forEach(renderMsg); scrollBottom(); }
+function scrollBottom() { requestAnimationFrame(() => { msgsEl.scrollTop = msgsEl.scrollHeight; }); }
+
+/* ---------- transport: PeerJS mesh + BroadcastChannel ---------- */
+function broadcast(obj) { Object.values(conns).forEach(c => { if (c && c.open) { try { c.send(obj); } catch (e) {} } }); }
+function updateStatus() {
+  const n = Object.values(conns).filter(c => c && c.open).length;
+  $("#status").classList.toggle("on", n > 0);
+  $("#statusText").textContent = n > 0 ? n + "人と接続中" : "相手を待っています…";
+}
+function hookConn(c, member) {
+  conns[member] = c;
+  c.on("open", () => {
+    updateStatus();
+    c.send({ kind: "hello", from: cfg.member, ids: [...msgIds] });
+  });
+  c.on("data", d => onData(c, d));
+  c.on("close", () => { if (conns[member] === c) delete conns[member]; updateStatus(); });
+  c.on("error", () => {});
+}
+function onData(c, d) {
+  if (!d || typeof d !== "object") return;
+  if (d.kind === "hello") {
+    const theirs = new Set(d.ids || []);
+    const missing = msgs.filter(m => !theirs.has(m.id));
+    if (missing.length) c.send({ kind: "msgs", msgs: missing });
+    // answer with my hello once per connection
+    if (!c._helloSent) { c._helloSent = true; try { c.send({ kind: "hello", from: cfg.member, ids: [...msgIds] }); } catch (e) {} }
+  } else if (d.kind === "msgs" && Array.isArray(d.msgs)) {
+    d.msgs.forEach(m => addMsg(m, true));
+  } else if (d.kind === "chat") {
+    addMsg(d.msg, true);
+  }
+}
+function connectToOthers() {
+  if (!peer || peer.destroyed) return;
+  Object.keys(MEMBERS).forEach(member => {
+    if (member === cfg.member) return;
+    const cur = conns[member];
+    if (cur && (cur.open || cur._pending)) return;
+    try {
+      const c = peer.connect(peerIdFor(member), { reliable: true });
+      c._pending = true;
+      c.on("open", () => { c._pending = false; });
+      hookConn(c, member);
+    } catch (e) {}
+  });
+}
+function startTransport() {
+  try { bc = new BroadcastChannel("famchat_" + roomKey); bc.onmessage = e => onData({ send() {} }, e.data); } catch (e) {}
+  if (typeof Peer === "undefined") { updateStatus(); return; }
+  const myId = peerIdFor(cfg.member);
+  peer = new Peer(myId);
+  peer.on("open", () => { connectToOthers(); updateStatus(); });
+  peer.on("connection", c => {
+    // incoming: figure out who from the peer id suffix
+    const member = Object.keys(MEMBERS).find(m => c.peer === peerIdFor(m)) || c.peer;
+    hookConn(c, member);
+  });
+  peer.on("error", err => {
+    if (err.type === "unavailable-id") {
+      // same member already open somewhere (e.g. another tab): join with a suffix id
+      try { peer.destroy(); } catch (e) {}
+      peer = new Peer(myId + "-" + Math.random().toString(36).slice(2, 6));
+      peer.on("open", () => { connectToOthers(); updateStatus(); });
+      peer.on("connection", c => hookConn(c, Object.keys(MEMBERS).find(m => c.peer.startsWith(PEER_PREFIX + roomKey + "-" + m)) || c.peer));
+      peer.on("error", () => {});
+    } else if (err.type === "peer-unavailable") {
+      // the other phone is simply not open right now; retry loop handles it
+    }
+  });
+  setInterval(connectToOthers, 5000);
+  setInterval(() => broadcast({ kind: "hello", from: cfg.member, ids: [...msgIds] }), 15000);
+}
+
+/* ================= inputs ================= */
+const textInput = $("#textInput");
+function doSendText() {
+  const v = textInput.value.trim(); if (!v) return;
+  sendMsg("text", v);
+  textInput.value = ""; textInput.style.height = "auto";
+}
+$("#sendBtn").addEventListener("click", doSendText);
+textInput.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); doSendText(); }
+});
+textInput.addEventListener("input", () => { textInput.style.height = "auto"; textInput.style.height = Math.min(textInput.scrollHeight, 100) + "px"; });
+
+const stampPanel = $("#stampPanel");
+STAMPS.forEach(s => {
+  const b = document.createElement("button"); b.textContent = s;
+  b.addEventListener("click", () => { sendMsg("stamp", s); stampPanel.classList.remove("open"); });
+  stampPanel.appendChild(b);
+});
+$("#stampBtn").addEventListener("click", () => stampPanel.classList.toggle("open"));
+
+$("#photoBtn").addEventListener("click", () => $("#photoInput").click());
+$("#photoInput").addEventListener("change", e => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f) return;
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => {
+    const scale = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
+    const cv = document.createElement("canvas");
+    cv.width = Math.round(img.naturalWidth * scale); cv.height = Math.round(img.naturalHeight * scale);
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    URL.revokeObjectURL(url);
+    sendMsg("photo", cv.toDataURL("image/jpeg", 0.82));
+  };
+  img.src = url;
+});
+
+/* ================= boot ================= */
+function startChat() {
+  roomKey = hashStr("famchat:" + cfg.code);
+  $("#setup").style.display = "none";
+  $("#chat").style.display = "flex";
+  loadHistory(); renderAll();
+  startTransport(); updateStatus();
+}
+try {
+  const saved = JSON.parse(localStorage.getItem(LS_CFG) || "null");
+  if (saved && MEMBERS[saved.member] && saved.code) { cfg = saved; startChat(); }
+} catch (e) {}
+</script>
+</body>
+</html>
