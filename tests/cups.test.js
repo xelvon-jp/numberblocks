@@ -57,6 +57,27 @@ module.exports = {
     t.ok(r2.amt < s2.amt - 0.08, '逆向きで 送り側が 減っていない');
   },
 
+  'かたむけると 注げて、もどすと 止まる': async t => {
+    const p1 = await openCup(t), p2 = await openCup2(p1);
+    await p1.evaluate(() => { cups.connect('999'); cups.setAmt(0.8); cups.tilt(true); });
+    await p2.evaluate(() => { cups.connect('999'); cups.setAmt(0.2); });
+    await p1.waitForFunction(() => cups.state().partner !== null, null, { timeout: 5000 });
+    await p2.waitForFunction(() => cups.state().partner !== null, null, { timeout: 5000 });
+    const tiltTo = (p, g, n) => p.evaluate(({ g, n }) => { for(let i = 0; i < n; i++) window.dispatchEvent(new DeviceOrientationEvent('deviceorientation', { gamma: g, beta: 0, alpha: 0 })); }, { g, n });
+    await tiltTo(p1, 38, 8);
+    await p1.waitForFunction(() => cups.state().pouring === true, null, { timeout: 3000 });
+    await p1.waitForTimeout(900);
+    const s1 = await st(p1), s2 = await st(p2);
+    t.ok(s1.amt < 0.68, '傾けたのに 減っていない ' + s1.amt);
+    t.ok(s2.amt > 0.3, '傾け注ぎが 相手に 届いていない ' + s2.amt);
+    await tiltTo(p1, 0, 10);
+    await p1.waitForFunction(() => cups.state().pouring === false, null, { timeout: 3000 });
+    const a1 = (await st(p1)).amt;
+    await p1.waitForTimeout(500);
+    const a2 = (await st(p1)).amt;
+    t.ok(Math.abs(a1 - a2) < 0.01, '戻しても 注ぎが 止まっていない ' + a1 + ' → ' + a2);
+  },
+
   '水面ドラッグで 量が 変わり、相手にも 伝わる': async t => {
     const p1 = await openCup(t), p2 = await openCup2(p1);
     await p1.evaluate(() => { cups.connect('555'); cups.setAmt(0.3); });

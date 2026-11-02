@@ -40,6 +40,7 @@
       <div id="dot"></div><div id="status">あいことば を あわせて「つなぐ」</div>
       <input id="code" type="text" inputmode="numeric" maxlength="3" value="">
       <button class="btn" id="connectBtn">つなぐ</button>
+      <button class="btn sub" id="tiltBtn">かたむき：OFF</button>
     </div>
   </div>
   <div id="stage"><canvas id="cv"></canvas></div>
@@ -61,7 +62,10 @@ const myId = Math.random().toString(36).slice(2, 9);
 let amt = 0.5;                       // じぶんの 量（0..1）
 let col = [70, 150, 230];            // じぶんの 色
 let partner = null;                  // { amt, col } あいての 最新
-let pouring = false, recvUntil = 0, lastSend = 0;
+let btnPour = false, recvUntil = 0, lastSend = 0;
+let tiltEnabled = false, tiltSm = 0, tiltPour = false, pourDir = 1;
+const isPouring = () => btnPour || tiltPour;
+const pourRate = () => tiltPour && !btnPour ? 0.30 * Math.min(1, (Math.abs(tiltSm) - 18) / 30 + 0.3) : 0.30;
 let slosh = 0, sloshV = 0, dragLevel = null, drops = [];
 const seen = new Set();
 /* ── つうしん（BroadcastChannel＝同じ端末のタブ / PeerJS＝2台の iPhone） ── */
@@ -178,7 +182,7 @@ function draw(t){
     for(let i = 0; i <= N; i++){
       const x = li.lx + (li.rx - li.lx) * i / N;
       const y = sy + Math.sin(t * 0.006 + i * 0.85) * (1.5 + Math.abs(slosh) * 5) * Math.sin(Math.PI * i / N)
-                  + slosh * 9 * (i / N - 0.5);
+                  + slosh * 9 * (i / N - 0.5) + tiltSm * 0.85 * (i / N - 0.5);
       i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
     }
     ctx.lineTo(bi.rx, g.bot - 6); ctx.lineTo(bi.lx, g.bot - 6); ctx.closePath();
@@ -192,12 +196,18 @@ function draw(t){
     ctx.beginPath(); ctx.moveTo(g.x0 - 26, g.top - 44);
     ctx.quadraticCurveTo(g.x0 + 6, g.top - 30, g.x0 + 34, sy - 8); ctx.stroke();
   }
-  /* 注いでいる流れ */
-  if(pouring && amt > 0.003){
+  /* 注いでいる流れ（傾けた側へ） */
+  if(isPouring() && amt > 0.003){
     ctx.strokeStyle = colCss(0.9); ctx.lineWidth = 10;
-    ctx.beginPath(); ctx.moveTo(g.x0 + g.topW - 6, g.top + 2);
-    ctx.quadraticCurveTo(W + 26, g.top - 26, W + 44, g.top + 42); ctx.stroke();
-    for(let i = 0; i < 2; i++) drops.push({ x: W - 8, y: g.top + 16 + Math.random() * 16, vx: 2.4 + Math.random() * 1.6, vy: 0.4, life: 15 });
+    if(pourDir >= 0){
+      ctx.beginPath(); ctx.moveTo(g.x0 + g.topW - 6, g.top + 2);
+      ctx.quadraticCurveTo(W + 26, g.top - 26, W + 44, g.top + 42); ctx.stroke();
+      for(let i = 0; i < 2; i++) drops.push({ x: W - 8, y: g.top + 16 + Math.random() * 16, vx: 2.4 + Math.random() * 1.6, vy: 0.4, life: 15 });
+    } else {
+      ctx.beginPath(); ctx.moveTo(g.x0 + 6, g.top + 2);
+      ctx.quadraticCurveTo(-26, g.top - 26, -44, g.top + 42); ctx.stroke();
+      for(let i = 0; i < 2; i++) drops.push({ x: 8, y: g.top + 16 + Math.random() * 16, vx: -2.4 - Math.random() * 1.6, vy: 0.4, life: 15 });
+    }
   }
   /* しずく */
   drops = drops.filter(d => d.life > 0);
@@ -250,16 +260,18 @@ let lastT = 0;
 function tick(t){
   const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016); lastT = t;
   sloshV += (-slosh * 0.14 - sloshV * 0.16); slosh += sloshV * 0.06;
-  if(pouring && amt > 0){
+  tiltPour = tiltEnabled && Math.abs(tiltSm) > 18;
+  if(tiltPour) pourDir = tiltSm >= 0 ? 1 : -1; else if(btnPour) pourDir = 1;
+  if(isPouring() && amt > 0){
     const room = partner ? 1 - partner.amt : 1;
-    const d = Math.min(0.30 * dt, amt, Math.max(0, room));
+    const d = Math.min(pourRate() * dt, amt, Math.max(0, room));
     if(d > 0){
       amt -= d; sloshV -= 0.7;
       send({ t: 'xfer', d, col, mid: myId + ':' + (midSeq++) });
       if(partner) partner = { amt: Math.min(1, partner.amt + d), col: partner.col };
     }
   }
-  if((pouring || dragLevel) && t - lastSend > 90){ lastSend = t; sendAmt(); }
+  if((isPouring() || dragLevel) && t - lastSend > 90){ lastSend = t; sendAmt(); }
   draw(t);
   requestAnimationFrame(tick);
 }
@@ -283,8 +295,31 @@ function setFromY(y){
 cv.addEventListener('pointerup', () => { dragLevel = null; });
 cv.addEventListener('pointercancel', () => { dragLevel = null; });
 const pourBtn = document.getElementById('pour');
-pourBtn.addEventListener('pointerdown', e => { e.preventDefault(); pouring = true; pourBtn.classList.add('held'); });
-['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => pourBtn.addEventListener(ev, () => { pouring = false; pourBtn.classList.remove('held'); }));
+pourBtn.addEventListener('pointerdown', e => { e.preventDefault(); btnPour = true; pourBtn.classList.add('held'); });
+['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => pourBtn.addEventListener(ev, () => { btnPour = false; pourBtn.classList.remove('held'); }));
+/* ── かたむき（DeviceOrientation）：右／左に かたむけると そっちへ 注ぐ ── */
+window.addEventListener('deviceorientation', e => {
+  if(e.gamma === null || e.gamma === undefined) return;
+  const landscape = window.screen && window.screen.orientation && Math.abs(window.screen.orientation.angle || 0) === 90;
+  const target = landscape ? (e.beta || 0) : e.gamma;
+  tiltSm += (target - tiltSm) * 0.25;
+});
+const tiltBtn = document.getElementById('tiltBtn');
+function setTilt(on){
+  tiltEnabled = !!on;
+  tiltBtn.textContent = 'かたむき：' + (tiltEnabled ? 'ON' : 'OFF');
+  if(tiltEnabled) setStatus('かたむき ON：右か左に かたむけると 注ぐよ', partner !== null);
+}
+tiltBtn.addEventListener('click', async () => {
+  if(tiltEnabled){ setTilt(false); return; }
+  try{
+    if(typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function'){
+      const r = await DeviceOrientationEvent.requestPermission();
+      if(r !== 'granted'){ setStatus('かたむきの 許可が なかった', false); return; }
+    }
+  }catch(_){}
+  setTilt(true);
+});
 document.querySelectorAll('.chip').forEach(ch => ch.addEventListener('click', () => {
   document.querySelectorAll('.chip').forEach(o => o.classList.toggle('on', o === ch));
   col = ch.dataset.col.split(',').map(Number);
@@ -296,10 +331,11 @@ layout();
 requestAnimationFrame(tick);
 /* ── テスト用 ── */
 window.cups = {
-  state(){ const g = cupGeom(); return { amt, col: col.slice(), partner: partner ? { amt: partner.amt, col: partner.col.slice() } : null, pouring,
+  state(){ const g = cupGeom(); return { amt, col: col.slice(), partner: partner ? { amt: partner.amt, col: partner.col.slice() } : null, pouring: isPouring(), tilt: tiltEnabled, gamma: Math.round(tiltSm * 10) / 10,
     y0: Math.round(levelY(0, g)), y1: Math.round(levelY(1, g)), cx: Math.round(W / 2) }; },
   connect, setAmt(v){ amt = Math.max(0, Math.min(1, v)); sendAmt(); },
-  pour(on){ pouring = !!on; },
+  pour(on){ btnPour = !!on; },
+  tilt(on){ setTilt(!!on); },
 };
 </script>
 </body>
