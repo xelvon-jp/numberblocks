@@ -113,10 +113,10 @@ let W = 0, H = 0, DPR = 1;
 /* りょう：合計は いつも 一定。frac は 合計 12 目盛り（1目盛り=カップの 1/12）、
    ml は 合計 40 目盛り（1目盛り=5ml、片側 最大 200ml） */
 let mode = 'frac';
-let myTicks = 6;
+let amtT = 6, amtA = 6;      // 目標の量（目盛り単位・連続）／ 実際に見えている量
 let col = [70, 150, 230];
-let partnerTicks = 6, partnerCol = [235, 90, 90], partnerSeen = false;
-let dispTicks = 6, partnerDisp = 6;   // 描画用：目盛りの 値へ ゆっくり 追いつく（アナログ表示）
+let partnerAmt = 6, partnerAmtA = 6, partnerCol = [235, 90, 90], partnerSeen = false;
+const shownTicks = () => Math.max(0, Math.min(totalTicks(), Math.round(amtA)));
 const totalTicks = () => mode === 'frac' ? 12 : 40;
 function gcd(a, b){ return b ? gcd(b, a % b) : a; }
 function fracOf(ticks){
@@ -136,19 +136,18 @@ function send(obj){
   try{ if(bc) bc.postMessage(obj); }catch(_){}
   try{ if(conn && conn.open) conn.send(obj); }catch(_){}
 }
-function sendState(){ send({ t: 'state', mode, ticks: myTicks, col }); }
+function sendState(){ send({ t: 'state', mode, amt: Math.round(amtT * 100) / 100, col }); }
 function recv(obj){
   if(!obj || obj.from === myId) return;
   if(obj.mid){ if(seenMids.has(obj.mid)) return; seenMids.add(obj.mid); if(seenMids.size > 400){ const it = seenMids.values(); for(let i = 0; i < 200; i++) seenMids.delete(it.next().value); } }
   if(obj.t === 'state'){
     partnerSeen = true; partnerCol = obj.col || partnerCol;
     if(obj.mode !== mode){ mode = obj.mode; syncUnitUI(); }
-    partnerTicks = obj.ticks;
-    myTicks = totalTicks() - obj.ticks;
+    const their = (typeof obj.amt === 'number') ? obj.amt : obj.ticks;
+    if(their > partnerAmt + 0.02) recvFx();
+    partnerAmt = their;
+    amtT = totalTicks() - their;
     buildMenu();
-  }
-  else if(obj.t === 'tick'){
-    if(myTicks < totalTicks()){ myTicks++; partnerTicks = totalTicks() - myTicks; recvFx(); }
   }
   else if(obj.t === 'col'){ partnerCol = obj.col; }
 }
@@ -203,7 +202,7 @@ function cupGeom(){
   const top = H * 0.24, bot = H * 0.88;
   return { x0, w, top, bot, inL: x0 + 8, inR: x0 + w - 8, inT: top + 8, inB: bot - 8 };
 }
-function levelYc(){ const g = cupGeom(); return g.inB - (dispTicks / totalTicks()) * (g.inB - g.inT); }
+function levelYc(){ const g = cupGeom(); return g.inB - (amtA / totalTicks()) * (g.inB - g.inT); }
 /* ── 傾きと 流れ ── */
 let tiltEnabled = false, tiltSm = 0;
 let gSm = { x: 0, y: -1, z: 0 }, g0 = null, rollDeg = 0;
@@ -225,7 +224,8 @@ function computeRoll(){
   const cross = (g0.x * gSm.y - g0.y * gSm.x) / (m * m0);
   return rollSign * -Math.atan2(cross, dot) * 180 / Math.PI; // 右に 倒す = +
 }
-let btnPour = false, spillAcc = 0, spilling = 0, recvUntil = 0, drops = [], slosh = 0, sloshV = 0;
+let btnPour = false, spilling = 0, recvUntil = 0, drops = [], slosh = 0, sloshV = 0;
+let lastPourAt = 0, lastStateSent = 0, settleSent = true;
 const TILT_AMP = 1.0;   // 水面の 角度は 端末の 傾き そのまま（実機フィードバックで 増幅は 廃止）
 function surfInfo(){
   const g = cupGeom(), cx = (g.inL + g.inR) / 2, yc = levelYc();
@@ -237,15 +237,7 @@ function surfInfo(){
   else if(tiltSm < -4 && yAt(g.inL) <= g.inT + 1) side = -1;
   return { g, cx, yc, m, yAt, side };
 }
-function transferTick(){
-  if(myTicks <= 0) return false;
-  myTicks--; partnerTicks = totalTicks() - myTicks;
-  send({ t: 'tick' });
-  sloshV += 1.1;
-  return true;
-}
 function recvFx(){
-  partnerTicks = totalTicks() - myTicks;
   recvUntil = performance.now() + 300;
   sloshV -= 1.2;
   const g = cupGeom();
@@ -268,7 +260,7 @@ function draw(t){
   ctx.fillStyle = '#dff4fa'; ctx.fillRect(0, 0, W, H);
   const si = surfInfo(), g = si.g;
   const colCss = a => 'rgba(' + col[0] + ',' + col[1] + ',' + col[2] + ',' + a + ')';
-  if(dispTicks > 0.01){
+  if(amtA > 0.01){
     ctx.beginPath();
     const N = 22;
     for(let i = 0; i <= N; i++){
@@ -281,7 +273,7 @@ function draw(t){
     gr.addColorStop(0, colCss(0.72)); gr.addColorStop(1, colCss(0.95));
     ctx.fillStyle = gr; ctx.fill();
   }
-  const flowing = (spilling !== 0 || btnPour) && myTicks > 0;
+  const flowing = (spilling !== 0 || btnPour) && amtT > 0.01;
   if(flowing){
     const dir = spilling !== 0 ? spilling : 1;
     ctx.strokeStyle = colCss(0.9); ctx.lineWidth = 9; ctx.lineCap = 'round';
@@ -324,40 +316,59 @@ function draw(t){
       if(major){ ctx.fillStyle = '#40627a'; ctx.font = '900 14.5px sans-serif'; ctx.fillText(String(ml), gx + 19, y); }
     }
   }
-  if(mode === 'frac'){ const f = fracOf(myTicks); drawFrac(ctx, W / 2, g.top - 40, f[0], f[1], 52, '#1f66ab'); }
-  else { ctx.fillStyle = '#1f66ab'; ctx.font = '900 34px "Hiragino Maru Gothic ProN",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText((myTicks * 5) + ' ml', W / 2, g.top - 40); }
+  if(mode === 'frac'){ const f = fracOf(shownTicks()); drawFrac(ctx, W / 2, g.top - 40, f[0], f[1], 52, '#1f66ab'); }
+  else { ctx.fillStyle = '#1f66ab'; ctx.font = '900 34px "Hiragino Maru Gothic ProN",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText((shownTicks() * 5) + ' ml', W / 2, g.top - 40); }
   if(partnerSeen){
     const mw = 40, mh = 56, mx = W - mw - 10, my0 = 8;
     ctx.strokeStyle = '#40627a'; ctx.lineWidth = 2.5; ctx.strokeRect(mx, my0, mw, mh);
-    const ph = (partnerDisp / totalTicks()) * (mh - 6);
+    const ph = (partnerAmtA / totalTicks()) * (mh - 6);
     ctx.fillStyle = 'rgba(' + partnerCol[0] + ',' + partnerCol[1] + ',' + partnerCol[2] + ',0.85)';
     ctx.fillRect(mx + 3, my0 + mh - 3 - ph, mw - 6, ph);
     ctx.fillStyle = '#40627a'; ctx.font = '900 11.5px sans-serif'; ctx.textAlign = 'center';
     ctx.fillText('あいて', mx + mw / 2, my0 + mh + 10);
-    if(mode === 'frac'){ const f = fracOf(partnerTicks); drawFrac(ctx, mx + mw / 2, my0 + mh + 27, f[0], f[1], 19, '#40627a'); }
-    else ctx.fillText((partnerTicks * 5) + 'ml', mx + mw / 2, my0 + mh + 24);
+    const pt = Math.max(0, Math.min(totalTicks(), Math.round(partnerAmtA)));
+    if(mode === 'frac'){ const f = fracOf(pt); drawFrac(ctx, mx + mw / 2, my0 + mh + 27, f[0], f[1], 19, '#40627a'); }
+    else ctx.fillText((pt * 5) + 'ml', mx + mw / 2, my0 + mh + 24);
   }
 }
 let lastT = 0;
 function tick(t){
   const dt = Math.min(0.05, (t - lastT) / 1000 || 0.016); lastT = t;
   sloshV += (-slosh * 0.14 - sloshV * 0.16); slosh += sloshV * 0.06;
-  const ease = Math.min(1, dt * 4.2);
-  dispTicks += (myTicks - dispTicks) * ease; if(Math.abs(myTicks - dispTicks) < 0.003) dispTicks = myTicks;
-  partnerDisp += (partnerTicks - partnerDisp) * ease; if(Math.abs(partnerTicks - partnerDisp) < 0.003) partnerDisp = partnerTicks;
   const si = surfInfo();
   spilling = tiltEnabled ? si.side : 0;
-  let rate = 0;
-  if(spilling !== 0){
-    const over = Math.max(0, (Math.abs(tiltSm) - 6)) / 40;
-    rate = (mode === 'frac' ? 1.05 : 2.3) * Math.min(1, 0.3 + over);
-  } else if(btnPour){
-    rate = mode === 'frac' ? 0.9 : 2.0;
+  /* 流れ：量 そのものが 連続に 減る。速さは「口を 超えた 角度」だけで 決まる */
+  let pouring = false;
+  if(amtT > 0){
+    let rate = 0;
+    if(spilling !== 0){
+      const halfW = (si.g.inR - si.g.inL) / 2;
+      const needDeg = Math.atan2(Math.max(0, si.yc - si.g.inT), halfW) * 180 / Math.PI;
+      const excess = Math.max(0, Math.abs(tiltSm) - needDeg);
+      rate = (mode === 'frac' ? 0.95 : 2.1) * Math.min(1, 0.35 + excess / 20);
+    } else if(btnPour){
+      rate = mode === 'frac' ? 0.85 : 1.9;
+    }
+    if(rate > 0){
+      pouring = true; lastPourAt = t; settleSent = false;
+      amtT = Math.max(0, amtT - rate * dt);
+      amtA = amtT;
+      partnerAmt = totalTicks() - amtT; partnerAmtA = partnerAmt;
+      if(t - lastStateSent > 120){ lastStateSent = t; sendState(); }
+    }
   }
-  if(rate > 0 && myTicks > 0){
-    spillAcc += rate * dt;
-    while(spillAcc >= 1){ spillAcc -= 1; if(!transferTick()){ spillAcc = 0; break; } }
-  } else spillAcc = Math.max(0, spillAcc - dt * 2);
+  if(!pouring){
+    // 表示は 一定速度で 目標へ（速すぎず 一定なので、相手側も 均等に 増える）
+    const chase = (cur, target, vmax) => cur + Math.max(-vmax * dt, Math.min(vmax * dt, target - cur));
+    amtA = chase(amtA, amtT, 3.2);
+    partnerAmtA = chase(partnerAmtA, partnerAmt, 3.2);
+    /* 落ち着き：注ぎ終わって 少し 経ったら、最寄りの 目盛りに そっと 合わせる */
+    const nearest = Math.round(amtT);
+    if(Math.abs(amtT - nearest) > 0.002 && t - lastPourAt > 700){
+      amtT = chase(amtT, nearest, 1.4);
+      if(Math.abs(amtT - nearest) <= 0.002){ amtT = nearest; if(!settleSent){ settleSent = true; sendState(); } }
+    }
+  }
   draw(t); drawDbg(t);
   requestAnimationFrame(tick);
 }
@@ -398,7 +409,7 @@ function buildMenu(){
   const vals = mode === 'frac' ? [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] : [0, 5, 10, 15, 20, 25, 30, 35, 40];
   for(const v of vals){
     const b = document.createElement('button');
-    b.className = 'mbtn' + (v === myTicks ? ' on' : '');
+    b.className = 'mbtn' + (v === Math.round(amtT) ? ' on' : '');
     b.innerHTML = mode === 'frac' ? fracHTML(v) : (v * 5) + ' ml';
     b.onclick = () => setMyTicks(v);
     gridEl.appendChild(b);
@@ -407,12 +418,12 @@ function buildMenu(){
   document.getElementById('stepUp').textContent = mode === 'frac' ? '＋ 1/12' : '＋ 5ml';
 }
 function setMyTicks(v){
-  myTicks = Math.max(0, Math.min(totalTicks(), Math.round(v)));
-  partnerTicks = totalTicks() - myTicks;
+  amtT = Math.max(0, Math.min(totalTicks(), Math.round(v)));
+  partnerAmt = totalTicks() - amtT;
   sendState(); buildMenu();
 }
-document.getElementById('stepDown').onclick = () => setMyTicks(myTicks - 1);
-document.getElementById('stepUp').onclick = () => setMyTicks(myTicks + 1);
+document.getElementById('stepDown').onclick = () => setMyTicks(Math.round(amtT) - 1);
+document.getElementById('stepUp').onclick = () => setMyTicks(Math.round(amtT) + 1);
 document.getElementById('menuClose').onclick = () => menuEl.classList.remove('on');
 document.getElementById('amtBtn').onclick = () => { buildMenu(); menuEl.classList.toggle('on'); };
 function syncUnitUI(){
@@ -422,10 +433,10 @@ function syncUnitUI(){
 }
 function setMode(m){
   if(m === mode) return;
-  const ratio = myTicks / totalTicks();
+  const ratio = amtT / totalTicks();
   mode = m;
-  myTicks = Math.round(ratio * totalTicks());
-  partnerTicks = totalTicks() - myTicks;
+  amtT = Math.round(ratio * totalTicks()); amtA = amtT;
+  partnerAmt = totalTicks() - amtT; partnerAmtA = partnerAmt;
   syncUnitUI(); sendState();
 }
 document.getElementById('uFrac').onclick = () => setMode('frac');
@@ -472,7 +483,7 @@ function drawDbg(t){
     'g  = (' + f(gSm.x) + ', ' + f(gSm.y) + ', ' + f(gSm.z) + ')\n' +
     'g0 = ' + (g0 ? '(' + f(g0.x) + ', ' + f(g0.y) + ', ' + f(g0.z) + ')' : 'なし') + '\n' +
     'roll=' + f(rollDeg, 1) + '°  tiltSm=' + f(tiltSm, 1) + '°  符号=' + (rollSign > 0 ? '+1' : '-1') + '\n' +
-    'spill=' + spilling + '  ticks=' + myTicks + '  disp=' + f(dispTicks) + '  mode=' + mode + '\n' +
+    'spill=' + spilling + '  amt=' + f(amtT) + '  disp=' + f(amtA) + '  mode=' + mode + '\n' +
     'tilt=' + (tiltEnabled ? 'ON' : 'OFF') + '  perm=' + (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function' ? '要許可' : '不要') + '  conn=' + (connected ? 'Peer' : (partnerSeen ? 'BC/同期' : '未'));
   const c = dbgCv.getContext('2d');
   c.clearRect(0, 0, 92, 92);
@@ -487,7 +498,7 @@ function drawDbg(t){
   c.lineWidth = 1;
 }
 window.cups = {
-  state(){ return { mode, ticks: myTicks, disp: Math.round(dispTicks * 100) / 100, total: totalTicks(), partnerTicks, partnerSeen, connected, tilt: tiltEnabled, gamma: Math.round(tiltSm * 10) / 10, roll: Math.round(rollDeg * 10) / 10, sign: rollSign, spilling }; },
+  state(){ return { mode, ticks: Math.round(amtT), amt: Math.round(amtT * 100) / 100, disp: Math.round(amtA * 100) / 100, total: totalTicks(), partnerTicks: Math.round(partnerAmt), partnerSeen, connected, tilt: tiltEnabled, gamma: Math.round(tiltSm * 10) / 10, roll: Math.round(rollDeg * 10) / 10, sign: rollSign, spilling }; },
   debug(on){ setDbg(on !== false); },
   setTicks: setMyTicks, setMode, tilt(on){ setTilt(!!on); },
   pour(on){ btnPour = !!on; },

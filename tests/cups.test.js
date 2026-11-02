@@ -99,7 +99,7 @@ module.exports = {
     let s = await st(p1);
     t.ok(s.roll < -9, 'iOS実測では 素の roll が 負になるはず: ' + s.roll);
     await p1.evaluate(() => document.getElementById('dbgFlip').click());
-    await evt(p1, 104, -90, 4);
+    await evt(p1, 104, -90, 12);
     s = await st(p1);
     t.ok(s.roll > 9 && s.roll < 19, '反転後に roll が 一致しない: ' + s.roll);
     await p1.waitForFunction(() => cups.state().spilling === 1, null, { timeout: 4000 });
@@ -112,9 +112,9 @@ module.exports = {
   '水面は アナログに 動く（値は 目盛りのまま）': async t => {
     const p1 = await openCup(t);
     await p1.evaluate(() => cups.setTicks(0));
-    await p1.waitForTimeout(160);
+    await p1.waitForTimeout(250);
     const mid = (await st(p1)).disp;
-    t.ok(mid > 0.4 && mid < 5.6, '水面が パッと 切り替わっている（途中経過がない）: ' + mid);
+    t.ok(mid > 0.4 && mid < 5.9, '水面が パッと 切り替わっている（途中経過がない）: ' + mid);
     await p1.waitForFunction(() => cups.state().disp === 0, null, { timeout: 4000 });
     t.eq((await st(p1)).ticks, 0, '値そのものは 目盛り（0）に なっていない');
   },
@@ -145,7 +145,25 @@ module.exports = {
     t.ok(Math.abs(r3) < 5, '基準リセット後に roll が 0 近くに ならない: ' + r3);
   },
 
-  'そそぐボタンでも ゆっくり 1目盛りずつ うつる': async t => {
+  '流量が 均等で、止めると 目盛りに 落ち着く': async t => {
+    const p1 = await openCup(t), p2 = await openCup2(p1);
+    await p2.waitForFunction(() => cups.state().partnerSeen === true, null, { timeout: 6000 });
+    await p1.evaluate(() => { cups.setTicks(6); cups.pour(true); });
+    await p1.waitForTimeout(900);
+    const a1 = (await st(p1)).amt;
+    await p1.waitForTimeout(900);
+    const a2 = (await st(p1)).amt;
+    await p1.evaluate(() => cups.pour(false));
+    const d1 = 6 - a1, d2 = a1 - a2;
+    t.ok(d1 > 0.35 && d2 > 0.35, '流れていない: ' + d1 + '/' + d2);
+    t.ok(d2 / d1 > 0.6 && d2 / d1 < 1.6, '流量が 均等でない: 前半 ' + d1.toFixed(2) + ' 後半 ' + d2.toFixed(2));
+    // 止めて しばらくすると 最寄りの 目盛りに 落ち着く
+    await p1.waitForTimeout(1800);
+    const s = await st(p1);
+    t.eq(s.amt, s.ticks, '目盛りに 落ち着いていない: amt=' + s.amt);
+  },
+
+  'そそぐボタンでも ゆっくり うつる': async t => {
     const p1 = await openCup(t), p2 = await openCup2(p1);
     await p2.waitForFunction(() => cups.state().partnerSeen === true, null, { timeout: 6000 });
     await p1.evaluate(() => { cups.setTicks(6); cups.pour(true); });
