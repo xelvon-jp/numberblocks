@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>こうえん</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; overflow:hidden; }
+  body { font-family:"Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",sans-serif;
+         background:#bfe8f0; color:#233; user-select:none; -webkit-user-select:none; touch-action:none; }
+  #wrap { display:flex; flex-direction:column; height:100%; }
+  #head { display:flex; align-items:center; gap:8px; padding:7px 10px 3px; }
+  #title { font-size:19px; font-weight:900; color:#2a6cb8; }
+  #hint { font-size:11.5px; font-weight:700; color:#5a7a8c; }
+  #diffRow { display:flex; align-items:center; gap:5px; padding:2px 10px 5px; flex-wrap:wrap; }
+  #diffRow .lab { font-size:12px; font-weight:900; color:#3a7bd5; }
+  .dchip { border:2.5px solid #9db8c9; background:#fff; color:#40627a; border-radius:999px;
+           padding:3px 11px; font-size:14.5px; font-weight:900; font-family:inherit; cursor:pointer; }
+  .dchip.on { background:#3a7bd5; border-color:#3a7bd5; color:#fff; }
+  #stage { position:relative; flex:1; min-height:0; }
+  #cv { position:absolute; inset:0; }
+  #bar { display:flex; gap:6px; padding:7px 10px 10px; overflow-x:auto; background:rgba(255,255,255,0.45); }
+  .schip { flex:none; border:2.5px solid #a8c69a; background:#fff; color:#38662c; border-radius:14px;
+           padding:6px 13px; font-size:17px; font-weight:900; font-family:inherit; cursor:pointer; }
+  .schip:active { transform:scale(0.93); }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="head">
+    <div id="title">🛝 こうえん</div>
+    <div id="hint">キャラを ドラッグ：シーソー／すべり台の 上／🏠（けす）</div>
+  </div>
+  <div id="diffRow"><span class="lab">すべり台ルール</span></div>
+  <div id="stage"><canvas id="cv"></canvas></div>
+  <div id="bar"></div>
+</div>
+
+<script>
+(function(){ var v = (document.lastModified || '').replace(/\D/g,'') || '1';
+  ['overrides.js','engine.js'].forEach(function(f){ document.write('<script src="' + f + '?v=' + v + '"><\/script>'); }); })();
+</script>
+<script>
+'use strict';
+const cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+const stage = document.getElementById('stage');
+let W = 0, H = 0, DPR = 1;
+let chars = [], fx = [], nextId = 1;
+let diff = -700;                 // 公差（0.01 単位）既定 −7
+let history = [];                // 数列（0.01 単位）
+let tilt = 0, balancedAt = 0, wasBalanced = false;
+const DIFFS = [-1000, -700, -500, -300, -200, -100, 200, 500];
+const SUMMONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12.5, 25, 50, 100];
+
+function groundY(){ return H - 54; }
+function platPt(){ return { x: W * 0.17, y: H * 0.17 }; }
+function slidePt(t){
+  const p0 = { x: W * 0.17, y: H * 0.17 }, pc = { x: W * 0.60, y: H * 0.30 }, p1 = { x: W * 0.885, y: groundY() - 2 };
+  const a = (1 - t) * (1 - t), b = 2 * (1 - t) * t, c = t * t;
+  return { x: a * p0.x + b * pc.x + c * p1.x, y: a * p0.y + b * pc.y + c * p1.y };
+}
+function seesawGeom(){
+  const cx = W * 0.46, base = groundY(), topY = base - Math.max(64, H * 0.135);
+  return { cx, base, topY, half: W * 0.415 };
+}
+function fmt(u){
+  const neg = u < 0; u = Math.abs(Math.round(u));
+  const i = Math.floor(u / 100), f = u % 100;
+  let s = String(i);
+  if(f) s += '.' + (f % 10 === 0 ? String(f / 10) : (f < 10 ? '0' : '') + String(f));
+  return (neg ? '−' : '') + s;
+}
+function sums(){
+  let L = 0, R = 0;
+  for(const c of chars){ if(c.seat === 'L') L += c.u; else if(c.seat === 'R') R += c.u; }
+  return { L, R };
+}
+function isBalanced(){
+  const s = sums();
+  return s.L === s.R && s.L !== 0 && chars.some(c => c.seat === 'L') && chars.some(c => c.seat === 'R');
+}
+function charGeom(c){
+  const neg = c.u < 0, au = Math.abs(c.u);
+  const whole = Math.floor(au / 100), frac = (au % 100) / 100;
+  if(whole === 0) return { bs: 20, w: 22, h: 20, whole: 0, frac };
+  const sp = blockSpec(whole);
+  const bs = Math.max(7, Math.min(24, Math.round(64 / sp.rows)));
+  return { bs, w: sp.cols * bs + (frac > 0 ? bs + 4 : 0), h: sp.rows * bs, whole, frac, sp };
+}
+function freeSpot(){
+  const gy = groundY();
+  for(let x = 46; x < W - 30; x += 44){
+    if(!chars.some(c => !c.seat && Math.abs(c.tx - x) < 40)) return { x, y: gy };
+  }
+  return { x: 40 + Math.random() * (W - 80), y: gy };
+}
+function summon(v){
+  if(chars.length >= 16) return null;
+  const sp = freeSpot();
+  const c = { id: nextId++, u: Math.round(v * 100), x: sp.x, y: sp.y - 130, tx: sp.x, ty: sp.y, seat: null, ride: null, born: performance.now() };
+  chars.push(c);
+  for(let i = 0; i < 8; i++) fx.push({ x: sp.x + (Math.random() - 0.5) * 44, y: sp.y - 20, vx: (Math.random() - 0.5) * 2, vy: -1 - Math.random() * 2, life: 26, col: '#ffd94a' });
+  return c;
+}
+function burst(x, y, n, cols){
+  for(let i = 0; i < (n || 16); i++){ const a = Math.random() * 6.28, s = 1 + Math.random() * 3.4;
+    fx.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 1.6, life: 34 + Math.random() * 16, col: cols[i % cols.length] }); }
+}
+/* ── シーソー上の 座席位置 ── */
+function seatPos(c){
+  const g = seesawGeom();
+  const side = c.seat, mates = chars.filter(o => o.seat === side);
+  const idx = mates.indexOf(c);
+  const tan = Math.tan(tilt);
+  let x;
+  if(side === 'L') x = g.cx - g.half + 34 + idx * 46;
+  else x = g.cx + g.half - 34 - (mates.length - 1 - idx) * 46;
+  return { x, y: g.topY + (x - g.cx) * tan };
+}
+function layout(){
+  const r = stage.getBoundingClientRect();
+  const nw = Math.max(280, r.width), nh = Math.max(280, r.height);
+  if(Math.abs(nw - W) < 2 && Math.abs(nh - H) < 2) return;
+  W = nw; H = nh; DPR = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = W * DPR; cv.height = H * DPR;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  for(const c of chars) if(!c.seat && !c.ride){ c.ty = groundY(); if(c.y > groundY()) c.y = groundY(); if(c.x > W - 20) { c.x = W - 40; c.tx = c.x; } }
+}
+/* ── 描画 ── */
+function drawChar(c, t){
+  const g = charGeom(c);
+  const bobA = Math.max(0, 1 - (t - c.born) / 250);
+  let scale = 1 + 0.25 * Math.sin(bobA * Math.PI) * bobA;
+  if(c.pop) scale *= 1 + 0.3 * Math.max(0, 1 - (t - c.pop) / 220);
+  const x = c.x, baseY = c.y + (c.u < 0 ? Math.sin(t * 0.003 + c.id) * 4 - 6 : 0);
+  ctx.save();
+  ctx.translate(x, baseY); ctx.scale(scale, scale); ctx.translate(-x, -baseY);
+  if(c.u < 0){
+    // 負の数：ふうせん（浮く）
+    ctx.strokeStyle = 'rgba(90,110,130,0.7)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x, baseY - g.h - 4); ctx.quadraticCurveTo(x + 5, baseY - g.h - 16, x, baseY - g.h - 24); ctx.stroke();
+    ctx.fillStyle = '#8fd0ea'; ctx.strokeStyle = '#4aa3c7';
+    ctx.beginPath(); ctx.ellipse(x, baseY - g.h - 38, 13, 16, 0, 0, 6.29); ctx.fill(); ctx.stroke();
+  }
+  if(g.whole === 0){
+    ctx.fillStyle = 'rgba(120,205,245,0.9)';
+    const fh = g.frac * g.bs;
+    ctx.fillRect(x - g.bs / 2 + 2, baseY - fh, g.bs - 4, fh);
+    ctx.setLineDash([4, 3]); ctx.strokeStyle = 'rgba(70,140,180,0.85)'; ctx.lineWidth = 2.5;
+    ctx.strokeRect(x - g.bs / 2, baseY - g.bs, g.bs, g.bs); ctx.setLineDash([]);
+  } else {
+    if(c.u < 0) ctx.globalAlpha = 0.82;
+    drawNumberblock(ctx, g.whole, x - g.w / 2, baseY - g.h, g.bs, { t, animate: false, numberling: false });
+    if(c.u < 0) ctx.globalAlpha = 1;
+    if(g.frac > 0){
+      const hx = x - g.w / 2 + g.sp.cols * g.bs + 4;
+      ctx.fillStyle = 'rgba(120,205,245,0.9)';
+      ctx.fillRect(hx + 2, baseY - g.frac * g.bs, g.bs - 4, g.frac * g.bs);
+      ctx.setLineDash([4, 3]); ctx.strokeStyle = 'rgba(70,140,180,0.85)'; ctx.lineWidth = 2.5;
+      ctx.strokeRect(hx, baseY - g.bs, g.bs, g.bs); ctx.setLineDash([]);
+    }
+  }
+  // 値ラベル
+  ctx.font = '900 ' + (Math.abs(c.u) >= 10000 ? 19 : 22) + 'px sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  const ly = baseY - g.h - (c.u < 0 ? 62 : 15);
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 7; ctx.strokeText(fmt(c.u), x, ly);
+  ctx.fillStyle = c.u < 0 ? '#2a6cb8' : '#16233a'; ctx.fillText(fmt(c.u), x, ly);
+  ctx.restore();
+}
+function rr(x, y, w, h, r){ ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
+function sign(x, y, text, col, size){
+  ctx.save();
+  ctx.font = '900 ' + (size || 20) + 'px "Hiragino Maru Gothic ProN",sans-serif';
+  const w = ctx.measureText(text).width + 30;
+  ctx.fillStyle = '#fff'; ctx.strokeStyle = col; ctx.lineWidth = 3.5;
+  rr(x - w / 2, y - 19, w, 38, 12); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = col; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y + 1); ctx.restore();
+  return w;
+}
+function draw(t){
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  const gr = ctx.createLinearGradient(0, 0, 0, H);
+  gr.addColorStop(0, '#bfe8f0'); gr.addColorStop(0.72, '#dff6e3');
+  gr.addColorStop(0.721, '#8fd07a'); gr.addColorStop(1, '#6cb85c');
+  ctx.fillStyle = gr; ctx.fillRect(0, 0, W, H);
+  const gy = groundY(), pp = platPt();
+  /* すべり台 */
+  ctx.strokeStyle = '#7a8794'; ctx.lineWidth = 11; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(pp.x - 52, gy); ctx.lineTo(pp.x - 52, pp.y); ctx.stroke();
+  ctx.lineWidth = 8;
+  for(let i = 0; i < 4; i++){ const y = pp.y + 34 + i * ((gy - pp.y - 40) / 4); ctx.beginPath(); ctx.moveTo(pp.x - 76, y); ctx.lineTo(pp.x - 28, y); ctx.stroke(); }
+  ctx.fillStyle = '#7a8794'; ctx.fillRect(pp.x - 84, pp.y - 10, 148, 13);
+  ctx.strokeStyle = '#4aa3c7'; ctx.lineWidth = 20;
+  ctx.beginPath(); ctx.moveTo(pp.x + 56, pp.y + 4);
+  ctx.quadraticCurveTo(W * 0.60, H * 0.30 + 4, W * 0.885, gy - 2); ctx.stroke();
+  ctx.strokeStyle = '#8fd0ea'; ctx.lineWidth = 6;
+  ctx.beginPath(); ctx.moveTo(pp.x + 56, pp.y - 4);
+  ctx.quadraticCurveTo(W * 0.60, H * 0.30 - 4, W * 0.885, gy - 10); ctx.stroke();
+  // プール（マイナスにも 入れる）
+  ctx.fillStyle = 'rgba(90,170,220,0.55)';
+  ctx.beginPath(); ctx.ellipse(W * 0.885, gy + 6, 52, 12, 0, 0, 6.29); ctx.fill();
+  sign(pp.x + 6, pp.y - 44, (diff > 0 ? '+' : '') + fmt(diff) + ' ずつ', '#3a7bd5', 19);
+  // 数列チェーン
+  if(history.length >= 2){
+    const disp = history.slice(-5).map(fmt).join(' → ');
+    sign(W * 0.66, 26, disp, '#e8912d', 18);
+  }
+  /* シーソー */
+  const g = seesawGeom(), s = sums();
+  ctx.fillStyle = '#8a5a2b';
+  ctx.beginPath(); ctx.moveTo(g.cx - 34, g.base); ctx.lineTo(g.cx + 34, g.base); ctx.lineTo(g.cx, g.topY + 8); ctx.closePath(); ctx.fill();
+  ctx.save();
+  ctx.translate(g.cx, g.topY); ctx.rotate(tilt);
+  ctx.fillStyle = '#f2a541'; ctx.strokeStyle = '#c67f1e'; ctx.lineWidth = 3.5;
+  rr(-g.half, -9, g.half * 2, 18, 9); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.fillRect(-g.half + 8, -13, 64, 7); ctx.fillRect(g.half - 72, -13, 64, 7);
+  ctx.restore();
+  if(chars.some(c => c.seat === 'L')) sign(g.cx - g.half + 44, g.topY - Math.abs(Math.sin(tilt)) * g.half - 96, fmt(s.L), '#e2543e', 22);
+  if(chars.some(c => c.seat === 'R')) sign(g.cx + g.half - 44, g.topY - Math.abs(Math.sin(tilt)) * g.half - 96, fmt(s.R), '#3a7bd5', 22);
+  // 🏠（けす）
+  ctx.save();
+  ctx.font = '30px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(255,255,255,0.75)';
+  ctx.beginPath(); ctx.arc(W - 30, 30, 22, 0, 6.29); ctx.fill();
+  ctx.fillText('🏠', W - 30, 32); ctx.restore();
+  /* キャラ */
+  const sorted = [...chars].sort((a, b) => (a.seat ? 1 : 0) - (b.seat ? 1 : 0));
+  for(const c of sorted) drawChar(c, t);
+  /* fx */
+  fx = fx.filter(p => p.life > 0);
+  for(const p of fx){ p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life--;
+    ctx.globalAlpha = Math.min(1, p.life / 16); ctx.fillStyle = p.col;
+    ctx.beginPath(); ctx.arc(p.x, p.y, 3.4, 0, 6.29); ctx.fill(); }
+  ctx.globalAlpha = 1;
+  /* つりあい バナー */
+  if(wasBalanced && t - balancedAt < 2600){
+    ctx.save();
+    ctx.font = '900 30px "Hiragino Maru Gothic ProN",sans-serif';
+    const w = ctx.measureText('つりあい！').width + 52;
+    ctx.fillStyle = '#58a34c'; rr(W / 2 - w / 2, 52, w, 52, 26); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('つりあい！', W / 2, 79); ctx.restore();
+  }
+}
+/* ── 更新 ── */
+let drag = null;
+function tick(t){
+  const targ = (() => { const s = sums(); const d = (s.R - s.L) / 100;
+    return Math.max(-0.21, Math.min(0.21, d === 0 ? 0 : Math.sign(d) * Math.min(0.21, Math.abs(d) / 25 * 0.19 + 0.02))); })();
+  tilt += (targ - tilt) * 0.07;
+  const bal = isBalanced();
+  if(bal && !wasBalanced){ balancedAt = t; const g = seesawGeom(); burst(g.cx, g.topY - 60, 26, ['#ffd94a', '#ff8a5c', '#7ecb6f', '#5aa9e6']); }
+  wasBalanced = bal;
+  for(const c of chars){
+    if(drag && drag.c === c) continue;
+    if(c.ride){
+      const p = Math.min(1, (t - c.ride.t0) / 950), e = p * p * (3 - 2 * p) * 0.3 + p * p * 0.7;
+      const pt = slidePt(Math.min(1, p * 1.02));
+      c.x = pt.x; c.y = pt.y;
+      if(p >= 1){
+        const pre = c.u;
+        c.u = Math.max(-99900, Math.min(99999900, c.u + diff));
+        c.ride = null; c.pop = t;
+        burst(c.x, c.y - 6, 10, ['#8fd0ea', '#5aa9e6', '#ffffff']);
+        if(!history.length || history[history.length - 1] !== pre) history = [pre, c.u];
+        else history.push(c.u);
+        const sp = freeSpot(); c.tx = sp.x; c.ty = sp.y;
+      }
+      continue;
+    }
+    if(c.seat){ const sp = seatPos(c); c.x += (sp.x - c.x) * 0.3; c.y += (sp.y - c.y) * 0.3; continue; }
+    c.x += (c.tx - c.x) * 0.16; c.y += (c.ty - c.y) * 0.16;
+  }
+  draw(t);
+  requestAnimationFrame(tick);
+}
+/* ── 操作 ── */
+function ptr(e){ const r = cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top, id: e.pointerId }; }
+function hitChar(p){
+  for(let i = chars.length - 1; i >= 0; i--){
+    const c = chars[i], g = charGeom(c);
+    if(Math.abs(p.x - c.x) < g.w / 2 + 16 && p.y < c.y + 14 && p.y > c.y - g.h - 44) return c;
+  }
+  return null;
+}
+cv.addEventListener('pointerdown', e => {
+  const p = ptr(e), c = hitChar(p);
+  if(c && !c.ride){ drag = { c, dx: c.x - p.x, dy: c.y - p.y }; c.seat = null; try{ cv.setPointerCapture(e.pointerId); }catch(_){} }
+});
+cv.addEventListener('pointermove', e => {
+  if(!drag) return;
+  const p = ptr(e);
+  drag.c.x = Math.max(14, Math.min(W - 14, p.x + drag.dx));
+  drag.c.y = Math.max(30, Math.min(H - 4, p.y + drag.dy));
+});
+cv.addEventListener('pointerup', e => {
+  if(!drag) return;
+  const c = drag.c, p = ptr(e); drag = null;
+  const g = seesawGeom(), pp = platPt();
+  if(Math.hypot(p.x - (W - 30), p.y - 30) < 34){ chars = chars.filter(o => o !== c); return; }
+  if(Math.abs(p.x - pp.x) < 78 && Math.abs(p.y - pp.y) < 86 && c.u + diff >= -99900){ c.ride = { t0: performance.now() }; c.seat = null; return; }
+  const tan = Math.tan(tilt), plankYat = g.topY + (p.x - g.cx) * tan;
+  if(Math.abs(p.y - plankYat) < 64 && p.x > g.cx - g.half - 6 && p.x < g.cx + g.half + 6){
+    c.seat = p.x < g.cx ? 'L' : 'R'; return;
+  }
+  c.tx = Math.max(20, Math.min(W - 20, c.x)); c.ty = groundY();
+});
+cv.addEventListener('pointercancel', () => { drag = null; });
+/* ── UI ── */
+const diffRow = document.getElementById('diffRow');
+for(const d of DIFFS){
+  const b = document.createElement('button');
+  b.className = 'dchip' + (d * 100 === diff ? ' on' : ''); b.textContent = fmt(d * 100);
+  b.onclick = () => { diff = d * 100; history = []; diffRow.querySelectorAll('.dchip').forEach(o => o.classList.toggle('on', o === b)); };
+  diffRow.appendChild(b);
+}
+const bar = document.getElementById('bar');
+for(const v of SUMMONS){
+  const b = document.createElement('button');
+  b.className = 'schip'; b.textContent = fmt(Math.round(v * 100));
+  b.onclick = () => summon(v);
+  bar.appendChild(b);
+}
+new ResizeObserver(layout).observe(stage);
+window.addEventListener('resize', layout);
+layout();
+summon(7); summon(3); summon(4);
+requestAnimationFrame(tick);
+/* ── テスト用 ── */
+window.kouen = {
+  state(){ const s = sums(); return { chars: chars.map(c => ({ id: c.id, v: c.u / 100, seat: c.seat, riding: !!c.ride, x: Math.round(c.x), y: Math.round(c.y) })),
+    left: s.L / 100, right: s.R / 100, balanced: isBalanced(), diff: diff / 100, history: history.map(u => u / 100), groundY: Math.round(groundY()), W: Math.round(W),
+    plankY: Math.round(seesawGeom().topY), plankCx: Math.round(seesawGeom().cx), plankHalf: Math.round(seesawGeom().half) }; },
+  summon(v){ const c = summon(v); return c ? c.id : null; },
+  seat(id, side){ const c = chars.find(o => o.id === id); if(!c) return false; c.seat = side; return true; },
+  ride(id){ const c = chars.find(o => o.id === id); if(!c) return false; c.ride = { t0: performance.now() }; return true; },
+  setDiff(d){ diff = Math.round(d * 100); history = []; },
+};
+</script>
+</body>
+</html>
