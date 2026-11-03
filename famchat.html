@@ -190,7 +190,7 @@
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v6.5</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v6.6</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="msgMenu">
@@ -215,7 +215,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v6.5";
+const APP_VERSION = "v6.6";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -851,7 +851,7 @@ setupAppIcon();
 const LS_EFFECT = "famchat_effect_v1";
 let bgEffect = (() => {
   try { const v = localStorage.getItem(LS_EFFECT); if (v === "momiji" || v === "none") return v; } catch (e) {}
-  return (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) ? "none" : "momiji";
+  return "momiji";
 })();
 let leafRaf = null;
 function syncLeafLayer() {
