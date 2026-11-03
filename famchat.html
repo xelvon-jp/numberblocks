@@ -190,7 +190,7 @@
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v6.8</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v6.9</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="msgMenu">
@@ -215,7 +215,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v6.8";
+const APP_VERSION = "v6.9";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -567,6 +567,7 @@ function renderMsg(m) {
   const b = document.createElement("div"); b.className = "bubble " + m.type + (m.type === "text" && isSingleEmoji(m.body) ? " stamp" : "") + " from-" + m.from;
   if (m.type === "photo") {
     const img = document.createElement("img"); img.src = m.body; img.alt = "写真"; img.style.cursor = "pointer";
+    img.onload = () => { if (stickBottom) scrollBottom(); };
     img.addEventListener("click", () => openPhotoViewer(m));
     b.appendChild(img);
   } else {
@@ -583,7 +584,7 @@ function renderMsg(m) {
 $("#msgs").addEventListener("scroll", () => { const m = $("#msgs"); stickBottom = (m.scrollHeight - m.scrollTop - m.clientHeight) < 120; }, { passive: true });
 $("#textInput").addEventListener("focus", () => { if (stickBottom) setTimeout(() => { const m = $("#msgs"); m.scrollTop = m.scrollHeight; }, 350); });
 
-function renderAll() { msgsEl.innerHTML = ""; lastDay = ""; unreadPlaced = false; msgs.forEach(m => { try { renderMsg(m); } catch (e) {} }); paintReads(); scrollBottom(); }
+function renderAll() { msgsEl.innerHTML = ""; lastDay = ""; unreadPlaced = false; msgs.forEach(m => { try { renderMsg(m); } catch (e) {} }); paintReads(); scrollBottom(); setTimeout(() => { if (stickBottom) scrollBottom(); }, 350); }
 function scrollBottom() { requestAnimationFrame(() => { msgsEl.scrollTop = msgsEl.scrollHeight; }); }
 
 /* ---------- crypto: key + room from the family code (WebCrypto) ---------- */
