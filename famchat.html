@@ -85,6 +85,11 @@
   #photoViewer img { max-width:100%; max-height:100%; object-fit:contain; }
   #photoViewer .pvBar { display:flex; gap:10px; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); }
   #photoViewer .pvBar button { flex:1; padding:13px; border:none; border-radius:10px; font-size:16px; }
+  #photoViewer .pvTop { display:flex; justify-content:space-between; align-items:center; gap:10px; color:#fff; padding:calc(10px + env(safe-area-inset-top)) 16px 6px; font-size:14px; }
+  #photoViewer .pvHint { color:#bbb; font-size:12px; }
+  #photoViewer .pvNav { flex:0 0 auto; align-self:center; width:52px; height:52px; border-radius:50%; border:none; background:rgba(255,255,255,.16); color:#fff; font-size:32px; line-height:1; padding:0 0 4px; }
+  #photoViewer .pvNav:disabled { opacity:.22; }
+  #photoViewer .pvBody img { max-width:calc(100% - 112px); }
   #pvSave { background:#06c755; color:#fff; font-weight:bold; }
   #pvClose { background:#333; color:#fff; }
   #settingsPanel.open { display:flex; }
@@ -175,14 +180,15 @@
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v6.2</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v6.3</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="msgMenu">
   <div class="sheet" id="msgMenuSheet"></div>
 </div>
 <div id="photoViewer">
-  <div class="pvBody"><img id="pvImg" alt="写真"></div>
+  <div class="pvTop"><span id="pvCount"></span><span class="pvHint">左右スワイプで前後の写真へ</span></div>
+  <div class="pvBody"><button id="pvPrev" class="pvNav">‹</button><img id="pvImg" alt="写真"><button id="pvNext" class="pvNav">›</button></div>
   <div class="pvBar"><button id="pvSave">ほぞんする</button><button id="pvClose">とじる</button></div>
 </div>
 <div id="toast"></div>
@@ -199,7 +205,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v6.2";
+const APP_VERSION = "v6.3";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -283,22 +289,54 @@ addLongPress($("#verLabel"), 1000, hardReload);
 $("#settingsCloseBtn").addEventListener("click", () => $("#settingsPanel").classList.remove("open"));
 $("#settingsPanel").addEventListener("click", e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove("open"); });
 
-/* ---------- photo viewer + save ---------- */
-let pvSrc = null;
-function openPhotoViewer(src) { pvSrc = src; $("#pvImg").src = src; $("#photoViewer").classList.add("open"); }
-function closePhotoViewer() { $("#photoViewer").classList.remove("open"); $("#pvImg").src = ""; pvSrc = null; }
+/* ---------- photo viewer + save (swipe to browse all photos) ---------- */
+let pvList = [], pvIdx = 0;
+function pvCurSrc() { const m = pvList[pvIdx]; return m ? m.body : null; }
+function openPhotoViewer(m) {
+  pvList = msgs.filter(x => x.type === "photo");
+  if (!pvList.length) return;
+  pvIdx = Math.max(0, pvList.findIndex(x => m && x.id === m.id));
+  showPv(pvIdx);
+  $("#photoViewer").classList.add("open");
+}
+function showPv(i) {
+  if (!pvList.length) return;
+  pvIdx = Math.min(pvList.length - 1, Math.max(0, i));
+  const m = pvList[pvIdx];
+  $("#pvImg").src = m.body;
+  $("#pvCount").textContent = (pvIdx + 1) + " / " + pvList.length + "（" + senderName(m) + "・" + timeStr(m.ts) + "）";
+  $("#pvPrev").disabled = pvIdx <= 0;
+  $("#pvNext").disabled = pvIdx >= pvList.length - 1;
+}
+function closePhotoViewer() { $("#photoViewer").classList.remove("open"); $("#pvImg").src = ""; pvList = []; pvIdx = 0; }
 $("#pvClose").addEventListener("click", closePhotoViewer);
+$("#pvPrev").addEventListener("click", () => showPv(pvIdx - 1));
+$("#pvNext").addEventListener("click", () => showPv(pvIdx + 1));
 $("#photoViewer").addEventListener("click", e => { if (e.target.id === "photoViewer" || e.target.classList.contains("pvBody")) closePhotoViewer(); });
+let pvTouchX = null;
+$("#photoViewer").addEventListener("touchstart", e => { pvTouchX = e.changedTouches[0].clientX; }, { passive: true });
+$("#photoViewer").addEventListener("touchend", e => {
+  if (pvTouchX === null) return;
+  const dx = e.changedTouches[0].clientX - pvTouchX; pvTouchX = null;
+  if (dx <= -40) showPv(pvIdx + 1); else if (dx >= 40) showPv(pvIdx - 1);
+}, { passive: true });
+document.addEventListener("keydown", e => {
+  if (!$("#photoViewer").classList.contains("open")) return;
+  if (e.key === "ArrowRight") showPv(pvIdx + 1);
+  else if (e.key === "ArrowLeft") showPv(pvIdx - 1);
+  else if (e.key === "Escape") closePhotoViewer();
+});
 $("#pvSave").addEventListener("click", async () => {
-  if (!pvSrc) return;
+  const src = pvCurSrc();
+  if (!src) return;
   try {
-    const blob = await (await fetch(pvSrc)).blob();
+    const blob = await (await fetch(src)).blob();
     const file = new File([blob], "famchat-photo.jpg", { type: "image/jpeg" });
     if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; }
     throw new Error("share unsupported");
   } catch (err) {
     if (err && err.name === "AbortError") return;
-    const a = document.createElement("a"); a.href = pvSrc; a.download = "famchat-photo.jpg"; document.body.appendChild(a); a.click(); a.remove();
+    const a = document.createElement("a"); a.href = src; a.download = "famchat-photo.jpg"; document.body.appendChild(a); a.click(); a.remove();
     showToast("保存できない時は、写真を長押しして「写真に追加」");
   }
 });
@@ -317,6 +355,15 @@ $("#nameSaveBtn").addEventListener("click", () => {
 });
 
 /* ================= chat core ================= */
+let seenRows = new Set();
+function lsSeenKey() { return "famchat_seenrows_v1_" + roomKey; }
+function loadSeen() { try { seenRows = new Set(JSON.parse(localStorage.getItem(lsSeenKey()) || "[]")); } catch (e) { seenRows = new Set(); } }
+function markSeen(id) {
+  if (!id || seenRows.has(id)) return;
+  seenRows.add(id);
+  if (seenRows.size > 3000) seenRows = new Set([...seenRows].slice(-2000));
+  try { localStorage.setItem(lsSeenKey(), JSON.stringify([...seenRows])); } catch (e) {}
+}
 function loadHistory() {
   try { msgs = JSON.parse(localStorage.getItem(lsHistoryKey()) || "[]"); }
   catch (e) { msgs = []; }
@@ -419,8 +466,11 @@ function addMsg(m) {
   if (!m || !m.id || msgIds.has(m.id)) return false;
   if (deletedIds[m.id]) return false;
   if (!MEMBERS[m.from] || !["text", "stamp", "photo"].includes(m.type)) return false;
+  const lastTs = msgs.length ? msgs[msgs.length - 1].ts : -Infinity;
   msgs.push(m); msgIds.add(m.id);
-  saveHistory(); renderMsg(m); scrollBottom();
+  saveHistory();
+  if (m.ts >= lastTs) { renderMsg(m); scrollBottom(); }
+  else renderAll();
   return true;
 }
 function sendMsg(type, body) {
@@ -466,7 +516,7 @@ function renderMsg(m) {
   const b = document.createElement("div"); b.className = "bubble " + m.type + " from-" + m.from;
   if (m.type === "photo") {
     const img = document.createElement("img"); img.src = m.body; img.alt = "写真"; img.style.cursor = "pointer";
-    img.addEventListener("click", () => openPhotoViewer(m.body));
+    img.addEventListener("click", () => openPhotoViewer(m));
     b.appendChild(img);
   } else {
     b.textContent = m.body;
@@ -532,7 +582,7 @@ async function flushOutbox() {
   }
   updateStatus();
 }
-async function queueServerSend(m) {
+async function queueServerSend(m) { markSeen(m.id);
   if (!serverConfigured()) return;
   const row = await encryptMsg(m);
   outbox.push(row); saveOutbox();
@@ -550,7 +600,8 @@ async function fetchMissed() {
       serverOk = true;
       let changed = false;
       for (const row of data) {
-        const m = await decryptRow(row); if (!m) continue;
+        if (seenRows.has(row.id)) continue;
+        const m = await decryptRow(row); markSeen(row.id); if (!m) continue;
         if (m.type === "name" || m.type === "delete" || m.type === "profile" || m.type === "read") { if (applyControl(m)) changed = true; }
         else if (!msgIds.has(row.id)) addMsg(m);
       }
@@ -570,7 +621,7 @@ function startTransport() {
   try {
     sb.channel("famchat-live")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: SERVER_TABLE, filter: "room=eq." + roomServer },
-        async payload => { const row = payload.new; if (!row) return; const m = await decryptRow(row); if (!m) return;
+        async payload => { const row = payload.new; if (!row || seenRows.has(row.id)) return; const m = await decryptRow(row); markSeen(row.id); if (!m) return;
           if (m.type === "name" || m.type === "delete" || m.type === "profile" || m.type === "read") { if (applyControl(m)) renderAll(); }
           else if (!msgIds.has(row.id)) addMsg(m);
           serverOk = true; updateStatus(); sendRead(); })
@@ -641,7 +692,7 @@ function openMsgMenu(m, mine) {
     sheet.appendChild(b);
   };
   if (m.type === "text" || m.type === "stamp") add("コピーする", () => copyText(m.body));
-  if (m.type === "photo") add("写真をひらく（ほぞんもここから）", () => openPhotoViewer(m.body));
+  if (m.type === "photo") add("写真をひらく（ほぞんもここから）", () => openPhotoViewer(m));
   if (mine) add("送信を取り消す", () => doUnsend(m.id), true);
   add("キャンセル", () => {});
   $("#msgMenu").classList.add("open");
@@ -774,7 +825,7 @@ async function startChat() {
   $("#chat").style.display = "flex";
   loadProfiles(); loadDeleted(); loadReads();
   sessionReadBase = reads[cfg.member] || 0;
-  loadHistory(); renderAll(); loadOutbox();
+  loadSeen(); loadHistory(); renderAll(); loadOutbox();
   roomServer = await sha256Hex("famchat-room-v2:" + cfg.code);
   encKey = await deriveKey(cfg.code);
   startTransport(); updateStatus();
