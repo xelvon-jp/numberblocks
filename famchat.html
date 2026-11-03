@@ -64,6 +64,8 @@
   .bubble.photo img { max-width:210px; max-height:260px; border-radius:12px; display:block; }
   .time { font-size:10px; color:rgba(255,255,255,.85); margin:2px 2px 0; text-shadow:0 1px 2px rgba(0,0,0,.2); }
   .read { font-size:10px; color:#1d6f2f; margin:0 2px; font-weight:bold; min-height:12px; }
+  .unreadDiv { text-align:center; margin:12px 0 4px; }
+  .unreadDiv span { display:inline-block; background:#ff5a5a; color:#fff; font-size:11px; font-weight:bold; padding:3px 12px; border-radius:999px; }
   #stampPanel { display:none; background:#fff; padding:10px; grid-template-columns:repeat(6,1fr); gap:4px; border-top:1px solid #ddd; }
   #stampPanel.open { display:grid; }
   #stampPanel button { font-size:30px; padding:8px 0; background:none; border:none; cursor:pointer; border-radius:10px; }
@@ -124,7 +126,7 @@
   <header>
     <div class="title">💬 かぞくチャット</div>
     <div id="status"><span class="dot"></span><span id="statusText">接続中…</span></div>
-    <span id="verLabel">v6.0</span>
+    <span id="verLabel">v6.1</span>
     <button id="resetBtn">設定</button>
   </header>
   <div id="msgs"></div>
@@ -167,7 +169,7 @@
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v6.0</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v6.1</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="photoViewer">
@@ -188,7 +190,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v6.0";
+const APP_VERSION = "v6.1";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -353,6 +355,7 @@ function paintReads() {
   });
 }
 let lastReadSent = 0, readTimer = null;
+let sessionReadBase = 0, unreadPlaced = false;
 function sendRead() {
   if (readTimer) return;
   readTimer = setTimeout(() => {
@@ -424,6 +427,12 @@ let lastDay = "";
 function dayStr(ts) { const d = new Date(ts); return d.getFullYear() + "/" + (d.getMonth() + 1) + "/" + d.getDate(); }
 function timeStr(ts) { const d = new Date(ts); return d.getHours() + ":" + String(d.getMinutes()).padStart(2, "0"); }
 function renderMsg(m) {
+  if (!unreadPlaced && sessionReadBase > 0 && m.from !== cfg.member && m.ts > sessionReadBase) {
+    unreadPlaced = true;
+    const ud = document.createElement("div"); ud.className = "unreadDiv";
+    ud.innerHTML = "<span>ここから未読</span>";
+    msgsEl.appendChild(ud);
+  }
   const ds = dayStr(m.ts);
   if (ds !== lastDay) {
     lastDay = ds;
@@ -464,7 +473,7 @@ function renderMsg(m) {
 $("#msgs").addEventListener("scroll", () => { const m = $("#msgs"); stickBottom = (m.scrollHeight - m.scrollTop - m.clientHeight) < 120; }, { passive: true });
 $("#textInput").addEventListener("focus", () => { if (stickBottom) setTimeout(() => { const m = $("#msgs"); m.scrollTop = m.scrollHeight; }, 350); });
 
-function renderAll() { msgsEl.innerHTML = ""; lastDay = ""; msgs.forEach(renderMsg); paintReads(); scrollBottom(); }
+function renderAll() { msgsEl.innerHTML = ""; lastDay = ""; unreadPlaced = false; msgs.forEach(renderMsg); paintReads(); scrollBottom(); }
 function scrollBottom() { requestAnimationFrame(() => { msgsEl.scrollTop = msgsEl.scrollHeight; }); }
 
 /* ---------- crypto: key + room from the family code (WebCrypto) ---------- */
@@ -484,7 +493,7 @@ async function deriveKey(code) {
 async function encryptMsg(m) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, encKey, te.encode(JSON.stringify(m)));
-  return { id: m.id, room: roomServer, iv: u8ToB64(iv), data: u8ToB64(new Uint8Array(ct)), ts: m.ts, sender: m.from, kind: (m.type === "name" || m.type === "profile" || m.type === "delete" || m.type === "read") ? "control" : "chat" };
+  return { id: m.id, room: roomServer, iv: u8ToB64(iv), data: u8ToB64(new Uint8Array(ct)), ts: m.ts, sender: m.from, kind: (m.type === "name" || m.type === "profile" || m.type === "delete" || m.type === "read") ? "control" : "chat", upto: m.type === "read" ? (parseInt(m.body, 10) || null) : null };
 }
 async function decryptRow(row) {
   try {
@@ -713,6 +722,7 @@ async function startChat() {
   $("#setup").style.display = "none";
   $("#chat").style.display = "flex";
   loadProfiles(); loadDeleted(); loadReads();
+  sessionReadBase = reads[cfg.member] || 0;
   loadHistory(); renderAll(); loadOutbox();
   roomServer = await sha256Hex("famchat-room-v2:" + cfg.code);
   encKey = await deriveKey(cfg.code);
