@@ -190,7 +190,7 @@
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v6.6</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v6.7</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="msgMenu">
@@ -215,7 +215,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v6.6";
+const APP_VERSION = "v6.7";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -374,6 +374,16 @@ function markSeen(id) {
   if (seenRows.size > 3000) seenRows = new Set([...seenRows].slice(-2000));
   try { localStorage.setItem(lsSeenKey(), JSON.stringify([...seenRows])); } catch (e) {}
 }
+let trimmedIds = new Set();
+function lsTrimmedKey() { return "famchat_trimmed_v1_" + roomKey; }
+function loadTrimmed() { try { trimmedIds = new Set(JSON.parse(localStorage.getItem(lsTrimmedKey()) || "[]")); } catch (e) { trimmedIds = new Set(); } }
+function markTrimmed(ids) {
+  let added = false;
+  for (const id of ids) { if (id && !trimmedIds.has(id)) { trimmedIds.add(id); added = true; } }
+  if (!added) return;
+  if (trimmedIds.size > 3000) trimmedIds = new Set([...trimmedIds].slice(-2000));
+  try { localStorage.setItem(lsTrimmedKey(), JSON.stringify([...trimmedIds])); } catch (e) {}
+}
 function loadHistory() {
   try { msgs = JSON.parse(localStorage.getItem(lsHistoryKey()) || "[]"); }
   catch (e) { msgs = []; }
@@ -382,10 +392,18 @@ function loadHistory() {
 }
 function saveHistory() {
   msgs.sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : 1));
-  if (msgs.length > MAX_KEEP) msgs = msgs.slice(-MAX_KEEP);
+  if (msgs.length > MAX_KEEP) {
+    markTrimmed(msgs.slice(0, msgs.length - MAX_KEEP).map(m => m.id));
+    msgs = msgs.slice(-MAX_KEEP);
+  }
   msgIds = new Set(msgs.map(m => m.id));
   try { localStorage.setItem(lsHistoryKey(), JSON.stringify(msgs)); } catch (e) { /* photo may overflow; drop oldest photos */
-    msgs = msgs.filter(m => m.type !== "photo").concat(msgs.filter(m => m.type === "photo").slice(-10));
+    const photos = msgs.filter(m => m.type === "photo");
+    const keepPhotos = photos.slice(-10);
+    const keepIds = new Set(keepPhotos.map(m => m.id));
+    markTrimmed(photos.filter(m => !keepIds.has(m.id)).map(m => m.id));
+    msgs = msgs.filter(m => m.type !== "photo").concat(keepPhotos);
+    msgIds = new Set(msgs.map(m => m.id));
     try { localStorage.setItem(lsHistoryKey(), JSON.stringify(msgs)); } catch (e2) {}
   }
 }
@@ -622,16 +640,22 @@ async function fetchMissed() {
   fetching = true;
   try {
     const { data, error } = await sb.from(SERVER_TABLE)
-      .select("id,iv,data,ts").eq("room", roomServer)
+      .select("id,iv,data,ts,kind").eq("room", roomServer)
       .order("ts", { ascending: true }).limit(500);
     if (!error && Array.isArray(data)) {
       serverOk = true;
       let changed = false;
       for (const row of data) {
-        if (seenRows.has(row.id)) continue;
-        const m = await decryptRow(row); markSeen(row.id); if (!m) continue;
-        if (m.type === "name" || m.type === "delete" || m.type === "profile" || m.type === "read") { if (applyControl(m)) changed = true; }
-        else if (!msgIds.has(row.id)) addMsg(m);
+        if (row.kind === "control") {
+          if (seenRows.has(row.id)) continue;
+          const mc = await decryptRow(row); markSeen(row.id); if (!mc) continue;
+          if (applyControl(mc)) changed = true;
+          continue;
+        }
+        if (row.kind === "chat" && (msgIds.has(row.id) || trimmedIds.has(row.id))) continue;
+        const m = await decryptRow(row); if (!m) { markSeen(row.id); continue; }
+        if (m.type === "name" || m.type === "delete" || m.type === "profile" || m.type === "read") { markSeen(row.id); if (applyControl(m)) changed = true; }
+        else if (!msgIds.has(row.id) && !trimmedIds.has(row.id)) addMsg(m);
       }
       if (changed) renderAll();
     } else if (error) { serverOk = false; }
@@ -943,7 +967,7 @@ async function startChat() {
   $("#chat").style.display = "flex";
   loadProfiles(); loadDeleted(); loadReads();
   sessionReadBase = reads[cfg.member] || 0;
-  loadSeen(); loadHistory(); renderAll(); loadOutbox();
+  loadSeen(); loadTrimmed(); loadHistory(); renderAll(); loadOutbox();
   startLeaves();
   roomServer = await sha256Hex("famchat-room-v2:" + cfg.code);
   encKey = await deriveKey(cfg.code);
