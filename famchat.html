@@ -101,6 +101,12 @@
   #emojiGrid { display:grid; grid-template-columns:repeat(6,1fr); gap:4px; margin-top:8px; }
   #emojiGrid button { font-size:24px; padding:6px 0; background:#fafafa; border:2px solid #eee; border-radius:10px; cursor:pointer; }
   #emojiGrid button.sel { border-color:#06c755; background:#e9fbef; }
+
+  #msgMenu { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; z-index:60; align-items:flex-end; justify-content:center; }
+  #msgMenu.open { display:flex; }
+  #msgMenu .sheet { background:#fff; width:100%; max-width:480px; border-radius:16px 16px 0 0; padding:10px 12px calc(12px + env(safe-area-inset-bottom)); }
+  #msgMenu button { display:block; width:100%; padding:14px; font-size:16px; background:#f4f6f8; border:none; border-radius:10px; margin-top:8px; color:#17324a; font-family:inherit; }
+  #msgMenu button.danger { color:#d33; background:#fdeeee; }
 </style>
 </head>
 <body>
@@ -133,7 +139,7 @@
   <div id="stampPanel"></div>
   <div id="inputBar">
     <button class="iconBtn" id="photoBtn" title="写真">＋</button>
-    <input type="file" id="photoInput" accept="image/*" hidden>
+    <input type="file" id="photoInput" accept="image/*" multiple hidden>
     <button class="iconBtn" id="stampBtn" title="スタンプ">😊</button>
     <textarea id="textInput" rows="1" placeholder="メッセージ"></textarea>
     <button id="sendBtn">送信</button>
@@ -169,8 +175,11 @@
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v6.1</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v6.2</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
+</div>
+<div id="msgMenu">
+  <div class="sheet" id="msgMenuSheet"></div>
 </div>
 <div id="photoViewer">
   <div class="pvBody"><img id="pvImg" alt="写真"></div>
@@ -190,7 +199,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v6.1";
+const APP_VERSION = "v6.2";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -462,7 +471,7 @@ function renderMsg(m) {
   } else {
     b.textContent = m.body;
   }
-  if (mine) addLongPress(b, 650, () => { if (confirm("このメッセージの送信を取り消しますか？")) doUnsend(m.id); });
+  addLongPress(b, 650, () => openMsgMenu(m, mine));
   col.appendChild(b);
   const t = document.createElement("div"); t.className = "time"; t.textContent = timeStr(m.ts);
   col.appendChild(t);
@@ -594,21 +603,63 @@ STAMPS.forEach(s => {
 $("#stampBtn").addEventListener("click", () => stampPanel.classList.toggle("open"));
 
 $("#photoBtn").addEventListener("click", () => $("#photoInput").click());
-$("#photoInput").addEventListener("change", e => {
-  const f = e.target.files[0]; e.target.value = "";
-  if (!f) return;
-  const url = URL.createObjectURL(f);
-  const img = new Image();
-  img.onload = () => {
-    const scale = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
-    const cv = document.createElement("canvas");
-    cv.width = Math.round(img.naturalWidth * scale); cv.height = Math.round(img.naturalHeight * scale);
-    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
-    URL.revokeObjectURL(url);
-    sendMsg("photo", cv.toDataURL("image/jpeg", 0.82));
-  };
-  img.src = url;
+function fileToDataURL(f) {
+  return new Promise(res => {
+    const url = URL.createObjectURL(f);
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, 1024 / Math.max(img.naturalWidth, img.naturalHeight));
+      const cv = document.createElement("canvas");
+      cv.width = Math.round(img.naturalWidth * scale); cv.height = Math.round(img.naturalHeight * scale);
+      cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+      URL.revokeObjectURL(url);
+      res(cv.toDataURL("image/jpeg", 0.82));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); res(null); };
+    img.src = url;
+  });
+}
+$("#photoInput").addEventListener("change", async e => {
+  const files = [...e.target.files]; e.target.value = "";
+  if (!files.length) return;
+  let sent = 0;
+  for (const f of files) {
+    const d = await fileToDataURL(f);
+    if (d) { sendMsg("photo", d); sent++; }
+  }
+  if (files.length > 1 && sent) showToast(sent + "枚送りました");
 });
+
+/* ---------- message long-press menu (copy / unsend / save) ---------- */
+let menuMsg = null;
+function openMsgMenu(m, mine) {
+  menuMsg = m;
+  const sheet = $("#msgMenuSheet"); sheet.innerHTML = "";
+  const add = (label, fn, danger) => {
+    const b = document.createElement("button"); b.textContent = label; if (danger) b.className = "danger";
+    b.addEventListener("click", () => { closeMsgMenu(); fn(); });
+    sheet.appendChild(b);
+  };
+  if (m.type === "text" || m.type === "stamp") add("コピーする", () => copyText(m.body));
+  if (m.type === "photo") add("写真をひらく（ほぞんもここから）", () => openPhotoViewer(m.body));
+  if (mine) add("送信を取り消す", () => doUnsend(m.id), true);
+  add("キャンセル", () => {});
+  $("#msgMenu").classList.add("open");
+}
+function closeMsgMenu() { $("#msgMenu").classList.remove("open"); menuMsg = null; }
+$("#msgMenu").addEventListener("click", e => { if (e.target.id === "msgMenu") closeMsgMenu(); });
+async function copyText(t) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(t); ok = true; } catch (e) {}
+  if (!ok) {
+    const ta = document.createElement("textarea");
+    ta.value = t; ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand("copy"); } catch (e) {}
+    ta.remove();
+  }
+  showToast(ok ? "コピーしました" : "コピーできませんでした");
+}
 
 /* ---------- push notifications ---------- */
 let swReg = null;
