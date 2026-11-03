@@ -76,6 +76,14 @@
   #verLabel { font-size:11px; opacity:.75; padding:4px 2px; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
   #toast { position:fixed; left:50%; bottom:110px; transform:translateX(-50%); background:rgba(0,0,0,.82); color:#fff; font-size:14px; padding:10px 16px; border-radius:20px; display:none; z-index:60; white-space:nowrap; }
   #settingsPanel { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  #photoViewer { position:fixed; inset:0; background:#000; display:none; flex-direction:column; z-index:60; }
+  #photoViewer.open { display:flex; }
+  #photoViewer .pvBody { flex:1; display:flex; align-items:center; justify-content:center; min-height:0; }
+  #photoViewer img { max-width:100%; max-height:100%; object-fit:contain; }
+  #photoViewer .pvBar { display:flex; gap:10px; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); }
+  #photoViewer .pvBar button { flex:1; padding:13px; border:none; border-radius:10px; font-size:16px; }
+  #pvSave { background:#06c755; color:#fff; font-weight:bold; }
+  #pvClose { background:#333; color:#fff; }
   #settingsPanel.open { display:flex; }
   #settingsPanel .box { background:#fff; border-radius:16px; padding:20px; width:100%; max-width:340px; max-height:100%; overflow-y:auto; -webkit-overflow-scrolling:touch; }
   #settingsPanel h2 { margin:0 0 12px; font-size:18px; }
@@ -115,7 +123,7 @@
   <header>
     <div class="title">💬 かぞくチャット</div>
     <div id="status"><span class="dot"></span><span id="statusText">接続中…</span></div>
-    <span id="verLabel">v5.4</span>
+    <span id="verLabel">v5.5</span>
     <button id="resetBtn">設定</button>
   </header>
   <div id="msgs"></div>
@@ -158,8 +166,12 @@
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v5.4</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v5.5</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
+</div>
+<div id="photoViewer">
+  <div class="pvBody"><img id="pvImg" alt="写真"></div>
+  <div class="pvBar"><button id="pvSave">ほぞんする</button><button id="pvClose">とじる</button></div>
 </div>
 <div id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -175,7 +187,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v5.4";
+const APP_VERSION = "v5.5";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -257,6 +269,26 @@ $("#resetBtn").addEventListener("click", () => showToast("設定は長押しで�
 addLongPress($("#verLabel"), 1000, hardReload);
 $("#settingsCloseBtn").addEventListener("click", () => $("#settingsPanel").classList.remove("open"));
 $("#settingsPanel").addEventListener("click", e => { if (e.target === e.currentTarget) e.currentTarget.classList.remove("open"); });
+
+/* ---------- photo viewer + save ---------- */
+let pvSrc = null;
+function openPhotoViewer(src) { pvSrc = src; $("#pvImg").src = src; $("#photoViewer").classList.add("open"); }
+function closePhotoViewer() { $("#photoViewer").classList.remove("open"); $("#pvImg").src = ""; pvSrc = null; }
+$("#pvClose").addEventListener("click", closePhotoViewer);
+$("#photoViewer").addEventListener("click", e => { if (e.target.id === "photoViewer" || e.target.classList.contains("pvBody")) closePhotoViewer(); });
+$("#pvSave").addEventListener("click", async () => {
+  if (!pvSrc) return;
+  try {
+    const blob = await (await fetch(pvSrc)).blob();
+    const file = new File([blob], "famchat-photo.jpg", { type: "image/jpeg" });
+    if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file] }); return; }
+    throw new Error("share unsupported");
+  } catch (err) {
+    if (err && err.name === "AbortError") return;
+    const a = document.createElement("a"); a.href = pvSrc; a.download = "famchat-photo.jpg"; document.body.appendChild(a); a.click(); a.remove();
+    showToast("保存できない時は、写真を長押しして「写真に追加」");
+  }
+});
 $("#cfgResetBtn").addEventListener("click", () => {
   if (confirm("設定を消して、最初の画面に戻りますか？（履歴はこの端末に残ります）")) {
     localStorage.removeItem(LS_CFG);
@@ -380,7 +412,9 @@ function renderMsg(m) {
   }
   const b = document.createElement("div"); b.className = "bubble " + m.type + " from-" + m.from;
   if (m.type === "photo") {
-    const img = document.createElement("img"); img.src = m.body; img.alt = "写真"; b.appendChild(img);
+    const img = document.createElement("img"); img.src = m.body; img.alt = "写真"; img.style.cursor = "pointer";
+    img.addEventListener("click", () => openPhotoViewer(m.body));
+    b.appendChild(img);
   } else {
     b.textContent = m.body;
   }
