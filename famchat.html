@@ -115,7 +115,7 @@
   <header>
     <div class="title">💬 かぞくチャット</div>
     <div id="status"><span class="dot"></span><span id="statusText">接続中…</span></div>
-    <span id="verLabel">v5.3</span>
+    <span id="verLabel">v5.4</span>
     <button id="resetBtn">設定</button>
   </header>
   <div id="msgs"></div>
@@ -158,7 +158,7 @@
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v5.3</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v5.4</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="toast"></div>
@@ -175,7 +175,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v5.3";
+const APP_VERSION = "v5.4";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -391,6 +391,9 @@ function renderMsg(m) {
   row.appendChild(col);
   msgsEl.appendChild(row);
 }
+$("#msgs").addEventListener("scroll", () => { const m = $("#msgs"); stickBottom = (m.scrollHeight - m.scrollTop - m.clientHeight) < 120; }, { passive: true });
+$("#textInput").addEventListener("focus", () => { if (stickBottom) setTimeout(() => { const m = $("#msgs"); m.scrollTop = m.scrollHeight; }, 350); });
+
 function renderAll() { msgsEl.innerHTML = ""; lastDay = ""; msgs.forEach(renderMsg); scrollBottom(); }
 function scrollBottom() { requestAnimationFrame(() => { msgsEl.scrollTop = msgsEl.scrollHeight; }); }
 
@@ -646,12 +649,14 @@ async function startChat() {
   refreshPushSubscription();
 }
 /* ---------- keep the header visible when the iOS keyboard opens ---------- */
+let stickBottom = true;
 function fitViewport() {
   const vv = window.visualViewport;
   const h = vv ? vv.height : window.innerHeight;
   const t = vv ? vv.offsetTop : 0;
   ["#chat"].forEach(sel => { const el = document.querySelector(sel); if (el) { el.style.height = h + "px"; el.style.top = t + "px"; } });
   const sp = document.querySelector("#settingsPanel"); if (sp) { sp.style.height = h + "px"; sp.style.top = t + "px"; }
+  if (stickBottom) requestAnimationFrame(() => { const m = document.querySelector("#msgs"); if (m) m.scrollTop = m.scrollHeight; });
 }
 if (window.visualViewport) { visualViewport.addEventListener("resize", fitViewport); visualViewport.addEventListener("scroll", fitViewport); }
 window.addEventListener("resize", fitViewport);
