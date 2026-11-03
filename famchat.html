@@ -12,7 +12,8 @@
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   html, body { margin:0; padding:0; height:100%; }
   body { font-family: -apple-system, "Hiragino Sans", sans-serif; background:#8fa8c8; display:flex; flex-direction:column; height:100dvh; position:fixed; inset:0; overflow:hidden; overscroll-behavior:none; }
-  button { font-family: inherit; }
+  button { font-family: inherit; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+  header { -webkit-touch-callout: none; }
 
   /* ---------- setup ---------- */
   #setup { flex:1; display:flex; align-items:center; justify-content:center; padding:20px; overflow:auto; }
@@ -72,7 +73,7 @@
   #textInput { flex:1; font-size:16px; padding:10px 12px; border:1px solid #ccc; border-radius:20px; resize:none; max-height:100px; outline:none; font-family:inherit; }
   #sendBtn { flex:none; height:40px; padding:0 16px; font-size:15px; font-weight:700; color:#fff; background:#06c755; border:none; border-radius:20px; cursor:pointer; }
   #sendBtn:disabled { background:#bbb; }
-  #verLabel { font-size:11px; opacity:.75; padding:4px 2px; user-select:none; -webkit-user-select:none; }
+  #verLabel { font-size:11px; opacity:.75; padding:4px 2px; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
   #toast { position:fixed; left:50%; bottom:110px; transform:translateX(-50%); background:rgba(0,0,0,.82); color:#fff; font-size:14px; padding:10px 16px; border-radius:20px; display:none; z-index:60; white-space:nowrap; }
   #settingsPanel { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
   #settingsPanel.open { display:flex; }
@@ -85,7 +86,7 @@
   #settingsPanel button.primary { background:#06c755; border-color:#06c755; color:#fff; font-weight:700; }
   #settingsPanel button.danger { color:#c00; }
   #settingsPanel .ver { color:#888; font-size:12px; margin-top:14px; text-align:center; }
-  .row.mine .bubble { user-select:none; -webkit-user-select:none; }
+  .row.mine .bubble { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
   #emojiGrid { display:grid; grid-template-columns:repeat(6,1fr); gap:4px; margin-top:8px; }
   #emojiGrid button { font-size:24px; padding:6px 0; background:#fafafa; border:2px solid #eee; border-radius:10px; cursor:pointer; }
   #emojiGrid button.sel { border-color:#06c755; background:#e9fbef; }
@@ -114,7 +115,7 @@
   <header>
     <div class="title">💬 かぞくチャット</div>
     <div id="status"><span class="dot"></span><span id="statusText">接続中…</span></div>
-    <span id="verLabel">v5</span>
+    <span id="verLabel">v5.1</span>
     <button id="resetBtn">設定</button>
   </header>
   <div id="msgs"></div>
@@ -157,7 +158,7 @@
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v5</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v5.1</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="toast"></div>
@@ -174,7 +175,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v5";
+const APP_VERSION = "v5.1";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
