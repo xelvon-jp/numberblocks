@@ -6,6 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="かぞくチャット">
+<link rel="manifest" href="famchat.webmanifest">
 <title>かぞくチャット</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
@@ -113,7 +114,7 @@
   <header>
     <div class="title">💬 かぞくチャット</div>
     <div id="status"><span class="dot"></span><span id="statusText">接続中…</span></div>
-    <span id="verLabel">v4.1</span>
+    <span id="verLabel">v5</span>
     <button id="resetBtn">設定</button>
   </header>
   <div id="msgs"></div>
@@ -146,18 +147,24 @@
       <button id="iconPhotoClearBtn">写真をやめる</button>
     </div>
     <input type="file" id="iconPhotoInput" accept="image/*" hidden>
+    <label>通知</label>
+    <div style="font-size:12px; color:#888; line-height:1.5;">アプリを閉じていても、新しいメッセージが来たら通知します。ホーム画面のアイコンから開いた状態で ON にしてください。</div>
+    <div class="row">
+      <button id="pushBtn" class="primary">通知をONにする</button>
+    </div>
+    <div id="pushState" style="font-size:12px; color:#666; margin-top:6px;"></div>
     <div class="row">
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v4.1</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v5</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 "use strict";
-/* ================= かぞくチャット v4 (Supabase mailbox + E2E encryption + profiles/app icon) ================= */
+/* ================= かぞくチャット v5 (Supabase mailbox + E2E encryption + profiles/app icon + push) ================= */
 const MEMBERS = {
   papa: { name: "パパ", icon: "👨" },
   mama: { name: "ママ", icon: "👩" },
@@ -167,7 +174,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v4.1";
+const APP_VERSION = "v5";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -242,7 +249,7 @@ function hardReload() {
 /* settings opens only on long-press, so a child cannot open it by accident */
 addLongPress($("#resetBtn"), 1200, () => {
   $("#nameInput").value = displayName(cfg ? cfg.member : "boku");
-  refreshIconSettings();
+  refreshIconSettings(); updatePushUI();
   $("#settingsPanel").classList.add("open");
 });
 $("#resetBtn").addEventListener("click", () => showToast("設定は長押しで開きます"));
@@ -518,6 +525,65 @@ $("#photoInput").addEventListener("change", e => {
   img.src = url;
 });
 
+/* ---------- push notifications ---------- */
+let swReg = null;
+async function ensureSW() {
+  if (!("serviceWorker" in navigator)) return null;
+  try { swReg = await navigator.serviceWorker.register("famchat-sw.js"); } catch (e) {}
+  return swReg;
+}
+function u8FromB64url(str) {
+  const b64 = str.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (str.length % 4)) % 4);
+  const bin = atob(b64); const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
+}
+function setPushState(t) { const el = $("#pushState"); if (el) el.textContent = t; }
+async function fetchVapidKey() {
+  const r = await fetch(SUPABASE_URL + "/functions/v1/bright-worker", { headers: { apikey: SUPABASE_ANON_KEY, Authorization: "Bearer " + SUPABASE_ANON_KEY } });
+  if (!r.ok) throw new Error("通知係に届きません(" + r.status + ")");
+  const j = await r.json();
+  if (!j.publicKey) throw new Error("公開鍵がありません");
+  return j.publicKey;
+}
+async function saveSubscription(sub) {
+  try { localStorage.setItem("famchat_push_endpoint", sub.endpoint); } catch (e) {}
+  if (!sb) return;
+  try {
+    const { error } = await sb.from("famchat_push_subs").insert({ room: roomServer, member: cfg.member, endpoint: sub.endpoint, sub: JSON.stringify(sub.toJSON()) });
+    if (error && !/duplicate|unique/i.test(error.message || "")) console.warn("push sub save", error.message);
+  } catch (e) {}
+}
+async function enablePush() {
+  try {
+    if (!("PushManager" in window) || !("Notification" in window)) { setPushState("この開き方では通知を使えません。ホーム画面のアイコンから開いてください。"); return; }
+    setPushState("許可を確認しています…");
+    const perm = await Notification.requestPermission();
+    if (perm !== "granted") { setPushState("通知が許可されませんでした（iPhone の「設定」→「通知」から変更できます）。"); return; }
+    const reg = (await ensureSW()) || (await navigator.serviceWorker.ready);
+    const pub = await fetchVapidKey();
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: u8FromB64url(pub) });
+    await saveSubscription(sub);
+    setPushState("通知は ON です。アプリを閉じていても届きます。");
+    showToast("通知をONにしました");
+  } catch (e) { setPushState("うまくいきませんでした：" + (e && e.message ? e.message : e)); }
+}
+async function refreshPushSubscription() {
+  try {
+    if (!("PushManager" in window) || !("Notification" in window) || Notification.permission !== "granted") return;
+    const reg = (await ensureSW()) || (await navigator.serviceWorker.ready);
+    const sub = await reg.pushManager.getSubscription();
+    if (sub) await saveSubscription(sub);
+    if (navigator.clearAppBadge) { try { navigator.clearAppBadge(); } catch (e) {} }
+  } catch (e) {}
+}
+function updatePushUI() {
+  if (!("Notification" in window)) { setPushState("この開き方では通知を使えません。ホーム画面のアイコンから開いてください。"); return; }
+  setPushState(Notification.permission === "granted" ? "通知は ON です（許可済み）。" : "まだ ON になっていません。");
+}
+$("#pushBtn").addEventListener("click", enablePush);
+
 /* ---------- member icon settings ---------- */
 const ICON_EMOJIS = ["👨","👩","👦","👧","😊","😸","🐶","🐱","🦊","🐼","🐰","🦁","🐷","🌟","🍓","🚗","⚽","🎈"];
 const emojiGrid = $("#emojiGrid");
@@ -575,6 +641,7 @@ async function startChat() {
   roomServer = await sha256Hex("famchat-room-v2:" + cfg.code);
   encKey = await deriveKey(cfg.code);
   startTransport(); updateStatus();
+  refreshPushSubscription();
 }
 /* ---------- keep the header visible when the iOS keyboard opens ---------- */
 function fitViewport() {
@@ -588,6 +655,7 @@ if (window.visualViewport) { visualViewport.addEventListener("resize", fitViewpo
 window.addEventListener("resize", fitViewport);
 window.addEventListener("orientationchange", () => setTimeout(fitViewport, 100));
 fitViewport();
+ensureSW();
 $("#verLabel").textContent = APP_VERSION;
 $("#verInfo").textContent = APP_VERSION;
 try {
