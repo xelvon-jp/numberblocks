@@ -190,7 +190,7 @@
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v6.7</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v6.8</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="msgMenu">
@@ -215,7 +215,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v6.7";
+const APP_VERSION = "v6.8";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -397,14 +397,17 @@ function saveHistory() {
     msgs = msgs.slice(-MAX_KEEP);
   }
   msgIds = new Set(msgs.map(m => m.id));
-  try { localStorage.setItem(lsHistoryKey(), JSON.stringify(msgs)); } catch (e) { /* photo may overflow; drop oldest photos */
-    const photos = msgs.filter(m => m.type === "photo");
-    const keepPhotos = photos.slice(-10);
-    const keepIds = new Set(keepPhotos.map(m => m.id));
-    markTrimmed(photos.filter(m => !keepIds.has(m.id)).map(m => m.id));
-    msgs = msgs.filter(m => m.type !== "photo").concat(keepPhotos);
-    msgIds = new Set(msgs.map(m => m.id));
-    try { localStorage.setItem(lsHistoryKey(), JSON.stringify(msgs)); } catch (e2) {}
+  try { localStorage.setItem(lsHistoryKey(), JSON.stringify(msgs)); } catch (e) { /* photo may overflow; shed photos step by step until it fits */
+    for (const keepN of [10, 5, 2, 0]) {
+      const photos = msgs.filter(m => m.type === "photo");
+      const keepPhotos = keepN === 0 ? [] : photos.slice(-keepN);
+      const keepIds = new Set(keepPhotos.map(m => m.id));
+      markTrimmed(photos.filter(m => !keepIds.has(m.id)).map(m => m.id));
+      msgs = msgs.filter(m => m.type !== "photo").concat(keepPhotos);
+      msgs.sort((a, b) => a.ts - b.ts || (a.id < b.id ? -1 : 1));
+      msgIds = new Set(msgs.map(m => m.id));
+      try { localStorage.setItem(lsHistoryKey(), JSON.stringify(msgs)); break; } catch (e2) {}
+    }
   }
 }
 function loadProfiles() {
@@ -497,8 +500,10 @@ function addMsg(m) {
   const lastTs = msgs.length ? msgs[msgs.length - 1].ts : -Infinity;
   msgs.push(m); msgIds.add(m.id);
   saveHistory();
-  if (m.ts >= lastTs) { renderMsg(m); scrollBottom(); }
-  else renderAll();
+  try {
+    if (m.ts >= lastTs) { renderMsg(m); scrollBottom(); }
+    else renderAll();
+  } catch (e) {}
   return true;
 }
 function sendMsg(type, body) {
@@ -578,7 +583,7 @@ function renderMsg(m) {
 $("#msgs").addEventListener("scroll", () => { const m = $("#msgs"); stickBottom = (m.scrollHeight - m.scrollTop - m.clientHeight) < 120; }, { passive: true });
 $("#textInput").addEventListener("focus", () => { if (stickBottom) setTimeout(() => { const m = $("#msgs"); m.scrollTop = m.scrollHeight; }, 350); });
 
-function renderAll() { msgsEl.innerHTML = ""; lastDay = ""; unreadPlaced = false; msgs.forEach(renderMsg); paintReads(); scrollBottom(); }
+function renderAll() { msgsEl.innerHTML = ""; lastDay = ""; unreadPlaced = false; msgs.forEach(m => { try { renderMsg(m); } catch (e) {} }); paintReads(); scrollBottom(); }
 function scrollBottom() { requestAnimationFrame(() => { msgsEl.scrollTop = msgsEl.scrollHeight; }); }
 
 /* ---------- crypto: key + room from the family code (WebCrypto) ---------- */
@@ -641,11 +646,12 @@ async function fetchMissed() {
   try {
     const { data, error } = await sb.from(SERVER_TABLE)
       .select("id,iv,data,ts,kind").eq("room", roomServer)
-      .order("ts", { ascending: true }).limit(500);
+      .order("ts", { ascending: true }).limit(1000);
     if (!error && Array.isArray(data)) {
       serverOk = true;
       let changed = false;
       for (const row of data) {
+       try {
         if (row.kind === "control") {
           if (seenRows.has(row.id)) continue;
           const mc = await decryptRow(row); markSeen(row.id); if (!mc) continue;
@@ -656,6 +662,7 @@ async function fetchMissed() {
         const m = await decryptRow(row); if (!m) { markSeen(row.id); continue; }
         if (m.type === "name" || m.type === "delete" || m.type === "profile" || m.type === "read") { markSeen(row.id); if (applyControl(m)) changed = true; }
         else if (!msgIds.has(row.id) && !trimmedIds.has(row.id)) addMsg(m);
+       } catch (e) {}
       }
       if (changed) renderAll();
     } else if (error) { serverOk = false; }
@@ -673,10 +680,10 @@ function startTransport() {
   try {
     sb.channel("famchat-live")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: SERVER_TABLE, filter: "room=eq." + roomServer },
-        async payload => { const row = payload.new; if (!row || seenRows.has(row.id)) return; const m = await decryptRow(row); markSeen(row.id); if (!m) return;
+        async payload => { try { const row = payload.new; if (!row || seenRows.has(row.id)) return; const m = await decryptRow(row); markSeen(row.id); if (!m) return;
           if (m.type === "name" || m.type === "delete" || m.type === "profile" || m.type === "read") { if (applyControl(m)) renderAll(); }
           else if (!msgIds.has(row.id)) addMsg(m);
-          serverOk = true; updateStatus(); sendRead(); })
+          serverOk = true; updateStatus(); sendRead(); } catch (e) {} })
       .subscribe();
   } catch (e) {}
   setInterval(fetchMissed, 10000);
