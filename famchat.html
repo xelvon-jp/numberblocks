@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="かぞくチャット">
 <title>かぞくチャット</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
@@ -39,7 +40,15 @@
   .day span { background:rgba(0,0,0,.18); color:#fff; font-size:11px; padding:3px 10px; border-radius:10px; }
   .row { display:flex; flex-direction:column; margin:2px 0 10px; }
   .row.mine { align-items:flex-end; }
-  .row.theirs { align-items:flex-start; }
+  .row.theirs { flex-direction:row; align-items:flex-start; gap:6px; }
+  .row .col { display:flex; flex-direction:column; min-width:0; }
+  .row.mine .col { align-items:flex-end; }
+  .row.theirs .col { align-items:flex-start; }
+  .avatar { flex:none; width:38px; height:38px; border-radius:50%; overflow:hidden; display:flex; align-items:center; justify-content:center; font-size:21px; border:1px solid rgba(0,0,0,.15); background:#fff; }
+  .avatar img { width:100%; height:100%; object-fit:cover; display:block; }
+  .avatar.bg-papa { background:#ffffff; }
+  .avatar.bg-mama { background:#ffd6e8; }
+  .avatar.bg-boku { background:#bfe3ff; }
   .who { font-size:11px; color:#fff; margin:0 2px 2px; text-shadow:0 1px 2px rgba(0,0,0,.25); }
   .bubble { max-width:75%; padding:9px 12px; border-radius:16px; font-size:16px; line-height:1.45; word-break:break-word; white-space:pre-wrap; position:relative; }
   .mine .bubble { border-top-right-radius:4px; }
@@ -75,6 +84,9 @@
   #settingsPanel button.danger { color:#c00; }
   #settingsPanel .ver { color:#888; font-size:12px; margin-top:14px; text-align:center; }
   .row.mine .bubble { user-select:none; -webkit-user-select:none; }
+  #emojiGrid { display:grid; grid-template-columns:repeat(6,1fr); gap:4px; margin-top:8px; }
+  #emojiGrid button { font-size:24px; padding:6px 0; background:#fafafa; border:2px solid #eee; border-radius:10px; cursor:pointer; }
+  #emojiGrid button.sel { border-color:#06c755; background:#e9fbef; }
 </style>
 </head>
 <body>
@@ -100,7 +112,7 @@
   <header>
     <div class="title">💬 かぞくチャット</div>
     <div id="status"><span class="dot"></span><span id="statusText">接続中…</span></div>
-    <span id="verLabel">v3</span>
+    <span id="verLabel">v4</span>
     <button id="resetBtn">設定</button>
   </header>
   <div id="msgs"></div>
@@ -122,18 +134,29 @@
     <div class="row">
       <button id="nameSaveBtn" class="primary">名前を保存</button>
     </div>
+    <label>あなたのアイコン</label>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div id="iconPreview" class="avatar" style="width:48px; height:48px; font-size:26px;"></div>
+      <div style="font-size:12px; color:#888; line-height:1.5;">写真を設定すると写真が優先されます。<br>絵文字を押すと写真は外れます。</div>
+    </div>
+    <div id="emojiGrid"></div>
+    <div class="row">
+      <button id="iconPhotoBtn">写真を選ぶ</button>
+      <button id="iconPhotoClearBtn">写真をやめる</button>
+    </div>
+    <input type="file" id="iconPhotoInput" accept="image/*" hidden>
     <div class="row">
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v3</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v4</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 "use strict";
-/* ================= かぞくチャット v3 (Supabase mailbox + E2E encryption + name/unsend/keyboard fixes) ================= */
+/* ================= かぞくチャット v4 (Supabase mailbox + E2E encryption + profiles/app icon) ================= */
 const MEMBERS = {
   papa: { name: "パパ", icon: "👨" },
   mama: { name: "ママ", icon: "👩" },
@@ -143,7 +166,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v3";
+const APP_VERSION = "v4";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -158,7 +181,8 @@ let outbox = [];           // encrypted rows waiting to be inserted
 let msgs = [];             // sorted by ts, id
 let msgIds = new Set();
 let bc = null;
-let namesMap = {};         // member -> {name, ts} (synced via control messages)
+let profiles = {};         // member -> {name, nameTs, emoji, photo, iconTs} (synced via control messages)
+const LS_PROFILES = "famchat_profiles_v4";
 let deletedIds = {};       // messageId -> ts (unsend tombstones, synced)
 const LS_NAMES = "famchat_names_v3";
 const LS_DELETED = "famchat_deleted_v3";
@@ -217,6 +241,7 @@ function hardReload() {
 /* settings opens only on long-press, so a child cannot open it by accident */
 addLongPress($("#resetBtn"), 1200, () => {
   $("#nameInput").value = displayName(cfg ? cfg.member : "boku");
+  refreshIconSettings();
   $("#settingsPanel").classList.add("open");
 });
 $("#resetBtn").addEventListener("click", () => showToast("設定は長押しで開きます"));
@@ -252,17 +277,31 @@ function saveHistory() {
     try { localStorage.setItem(lsHistoryKey(), JSON.stringify(msgs)); } catch (e2) {}
   }
 }
-function loadNames() { try { namesMap = JSON.parse(localStorage.getItem(LS_NAMES) || "{}"); } catch (e) { namesMap = {}; } if (!namesMap || typeof namesMap !== "object") namesMap = {}; }
-function saveNames() { try { localStorage.setItem(LS_NAMES, JSON.stringify(namesMap)); } catch (e) {} }
+function loadProfiles() {
+  try { profiles = JSON.parse(localStorage.getItem(LS_PROFILES) || "{}"); } catch (e) { profiles = {}; }
+  if (!profiles || typeof profiles !== "object") profiles = {};
+  try { const old = JSON.parse(localStorage.getItem(LS_NAMES) || "{}");
+    for (const m of Object.keys(old || {})) { if (old[m] && old[m].name && (!profiles[m] || (old[m].ts || 0) > (profiles[m].nameTs || 0))) { profiles[m] = Object.assign({}, profiles[m], { name: old[m].name, nameTs: old[m].ts || 0 }); } }
+  } catch (e) {}
+}
+function saveProfiles() { try { localStorage.setItem(LS_PROFILES, JSON.stringify(profiles)); } catch (e) {} }
+function prof(m) { return profiles[m] || {}; }
+function displayEmoji(member) { return prof(member).emoji || MEMBERS[member].icon; }
 function loadDeleted() { try { deletedIds = JSON.parse(localStorage.getItem(LS_DELETED) || "{}"); } catch (e) { deletedIds = {}; } if (!deletedIds || typeof deletedIds !== "object") deletedIds = {}; }
 function saveDeleted() { try { localStorage.setItem(LS_DELETED, JSON.stringify(deletedIds)); } catch (e) {} }
-function displayName(member) { return (namesMap[member] && namesMap[member].name) || MEMBERS[member].name; }
+function displayName(member) { return prof(member).name || MEMBERS[member].name; }
+function senderName(m) { return prof(m.from).name || m.name || MEMBERS[m.from].name; }
 function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 function sendControl(m) { if (bc) bc.postMessage({ kind: "control", msg: m }); queueServerSend(m); }
 function sendNameUpdate(name) {
   const ts = Date.now();
-  namesMap[cfg.member] = { name, ts }; saveNames(); renderAll();
+  profiles[cfg.member] = Object.assign({}, prof(cfg.member), { name, nameTs: ts }); saveProfiles(); renderAll();
   sendControl({ id: newId(), from: cfg.member, type: "name", body: name, ts });
+}
+function sendIconUpdate(emoji, photo) {
+  const ts = Date.now();
+  profiles[cfg.member] = Object.assign({}, prof(cfg.member), { emoji, photo, iconTs: ts }); saveProfiles(); renderAll();
+  sendControl({ id: newId(), from: cfg.member, type: "profile", body: JSON.stringify({ emoji, photo }), ts });
 }
 function doUnsend(targetId) {
   deletedIds[targetId] = Date.now(); saveDeleted();
@@ -273,7 +312,14 @@ function doUnsend(targetId) {
 function applyControl(m) {
   if (!m || !MEMBERS[m.from]) return false;
   if (m.type === "name" && typeof m.body === "string" && m.body) {
-    if (!namesMap[m.from] || (m.ts || 0) > (namesMap[m.from].ts || 0)) { namesMap[m.from] = { name: m.body.slice(0, 12), ts: m.ts || 0 }; saveNames(); return true; }
+    if ((m.ts || 0) > (prof(m.from).nameTs || 0)) { profiles[m.from] = Object.assign({}, prof(m.from), { name: m.body.slice(0, 12), nameTs: m.ts || 0 }); saveProfiles(); return true; }
+  } else if (m.type === "profile" && typeof m.body === "string") {
+    if ((m.ts || 0) > (prof(m.from).iconTs || 0)) {
+      try { const d = JSON.parse(m.body);
+        profiles[m.from] = Object.assign({}, prof(m.from), { emoji: (typeof d.emoji === "string" && d.emoji) ? d.emoji : null, photo: (typeof d.photo === "string" && d.photo.startsWith("data:image/")) ? d.photo : null, iconTs: m.ts || 0 });
+        saveProfiles(); return true;
+      } catch (e) { return false; }
+    }
   } else if (m.type === "delete" && typeof m.body === "string") {
     if (!deletedIds[m.body]) { deletedIds[m.body] = m.ts || Date.now(); saveDeleted(); }
     if (msgs.some(x => x.id === m.body)) { msgs = msgs.filter(x => x.id !== m.body); saveHistory(); return true; }
@@ -311,10 +357,16 @@ function renderMsg(m) {
   }
   const mine = m.from === cfg.member;
   const row = document.createElement("div"); row.className = "row " + (mine ? "mine" : "theirs");
+  const col = document.createElement("div"); col.className = "col";
   if (!mine) {
+    const av = document.createElement("div"); av.className = "avatar bg-" + m.from;
+    const ph = prof(m.from).photo;
+    if (ph) { const img = document.createElement("img"); img.src = ph; img.alt = ""; av.appendChild(img); }
+    else av.textContent = displayEmoji(m.from);
+    row.appendChild(av);
     const who = document.createElement("div"); who.className = "who";
-    who.textContent = MEMBERS[m.from].icon + " " + ((namesMap[m.from] && namesMap[m.from].name) || m.name || MEMBERS[m.from].name);
-    row.appendChild(who);
+    who.textContent = senderName(m);
+    col.appendChild(who);
   }
   const b = document.createElement("div"); b.className = "bubble " + m.type + " from-" + m.from;
   if (m.type === "photo") {
@@ -323,9 +375,10 @@ function renderMsg(m) {
     b.textContent = m.body;
   }
   if (mine) addLongPress(b, 650, () => { if (confirm("このメッセージの送信を取り消しますか？")) doUnsend(m.id); });
-  row.appendChild(b);
+  col.appendChild(b);
   const t = document.createElement("div"); t.className = "time"; t.textContent = timeStr(m.ts);
-  row.appendChild(t);
+  col.appendChild(t);
+  row.appendChild(col);
   msgsEl.appendChild(row);
 }
 function renderAll() { msgsEl.innerHTML = ""; lastDay = ""; msgs.forEach(renderMsg); scrollBottom(); }
@@ -397,7 +450,7 @@ async function fetchMissed() {
       let changed = false;
       for (const row of data) {
         const m = await decryptRow(row); if (!m) continue;
-        if (m.type === "name" || m.type === "delete") { if (applyControl(m)) changed = true; }
+        if (m.type === "name" || m.type === "delete" || m.type === "profile") { if (applyControl(m)) changed = true; }
         else if (!msgIds.has(row.id)) addMsg(m);
       }
       if (changed) renderAll();
@@ -416,7 +469,7 @@ function startTransport() {
     sb.channel("famchat-live")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: SERVER_TABLE, filter: "room=eq." + roomServer },
         async payload => { const row = payload.new; if (!row) return; const m = await decryptRow(row); if (!m) return;
-          if (m.type === "name" || m.type === "delete") { if (applyControl(m)) renderAll(); }
+          if (m.type === "name" || m.type === "delete" || m.type === "profile") { if (applyControl(m)) renderAll(); }
           else if (!msgIds.has(row.id)) addMsg(m);
           serverOk = true; updateStatus(); })
       .subscribe();
@@ -464,12 +517,76 @@ $("#photoInput").addEventListener("change", e => {
   img.src = url;
 });
 
+/* ---------- member icon settings ---------- */
+const ICON_EMOJIS = ["👨","👩","👦","👧","😊","😸","🐶","🐱","🦊","🐼","🐰","🦁","🐷","🌟","🍓","🚗","⚽","🎈"];
+const emojiGrid = $("#emojiGrid");
+ICON_EMOJIS.forEach(e => {
+  const b = document.createElement("button"); b.textContent = e; b.dataset.emoji = e;
+  b.addEventListener("click", () => { if (!cfg) return; sendIconUpdate(e, null); refreshIconSettings(); showToast("アイコンを変えました"); });
+  emojiGrid.appendChild(b);
+});
+function refreshIconSettings() {
+  if (!cfg) return;
+  const pv = $("#iconPreview"); pv.className = "avatar bg-" + cfg.member;
+  pv.style.width = "48px"; pv.style.height = "48px"; pv.style.fontSize = "26px";
+  pv.innerHTML = "";
+  const ph = prof(cfg.member).photo;
+  if (ph) { const img = document.createElement("img"); img.src = ph; img.alt = ""; pv.appendChild(img); }
+  else pv.textContent = displayEmoji(cfg.member);
+  document.querySelectorAll("#emojiGrid button").forEach(b => b.classList.toggle("sel", !ph && b.dataset.emoji === displayEmoji(cfg.member)));
+  $("#iconPhotoClearBtn").disabled = !ph;
+}
+$("#iconPhotoBtn").addEventListener("click", () => $("#iconPhotoInput").click());
+$("#iconPhotoClearBtn").addEventListener("click", () => { if (!cfg) return; sendIconUpdate(displayEmoji(cfg.member), null); refreshIconSettings(); showToast("写真をやめました"); });
+$("#iconPhotoInput").addEventListener("change", e => {
+  const f = e.target.files[0]; e.target.value = "";
+  if (!f || !cfg) return;
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => {
+    const side = Math.min(img.naturalWidth, img.naturalHeight);
+    const cv = document.createElement("canvas"); cv.width = 128; cv.height = 128;
+    cv.getContext("2d").drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 128, 128);
+    URL.revokeObjectURL(url);
+    sendIconUpdate(displayEmoji(cfg.member), cv.toDataURL("image/jpeg", 0.85));
+    refreshIconSettings(); showToast("アイコンを変えました");
+  };
+  img.src = url;
+});
+
+/* ---------- app icon (generated in-page: pastel rainbow speech bubble) ---------- */
+function setupAppIcon() {
+  try {
+    const c = document.createElement("canvas"); c.width = 512; c.height = 512;
+    const x = c.getContext("2d");
+    const g = x.createLinearGradient(0, 0, 512, 512);
+    [[0,"#7d2ae8"],[0.30,"#00a8c5"],[0.50,"#4cc964"],[0.75,"#ff4fa0"],[1,"#8e2de2"]].forEach(([o, col]) => g.addColorStop(o, col));
+    x.fillStyle = g; x.fillRect(0, 0, 512, 512);
+    x.save();
+    x.shadowColor = "rgba(0,0,0,.20)"; x.shadowBlur = 14; x.shadowOffsetY = 5;
+    x.beginPath();
+    x.moveTo(200, 348); x.lineTo(226, 448); x.lineTo(266, 356); x.closePath();
+    x.ellipse(256, 238, 164, 142, 0, 0, Math.PI * 2);
+    x.fillStyle = "#ffffff"; x.fill();
+    x.restore();
+    const tg = x.createLinearGradient(90, 0, 422, 0);
+    [[0,"#00b2a9"],[0.35,"#40a4c4"],[0.62,"#6ebe5a"],[1,"#d860aa"]].forEach(([o, col]) => tg.addColorStop(o, col));
+    x.fillStyle = tg; x.textAlign = "center"; x.textBaseline = "middle";
+    x.font = "700 76px sans-serif"; x.fillText("かぞく", 256, 192);
+    x.font = "700 66px sans-serif"; x.fillText("チャット", 256, 276);
+    const url = c.toDataURL("image/png");
+    const l = document.createElement("link"); l.rel = "apple-touch-icon"; l.href = url; document.head.appendChild(l);
+    const f = document.createElement("link"); f.rel = "icon"; f.type = "image/png"; f.href = url; document.head.appendChild(f);
+  } catch (e) {}
+}
+setupAppIcon();
+
 /* ================= boot ================= */
 async function startChat() {
   roomKey = hashStr("famchat:" + cfg.code);
   $("#setup").style.display = "none";
   $("#chat").style.display = "flex";
-  loadNames(); loadDeleted();
+  loadProfiles(); loadDeleted();
   loadHistory(); renderAll(); loadOutbox();
   roomServer = await sha256Hex("famchat-room-v2:" + cfg.code);
   encKey = await deriveKey(cfg.code);
