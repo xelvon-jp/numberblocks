@@ -2,14 +2,14 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>かぞくチャット</title>
 <style>
-  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   html, body { margin:0; padding:0; height:100%; }
-  body { font-family: -apple-system, "Hiragino Sans", sans-serif; background:#8fa8c8; display:flex; flex-direction:column; height:100dvh; }
+  body { font-family: -apple-system, "Hiragino Sans", sans-serif; background:#8fa8c8; display:flex; flex-direction:column; height:100dvh; position:fixed; inset:0; overflow:hidden; overscroll-behavior:none; }
   button { font-family: inherit; }
 
   /* ---------- setup ---------- */
@@ -27,7 +27,7 @@
   #startBtn:disabled { background:#bbb; }
 
   /* ---------- chat ---------- */
-  #chat { flex:1; display:none; flex-direction:column; min-height:0; }
+  #chat { position:fixed; left:0; right:0; top:0; height:100dvh; display:none; flex-direction:column; min-height:0; }
   header { background:#2f3e5c; color:#fff; padding:10px 14px; padding-top:calc(10px + env(safe-area-inset-top)); display:flex; align-items:center; gap:8px; }
   header .title { font-size:17px; font-weight:700; flex:1; }
   #status { font-size:12px; opacity:.9; }
@@ -42,11 +42,13 @@
   .row.theirs { align-items:flex-start; }
   .who { font-size:11px; color:#fff; margin:0 2px 2px; text-shadow:0 1px 2px rgba(0,0,0,.25); }
   .bubble { max-width:75%; padding:9px 12px; border-radius:16px; font-size:16px; line-height:1.45; word-break:break-word; white-space:pre-wrap; position:relative; }
-  .mine .bubble { background:#95ec69; border-top-right-radius:4px; }
-  .theirs .bubble { background:#fff; border-top-left-radius:4px; }
+  .mine .bubble { border-top-right-radius:4px; }
+  .theirs .bubble { border-top-left-radius:4px; }
+  .bubble.from-papa { background:#ffffff; }
+  .bubble.from-mama { background:#ffd6e8; }
+  .bubble.from-boku { background:#bfe3ff; }
   .bubble.stamp { background:none; font-size:64px; padding:0 4px; line-height:1.1; }
-  .bubble.photo { padding:4px; background:#fff; }
-  .mine .bubble.photo { background:#95ec69; }
+  .bubble.photo { padding:4px; }
   .bubble.photo img { max-width:210px; max-height:260px; border-radius:12px; display:block; }
   .time { font-size:10px; color:rgba(255,255,255,.85); margin:2px 2px 0; text-shadow:0 1px 2px rgba(0,0,0,.2); }
   #stampPanel { display:none; background:#fff; padding:10px; grid-template-columns:repeat(6,1fr); gap:4px; border-top:1px solid #ddd; }
@@ -59,6 +61,20 @@
   #textInput { flex:1; font-size:16px; padding:10px 12px; border:1px solid #ccc; border-radius:20px; resize:none; max-height:100px; outline:none; font-family:inherit; }
   #sendBtn { flex:none; height:40px; padding:0 16px; font-size:15px; font-weight:700; color:#fff; background:#06c755; border:none; border-radius:20px; cursor:pointer; }
   #sendBtn:disabled { background:#bbb; }
+  #verLabel { font-size:11px; opacity:.75; padding:4px 2px; user-select:none; -webkit-user-select:none; }
+  #toast { position:fixed; left:50%; bottom:110px; transform:translateX(-50%); background:rgba(0,0,0,.82); color:#fff; font-size:14px; padding:10px 16px; border-radius:20px; display:none; z-index:60; white-space:nowrap; }
+  #settingsPanel { position:fixed; inset:0; background:rgba(0,0,0,.45); display:none; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  #settingsPanel.open { display:flex; }
+  #settingsPanel .box { background:#fff; border-radius:16px; padding:20px; width:100%; max-width:340px; }
+  #settingsPanel h2 { margin:0 0 12px; font-size:18px; }
+  #settingsPanel label { display:block; font-size:13px; font-weight:600; margin:14px 0 6px; color:#333; }
+  #settingsPanel input { width:100%; padding:11px; font-size:16px; border:2px solid #ddd; border-radius:10px; }
+  #settingsPanel .row { display:flex; gap:8px; margin-top:16px; }
+  #settingsPanel button { flex:1; padding:12px 6px; font-size:15px; border-radius:10px; border:2px solid #ddd; background:#fafafa; cursor:pointer; }
+  #settingsPanel button.primary { background:#06c755; border-color:#06c755; color:#fff; font-weight:700; }
+  #settingsPanel button.danger { color:#c00; }
+  #settingsPanel .ver { color:#888; font-size:12px; margin-top:14px; text-align:center; }
+  .row.mine .bubble { user-select:none; -webkit-user-select:none; }
 </style>
 </head>
 <body>
@@ -84,6 +100,7 @@
   <header>
     <div class="title">💬 かぞくチャット</div>
     <div id="status"><span class="dot"></span><span id="statusText">接続中…</span></div>
+    <span id="verLabel">v3</span>
     <button id="resetBtn">設定</button>
   </header>
   <div id="msgs"></div>
@@ -97,10 +114,26 @@
   </div>
 </div>
 
+<div id="settingsPanel">
+  <div class="box">
+    <h2>設定</h2>
+    <label>あなたの表示名</label>
+    <input id="nameInput" type="text" maxlength="12" autocomplete="off">
+    <div class="row">
+      <button id="nameSaveBtn" class="primary">名前を保存</button>
+    </div>
+    <div class="row">
+      <button id="cfgResetBtn" class="danger">設定をリセット</button>
+      <button id="settingsCloseBtn">閉じる</button>
+    </div>
+    <div class="ver">かぞくチャット <span id="verInfo">v3</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+  </div>
+</div>
+<div id="toast"></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 "use strict";
-/* ================= かぞくチャット v2 (Supabase mailbox + E2E encryption) ================= */
+/* ================= かぞくチャット v3 (Supabase mailbox + E2E encryption + name/unsend/keyboard fixes) ================= */
 const MEMBERS = {
   papa: { name: "パパ", icon: "👨" },
   mama: { name: "ママ", icon: "👩" },
@@ -110,6 +143,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
+const APP_VERSION = "v3";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -124,6 +158,10 @@ let outbox = [];           // encrypted rows waiting to be inserted
 let msgs = [];             // sorted by ts, id
 let msgIds = new Set();
 let bc = null;
+let namesMap = {};         // member -> {name, ts} (synced via control messages)
+let deletedIds = {};       // messageId -> ts (unsend tombstones, synced)
+const LS_NAMES = "famchat_names_v3";
+const LS_DELETED = "famchat_deleted_v3";
 
 /* ---------- tiny hash for the room id (obscuring only, not security) ---------- */
 function hashStr(s) {
@@ -155,11 +193,47 @@ $("#startBtn").addEventListener("click", () => {
   localStorage.setItem(LS_CFG, JSON.stringify(cfg));
   startChat();
 });
-$("#resetBtn").addEventListener("click", () => {
+/* ---------- long-press helper + toast (common spec: settings needs a deliberate gesture) ---------- */
+function addLongPress(el, ms, fn) {
+  let timer = null, fired = false;
+  const start = e => { fired = false; timer = setTimeout(() => { fired = true; fn(); }, ms); };
+  const cancel = () => { if (timer) { clearTimeout(timer); timer = null; } };
+  el.addEventListener("pointerdown", start);
+  el.addEventListener("pointerup", cancel);
+  el.addEventListener("pointerleave", cancel);
+  el.addEventListener("pointercancel", cancel);
+  el.addEventListener("contextmenu", e => e.preventDefault());
+  el.addEventListener("click", e => { if (fired) { e.preventDefault(); e.stopPropagation(); fired = false; } }, true);
+}
+let toastTimer = null;
+function showToast(text) {
+  const t = $("#toast"); t.textContent = text; t.style.display = "block";
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => { t.style.display = "none"; }, 1800);
+}
+function hardReload() {
+  showToast("最新版を確認しています…");
+  setTimeout(() => location.replace(location.pathname + "?u=" + Date.now()), 250);
+}
+/* settings opens only on long-press, so a child cannot open it by accident */
+addLongPress($("#resetBtn"), 1200, () => {
+  $("#nameInput").value = displayName(cfg ? cfg.member : "boku");
+  $("#settingsPanel").classList.add("open");
+});
+$("#resetBtn").addEventListener("click", () => showToast("設定は長押しで開きます"));
+addLongPress($("#verLabel"), 1000, hardReload);
+$("#settingsCloseBtn").addEventListener("click", () => $("#settingsPanel").classList.remove("open"));
+$("#cfgResetBtn").addEventListener("click", () => {
   if (confirm("設定を消して、最初の画面に戻りますか？（履歴はこの端末に残ります）")) {
     localStorage.removeItem(LS_CFG);
     location.reload();
   }
+});
+$("#nameSaveBtn").addEventListener("click", () => {
+  const v = $("#nameInput").value.trim();
+  if (!v || !cfg) return;
+  $("#settingsPanel").classList.remove("open");
+  if (v !== displayName(cfg.member)) sendNameUpdate(v);
+  showToast("名前を「" + v + "」にしました");
 });
 
 /* ================= chat core ================= */
@@ -178,15 +252,45 @@ function saveHistory() {
     try { localStorage.setItem(lsHistoryKey(), JSON.stringify(msgs)); } catch (e2) {}
   }
 }
+function loadNames() { try { namesMap = JSON.parse(localStorage.getItem(LS_NAMES) || "{}"); } catch (e) { namesMap = {}; } if (!namesMap || typeof namesMap !== "object") namesMap = {}; }
+function saveNames() { try { localStorage.setItem(LS_NAMES, JSON.stringify(namesMap)); } catch (e) {} }
+function loadDeleted() { try { deletedIds = JSON.parse(localStorage.getItem(LS_DELETED) || "{}"); } catch (e) { deletedIds = {}; } if (!deletedIds || typeof deletedIds !== "object") deletedIds = {}; }
+function saveDeleted() { try { localStorage.setItem(LS_DELETED, JSON.stringify(deletedIds)); } catch (e) {} }
+function displayName(member) { return (namesMap[member] && namesMap[member].name) || MEMBERS[member].name; }
+function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+function sendControl(m) { if (bc) bc.postMessage({ kind: "control", msg: m }); queueServerSend(m); }
+function sendNameUpdate(name) {
+  const ts = Date.now();
+  namesMap[cfg.member] = { name, ts }; saveNames(); renderAll();
+  sendControl({ id: newId(), from: cfg.member, type: "name", body: name, ts });
+}
+function doUnsend(targetId) {
+  deletedIds[targetId] = Date.now(); saveDeleted();
+  msgs = msgs.filter(x => x.id !== targetId); saveHistory(); renderAll();
+  sendControl({ id: newId(), from: cfg.member, type: "delete", body: targetId, ts: Date.now() });
+  if (sb) { try { sb.from(SERVER_TABLE).delete().eq("id", targetId).then(() => {}, () => {}); } catch (e) {} }
+}
+function applyControl(m) {
+  if (!m || !MEMBERS[m.from]) return false;
+  if (m.type === "name" && typeof m.body === "string" && m.body) {
+    if (!namesMap[m.from] || (m.ts || 0) > (namesMap[m.from].ts || 0)) { namesMap[m.from] = { name: m.body.slice(0, 12), ts: m.ts || 0 }; saveNames(); return true; }
+  } else if (m.type === "delete" && typeof m.body === "string") {
+    if (!deletedIds[m.body]) { deletedIds[m.body] = m.ts || Date.now(); saveDeleted(); }
+    if (msgs.some(x => x.id === m.body)) { msgs = msgs.filter(x => x.id !== m.body); saveHistory(); return true; }
+    return false;
+  }
+  return false;
+}
 function addMsg(m) {
   if (!m || !m.id || msgIds.has(m.id)) return false;
+  if (deletedIds[m.id]) return false;
   if (!MEMBERS[m.from] || !["text", "stamp", "photo"].includes(m.type)) return false;
   msgs.push(m); msgIds.add(m.id);
   saveHistory(); renderMsg(m); scrollBottom();
   return true;
 }
 function sendMsg(type, body) {
-  const m = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), from: cfg.member, type, body, ts: Date.now() };
+  const m = { id: newId(), from: cfg.member, type, body, ts: Date.now(), name: displayName(cfg.member) };
   addMsg(m);
   if (bc) bc.postMessage({ kind: "chat", msg: m });
   queueServerSend(m);
@@ -209,15 +313,16 @@ function renderMsg(m) {
   const row = document.createElement("div"); row.className = "row " + (mine ? "mine" : "theirs");
   if (!mine) {
     const who = document.createElement("div"); who.className = "who";
-    who.textContent = MEMBERS[m.from].icon + " " + MEMBERS[m.from].name;
+    who.textContent = MEMBERS[m.from].icon + " " + ((namesMap[m.from] && namesMap[m.from].name) || m.name || MEMBERS[m.from].name);
     row.appendChild(who);
   }
-  const b = document.createElement("div"); b.className = "bubble " + m.type;
+  const b = document.createElement("div"); b.className = "bubble " + m.type + " from-" + m.from;
   if (m.type === "photo") {
     const img = document.createElement("img"); img.src = m.body; img.alt = "写真"; b.appendChild(img);
   } else {
     b.textContent = m.body;
   }
+  if (mine) addLongPress(b, 650, () => { if (confirm("このメッセージの送信を取り消しますか？")) doUnsend(m.id); });
   row.appendChild(b);
   const t = document.createElement("div"); t.className = "time"; t.textContent = timeStr(m.ts);
   row.appendChild(t);
@@ -289,7 +394,13 @@ async function fetchMissed() {
       .order("ts", { ascending: true }).limit(500);
     if (!error && Array.isArray(data)) {
       serverOk = true;
-      for (const row of data) { if (!msgIds.has(row.id)) { const m = await decryptRow(row); if (m) addMsg(m); } }
+      let changed = false;
+      for (const row of data) {
+        const m = await decryptRow(row); if (!m) continue;
+        if (m.type === "name" || m.type === "delete") { if (applyControl(m)) changed = true; }
+        else if (!msgIds.has(row.id)) addMsg(m);
+      }
+      if (changed) renderAll();
     } else if (error) { serverOk = false; }
   } catch (e) { serverOk = false; }
   fetching = false;
@@ -297,14 +408,17 @@ async function fetchMissed() {
   flushOutbox();
 }
 function startTransport() {
-  try { bc = new BroadcastChannel("famchat_" + roomKey); bc.onmessage = e => { if (e.data && e.data.kind === "chat") addMsg(e.data.msg); }; } catch (e) {}
+  try { bc = new BroadcastChannel("famchat_" + roomKey); bc.onmessage = e => { if (!e.data) return; if (e.data.kind === "chat") addMsg(e.data.msg); else if (e.data.kind === "control") { if (applyControl(e.data.msg)) renderAll(); } }; } catch (e) {}
   if (!serverConfigured() || typeof supabase === "undefined") { updateStatus(); return; }
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   fetchMissed();
   try {
     sb.channel("famchat-live")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: SERVER_TABLE, filter: "room=eq." + roomServer },
-        async payload => { const row = payload.new; if (row && !msgIds.has(row.id)) { const m = await decryptRow(row); if (m) addMsg(m); } serverOk = true; updateStatus(); })
+        async payload => { const row = payload.new; if (!row) return; const m = await decryptRow(row); if (!m) return;
+          if (m.type === "name" || m.type === "delete") { if (applyControl(m)) renderAll(); }
+          else if (!msgIds.has(row.id)) addMsg(m);
+          serverOk = true; updateStatus(); })
       .subscribe();
   } catch (e) {}
   setInterval(fetchMissed, 10000);
@@ -355,11 +469,26 @@ async function startChat() {
   roomKey = hashStr("famchat:" + cfg.code);
   $("#setup").style.display = "none";
   $("#chat").style.display = "flex";
+  loadNames(); loadDeleted();
   loadHistory(); renderAll(); loadOutbox();
   roomServer = await sha256Hex("famchat-room-v2:" + cfg.code);
   encKey = await deriveKey(cfg.code);
   startTransport(); updateStatus();
 }
+/* ---------- keep the header visible when the iOS keyboard opens ---------- */
+function fitViewport() {
+  const vv = window.visualViewport;
+  const h = vv ? vv.height : window.innerHeight;
+  const t = vv ? vv.offsetTop : 0;
+  ["#chat"].forEach(sel => { const el = document.querySelector(sel); if (el) { el.style.height = h + "px"; el.style.top = t + "px"; } });
+  const sp = document.querySelector("#settingsPanel"); if (sp) { sp.style.height = h + "px"; sp.style.top = t + "px"; }
+}
+if (window.visualViewport) { visualViewport.addEventListener("resize", fitViewport); visualViewport.addEventListener("scroll", fitViewport); }
+window.addEventListener("resize", fitViewport);
+window.addEventListener("orientationchange", () => setTimeout(fitViewport, 100));
+fitViewport();
+$("#verLabel").textContent = APP_VERSION;
+$("#verInfo").textContent = APP_VERSION;
 try {
   const saved = JSON.parse(localStorage.getItem(LS_CFG) || "null");
   if (saved && MEMBERS[saved.member] && saved.code) { cfg = saved; startChat(); }
