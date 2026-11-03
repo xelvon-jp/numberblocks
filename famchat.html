@@ -37,7 +37,10 @@
   #status .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#f66; margin-right:4px; vertical-align:middle; }
   #status.on .dot { background:#06c755; }
   #resetBtn { background:rgba(255,255,255,.15); color:#fff; border:none; border-radius:8px; padding:6px 10px; font-size:13px; cursor:pointer; }
-  #msgs { flex:1; overflow-y:auto; padding:12px 10px; -webkit-overflow-scrolling:touch; }
+  #msgs { flex:1; overflow-y:auto; padding:12px 10px; -webkit-overflow-scrolling:touch; position:relative; z-index:1; }
+  #leafLayer { position:absolute; left:0; right:0; overflow:hidden; pointer-events:none; z-index:0; }
+  #leafLayer .leaf { position:absolute; top:0; left:0; will-change:transform; }
+  #chat header, #stampPanel, #inputBar { position:relative; z-index:1; }
   .day { text-align:center; margin:10px 0; }
   .day span { background:rgba(0,0,0,.18); color:#fff; font-size:11px; padding:3px 10px; border-radius:10px; }
   .row { display:flex; flex-direction:column; margin:2px 0 10px; }
@@ -140,6 +143,7 @@
     <span id="verLabel">v6.1</span>
     <button id="resetBtn">設定</button>
   </header>
+  <div id="leafLayer"></div>
   <div id="msgs"></div>
   <div id="stampPanel"></div>
   <div id="inputBar">
@@ -176,11 +180,17 @@
       <button id="pushBtn" class="primary">通知をONにする</button>
     </div>
     <div id="pushState" style="font-size:12px; color:#666; margin-top:6px;"></div>
+    <label>背景アニメーション</label>
+    <div style="font-size:12px; color:#888; line-height:1.5;">チャットの背景に季節のものが舞います。この端末だけの設定です。</div>
+    <div class="row">
+      <button id="effectMomijiBtn">🍁 紅葉</button>
+      <button id="effectNoneBtn">なし</button>
+    </div>
     <div class="row">
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v6.4</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v6.5</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="msgMenu">
@@ -205,7 +215,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v6.4";
+const APP_VERSION = "v6.5";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -282,7 +292,7 @@ function hardReload() {
 addLongPress($("#resetBtn"), 1200, () => {
   $("#nameInput").value = displayName(cfg ? cfg.member : "boku");
   refreshIconSettings(); updatePushUI();
-  $("#settingsPanel").classList.add("open");
+  $("#settingsPanel").classList.add("open"); paintEffectBtns();
 });
 $("#resetBtn").addEventListener("click", () => showToast("設定は長押しで開きます"));
 addLongPress($("#verLabel"), 1000, hardReload);
@@ -669,7 +679,7 @@ STAMPS.forEach(s => {
   b.addEventListener("click", () => { sendMsg("stamp", s); stampPanel.classList.remove("open"); });
   stampPanel.appendChild(b);
 });
-$("#stampBtn").addEventListener("click", () => stampPanel.classList.toggle("open"));
+$("#stampBtn").addEventListener("click", () => { stampPanel.classList.toggle("open"); syncLeafLayer(); });
 
 $("#photoBtn").addEventListener("click", () => $("#photoInput").click());
 function fileToDataURL(f) {
@@ -837,6 +847,96 @@ function setupAppIcon() {
 setupAppIcon();
 
 /* ================= boot ================= */
+/* ---------- background effect: falling momiji leaves ---------- */
+const LS_EFFECT = "famchat_effect_v1";
+let bgEffect = (() => {
+  try { const v = localStorage.getItem(LS_EFFECT); if (v === "momiji" || v === "none") return v; } catch (e) {}
+  return (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) ? "none" : "momiji";
+})();
+let leafRaf = null;
+function syncLeafLayer() {
+  const layer = $("#leafLayer"); if (!layer) return;
+  const chat = $("#chat"); if (!chat || chat.style.display === "none") return;
+  const hd = chat.querySelector("header");
+  const ib = $("#inputBar");
+  const sp = $("#stampPanel");
+  const top = hd ? hd.offsetHeight : 0;
+  let bottom = ib ? ib.offsetHeight : 0;
+  if (sp && sp.classList.contains("open")) bottom += sp.offsetHeight;
+  layer.style.top = top + "px";
+  layer.style.bottom = bottom + "px";
+}
+function buildLeaves(layer) {
+  layer.innerHTML = "";
+  const emojis = ["🍁", "🍁", "🍂", "🍁", "🍂", "🍁"];
+  const leaves = [];
+  for (let i = 0; i < 6; i++) {
+    const el = document.createElement("span");
+    el.className = "leaf";
+    el.textContent = emojis[i % emojis.length];
+    layer.appendChild(el);
+    const L = {
+      el,
+      x0: (i * 0.83 + 0.07) % 1,
+      size: 18 + ((i * 13) % 15),
+      dur: 15000 + ((i * 3700) % 8000),
+      phase: (i * 0.37) % 1,
+      a1: 28 + ((i * 9) % 18), w1: 0.38 + ((i * 0.07) % 0.2), ph1: (i * 2.39) % (Math.PI * 2),
+      a2: 9 + ((i * 5) % 7), w2: 0.9 + ((i * 0.11) % 0.3), ph2: (i * 4.1) % (Math.PI * 2),
+      bob: 5 + ((i * 3) % 5), wb: 0.8 + ((i * 0.09) % 0.3),
+      rotAmp: 48 + ((i * 8) % 24),
+      wf: 0.5 + ((i * 0.06) % 0.25), phf: (i * 1.7) % (Math.PI * 2),
+      opacity: 0.6 + ((i * 0.09) % 0.35)
+    };
+    el.style.fontSize = L.size + "px";
+    el.style.opacity = L.opacity;
+    leaves.push(L);
+  }
+  return leaves;
+}
+function startLeaves() {
+  stopLeaves();
+  if (bgEffect !== "momiji") return;
+  const layer = $("#leafLayer"); if (!layer) return;
+  syncLeafLayer();
+  const leaves = buildLeaves(layer);
+  const step = now => {
+    const W = layer.clientWidth, H = layer.clientHeight;
+    if (W > 0 && H > 0) {
+      const ts = now / 1000;
+      for (const L of leaves) {
+        const p = ((now / L.dur) + L.phase) % 1;
+        const y = -44 + p * (H + 88) + Math.sin(ts * L.wb + L.ph2) * L.bob;
+        const x = L.x0 * W + Math.sin(ts * L.w1 + L.ph1) * L.a1 + Math.sin(ts * L.w2 + L.ph2) * L.a2;
+        const r = Math.sin(ts * L.w1 + L.ph1 + 0.6) * L.rotAmp;
+        const flip = Math.cos(ts * L.wf + L.phf);
+        L.el.style.transform = "translate(" + x.toFixed(1) + "px," + y.toFixed(1) + "px) rotate(" + r.toFixed(1) + "deg) scaleX(" + flip.toFixed(3) + ")";
+      }
+    }
+    leafRaf = requestAnimationFrame(step);
+  };
+  leafRaf = requestAnimationFrame(step);
+}
+function stopLeaves() {
+  if (leafRaf) cancelAnimationFrame(leafRaf);
+  leafRaf = null;
+  const layer = $("#leafLayer"); if (layer) layer.innerHTML = "";
+}
+function paintEffectBtns() {
+  const m = $("#effectMomijiBtn"), n = $("#effectNoneBtn");
+  if (m) m.classList.toggle("primary", bgEffect === "momiji");
+  if (n) n.classList.toggle("primary", bgEffect === "none");
+}
+function setBgEffect(v) {
+  bgEffect = v;
+  try { localStorage.setItem(LS_EFFECT, v); } catch (e) {}
+  paintEffectBtns();
+  startLeaves();
+  showToast(v === "momiji" ? "背景：紅葉" : "背景：なし");
+}
+$("#effectMomijiBtn").addEventListener("click", () => setBgEffect("momiji"));
+$("#effectNoneBtn").addEventListener("click", () => setBgEffect("none"));
+
 async function startChat() {
   roomKey = hashStr("famchat:" + cfg.code);
   $("#setup").style.display = "none";
@@ -844,6 +944,7 @@ async function startChat() {
   loadProfiles(); loadDeleted(); loadReads();
   sessionReadBase = reads[cfg.member] || 0;
   loadSeen(); loadHistory(); renderAll(); loadOutbox();
+  startLeaves();
   roomServer = await sha256Hex("famchat-room-v2:" + cfg.code);
   encKey = await deriveKey(cfg.code);
   startTransport(); updateStatus();
@@ -857,6 +958,7 @@ function fitViewport() {
   const t = vv ? vv.offsetTop : 0;
   ["#chat"].forEach(sel => { const el = document.querySelector(sel); if (el) { el.style.height = h + "px"; el.style.top = t + "px"; } });
   const sp = document.querySelector("#settingsPanel"); if (sp) { sp.style.height = h + "px"; sp.style.top = t + "px"; }
+  syncLeafLayer();
   if (stickBottom) requestAnimationFrame(() => { const m = document.querySelector("#msgs"); if (m) m.scrollTop = m.scrollHeight; });
 }
 if (window.visualViewport) { visualViewport.addEventListener("resize", fitViewport); visualViewport.addEventListener("scroll", fitViewport); }
