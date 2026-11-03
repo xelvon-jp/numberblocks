@@ -63,6 +63,7 @@
   .bubble.photo { padding:4px; }
   .bubble.photo img { max-width:210px; max-height:260px; border-radius:12px; display:block; }
   .time { font-size:10px; color:rgba(255,255,255,.85); margin:2px 2px 0; text-shadow:0 1px 2px rgba(0,0,0,.2); }
+  .read { font-size:10px; color:#1d6f2f; margin:0 2px; font-weight:bold; min-height:12px; }
   #stampPanel { display:none; background:#fff; padding:10px; grid-template-columns:repeat(6,1fr); gap:4px; border-top:1px solid #ddd; }
   #stampPanel.open { display:grid; }
   #stampPanel button { font-size:30px; padding:8px 0; background:none; border:none; cursor:pointer; border-radius:10px; }
@@ -123,7 +124,7 @@
   <header>
     <div class="title">💬 かぞくチャット</div>
     <div id="status"><span class="dot"></span><span id="statusText">接続中…</span></div>
-    <span id="verLabel">v5.5</span>
+    <span id="verLabel">v6.0</span>
     <button id="resetBtn">設定</button>
   </header>
   <div id="msgs"></div>
@@ -166,7 +167,7 @@
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v5.5</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v6.0</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="photoViewer">
@@ -187,7 +188,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v5.5";
+const APP_VERSION = "v6.0";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -207,6 +208,7 @@ const LS_PROFILES = "famchat_profiles_v4";
 let deletedIds = {};       // messageId -> ts (unsend tombstones, synced)
 const LS_NAMES = "famchat_names_v3";
 const LS_DELETED = "famchat_deleted_v3";
+const LS_READS = "famchat_reads_v6";
 
 /* ---------- tiny hash for the room id (obscuring only, not security) ---------- */
 function hashStr(s) {
@@ -335,6 +337,34 @@ function displayName(member) { return prof(member).name || MEMBERS[member].name;
 function senderName(m) { return prof(m.from).name || m.name || MEMBERS[m.from].name; }
 function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 function sendControl(m) { if (bc) bc.postMessage({ kind: "control", msg: m }); queueServerSend(m); }
+/* ---------- read receipts ---------- */
+let reads = {};
+function loadReads() { try { reads = JSON.parse(localStorage.getItem(LS_READS + "_" + roomKey) || "{}") || {}; } catch (e) { reads = {}; } }
+function saveReads() { try { localStorage.setItem(LS_READS + "_" + roomKey, JSON.stringify(reads)); } catch (e) {} }
+function readLabel(m) {
+  let n = 0; const total = Object.keys(MEMBERS).length - 1;
+  for (const k of Object.keys(MEMBERS)) { if (k !== m.from && (reads[k] || 0) >= m.ts) n++; }
+  return n === 0 ? "" : (n >= total ? "既読" : "既読 " + n);
+}
+function paintReads() {
+  document.querySelectorAll("#msgs .row.mine").forEach(row => {
+    const el = row.querySelector(".read"); if (!el) return;
+    el.textContent = readLabel({ from: row.dataset.from, ts: +row.dataset.ts || 0 });
+  });
+}
+let lastReadSent = 0, readTimer = null;
+function sendRead() {
+  if (readTimer) return;
+  readTimer = setTimeout(() => {
+    readTimer = null;
+    if (!cfg || document.hidden) return;
+    let upto = 0; for (const m of msgs) { if (m.ts > upto) upto = m.ts; }
+    if (!upto || upto <= lastReadSent) return;
+    lastReadSent = upto;
+    if ((reads[cfg.member] || 0) < upto) { reads[cfg.member] = upto; saveReads(); }
+    sendControl({ id: newId(), from: cfg.member, type: "read", body: String(upto), ts: Date.now() });
+  }, 800);
+}
 function sendNameUpdate(name) {
   const ts = Date.now();
   profiles[cfg.member] = Object.assign({}, prof(cfg.member), { name, nameTs: ts }); saveProfiles(); renderAll();
@@ -362,6 +392,10 @@ function applyControl(m) {
         saveProfiles(); return true;
       } catch (e) { return false; }
     }
+  } else if (m.type === "read") {
+    const upto = parseInt(m.body, 10) || 0;
+    if (upto > (reads[m.from] || 0)) { reads[m.from] = upto; saveReads(); paintReads(); }
+    return false;
   } else if (m.type === "delete" && typeof m.body === "string") {
     if (!deletedIds[m.body]) { deletedIds[m.body] = m.ts || Date.now(); saveDeleted(); }
     if (msgs.some(x => x.id === m.body)) { msgs = msgs.filter(x => x.id !== m.body); saveHistory(); return true; }
@@ -399,6 +433,7 @@ function renderMsg(m) {
   }
   const mine = m.from === cfg.member;
   const row = document.createElement("div"); row.className = "row " + (mine ? "mine" : "theirs");
+  row.dataset.ts = m.ts; row.dataset.from = m.from;
   const col = document.createElement("div"); col.className = "col";
   if (!mine) {
     const av = document.createElement("div"); av.className = "avatar bg-" + m.from;
@@ -422,13 +457,14 @@ function renderMsg(m) {
   col.appendChild(b);
   const t = document.createElement("div"); t.className = "time"; t.textContent = timeStr(m.ts);
   col.appendChild(t);
+  if (mine) { const rd = document.createElement("div"); rd.className = "read"; rd.textContent = readLabel(m); col.appendChild(rd); }
   row.appendChild(col);
   msgsEl.appendChild(row);
 }
 $("#msgs").addEventListener("scroll", () => { const m = $("#msgs"); stickBottom = (m.scrollHeight - m.scrollTop - m.clientHeight) < 120; }, { passive: true });
 $("#textInput").addEventListener("focus", () => { if (stickBottom) setTimeout(() => { const m = $("#msgs"); m.scrollTop = m.scrollHeight; }, 350); });
 
-function renderAll() { msgsEl.innerHTML = ""; lastDay = ""; msgs.forEach(renderMsg); scrollBottom(); }
+function renderAll() { msgsEl.innerHTML = ""; lastDay = ""; msgs.forEach(renderMsg); paintReads(); scrollBottom(); }
 function scrollBottom() { requestAnimationFrame(() => { msgsEl.scrollTop = msgsEl.scrollHeight; }); }
 
 /* ---------- crypto: key + room from the family code (WebCrypto) ---------- */
@@ -448,7 +484,7 @@ async function deriveKey(code) {
 async function encryptMsg(m) {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, encKey, te.encode(JSON.stringify(m)));
-  return { id: m.id, room: roomServer, iv: u8ToB64(iv), data: u8ToB64(new Uint8Array(ct)), ts: m.ts, sender: m.from, kind: (m.type === "name" || m.type === "profile" || m.type === "delete") ? "control" : "chat" };
+  return { id: m.id, room: roomServer, iv: u8ToB64(iv), data: u8ToB64(new Uint8Array(ct)), ts: m.ts, sender: m.from, kind: (m.type === "name" || m.type === "profile" || m.type === "delete" || m.type === "read") ? "control" : "chat" };
 }
 async function decryptRow(row) {
   try {
@@ -497,7 +533,7 @@ async function fetchMissed() {
       let changed = false;
       for (const row of data) {
         const m = await decryptRow(row); if (!m) continue;
-        if (m.type === "name" || m.type === "delete" || m.type === "profile") { if (applyControl(m)) changed = true; }
+        if (m.type === "name" || m.type === "delete" || m.type === "profile" || m.type === "read") { if (applyControl(m)) changed = true; }
         else if (!msgIds.has(row.id)) addMsg(m);
       }
       if (changed) renderAll();
@@ -506,6 +542,7 @@ async function fetchMissed() {
   fetching = false;
   updateStatus();
   flushOutbox();
+  sendRead();
 }
 function startTransport() {
   try { bc = new BroadcastChannel("famchat_" + roomKey); bc.onmessage = e => { if (!e.data) return; if (e.data.kind === "chat") addMsg(e.data.msg); else if (e.data.kind === "control") { if (applyControl(e.data.msg)) renderAll(); } }; } catch (e) {}
@@ -516,9 +553,9 @@ function startTransport() {
     sb.channel("famchat-live")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: SERVER_TABLE, filter: "room=eq." + roomServer },
         async payload => { const row = payload.new; if (!row) return; const m = await decryptRow(row); if (!m) return;
-          if (m.type === "name" || m.type === "delete" || m.type === "profile") { if (applyControl(m)) renderAll(); }
+          if (m.type === "name" || m.type === "delete" || m.type === "profile" || m.type === "read") { if (applyControl(m)) renderAll(); }
           else if (!msgIds.has(row.id)) addMsg(m);
-          serverOk = true; updateStatus(); })
+          serverOk = true; updateStatus(); sendRead(); })
       .subscribe();
   } catch (e) {}
   setInterval(fetchMissed, 10000);
@@ -675,7 +712,7 @@ async function startChat() {
   roomKey = hashStr("famchat:" + cfg.code);
   $("#setup").style.display = "none";
   $("#chat").style.display = "flex";
-  loadProfiles(); loadDeleted();
+  loadProfiles(); loadDeleted(); loadReads();
   loadHistory(); renderAll(); loadOutbox();
   roomServer = await sha256Hex("famchat-room-v2:" + cfg.code);
   encKey = await deriveKey(cfg.code);
