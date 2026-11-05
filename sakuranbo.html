@@ -19,7 +19,12 @@
         display:flex; align-items:center; justify-content:center; gap:7px;
         font-weight:900; color:#333; font-size:28px; letter-spacing:1px;
         box-shadow:0 2px 0 rgba(0,0,0,0.08); }
-  #inkBox { position:relative; width:96px; height:96px; flex:none; }
+  #inkBox, #inkBox2 { position:relative; width:96px; height:96px; flex:none; }
+  #inkBox2 { display:none; }
+  #eq.two #inkBox, #eq.two #inkBox2 { width:62px; }
+  #eq.two #inkBox2 { display:block; }
+  #inkBox2 canvas { width:100%; height:96px; background:#fffbe8; border:3px dashed #d8b13a; border-radius:10px; touch-action:none; display:block; }
+  #inkBox2 canvas.has { border-style:solid; border-color:#58a34c; }
   #inkCv { width:96px; height:96px; background:#fffbe8; border:3px dashed #d8b13a; border-radius:10px; touch-action:none; display:block; }
   #inkCv.has { border-style:solid; border-color:#58a34c; }
   #inkCv.ng { animation:shk .4s ease; border-color:#c00; }
@@ -41,22 +46,60 @@
   #cv { position:absolute; inset:0; width:100%; height:100%; display:block; touch-action:none; }
   /* ── した ── */
   #bar { display:flex; gap:10px; padding:8px 12px calc(10px + env(safe-area-inset-bottom)); }
+  #modeBtn { position:absolute; left:10px; top:8px; z-index:4; border:2.5px solid #2f7fd0; background:#fff; color:#2f7fd0;
+             border-radius:999px; padding:6px 14px; font-size:14.5px; font-weight:900; font-family:inherit; cursor:pointer; }
+  #freePanel { position:absolute; left:50%; top:44%; transform:translate(-50%,-50%); z-index:5; width:min(92%, 380px);
+               background:rgba(255,255,255,0.97); border:3px solid #e2543e; border-radius:20px; padding:16px 14px 14px;
+               display:none; box-shadow:0 10px 30px rgba(160,40,20,0.25); }
+  #freePanel.on { display:block; }
+  .fpTitle { text-align:center; font-size:19px; font-weight:900; color:#c33d27; margin-bottom:10px; }
+  .fpEq { display:flex; align-items:center; justify-content:center; gap:10px; }
+  .fpField { width:92px; height:76px; border:3.5px solid #bbb; border-radius:14px; background:#fff; font-size:36px;
+             font-weight:900; color:#333; font-family:inherit; cursor:pointer; }
+  .fpField.sel { border-color:#2f7fd0; background:#eaf3fd; }
+  .fpMinus { font-size:32px; font-weight:900; color:#333; }
+  #fMsg { text-align:center; font-size:14.5px; font-weight:800; color:#777; min-height:22px; margin:8px 0 4px; }
+  #fMsg.err { color:#c00; }
+  #fKeys { display:grid; grid-template-columns:repeat(5, 1fr); gap:7px; margin-top:6px; }
+  .fKey { height:48px; border-radius:12px; border:2.5px solid #9db8c9; background:#fff; font-size:21px;
+          font-weight:900; color:#1f66ab; font-family:inherit; cursor:pointer; }
+  .fpRow { display:flex; gap:8px; margin-top:12px; }
+  .fpBtn { flex:1; height:50px; border-radius:13px; font-size:16px; font-weight:900; font-family:inherit; cursor:pointer; }
+  .fpBtn.go { border:3px solid #e2543e; background:#e2543e; color:#fff; }
+  .fpBtn.sub { border:3px solid #999; background:#fff; color:#555; }
   .barBtn { flex:1; height:52px; border-radius:14px; border:3px solid #999; background:#fff; font-size:17px;
             font-weight:900; color:#555; cursor:pointer; font-family:inherit; }
   #bNext { display:none; border-color:#e2543e; background:#e2543e; color:#fff; flex:2; }
   #bNext.on { display:block; }
+  #bSame { display:none; flex:1.4; }
+  #bSame.on { display:block; }
 </style>
 </head>
 <body>
 <div id="app">
   <div id="top">
-    <div id="eq"><span id="eqA">13</span><span>−</span><span id="eqB">8</span><span>＝</span><span id="inkBox"><canvas id="inkCv" width="96" height="96"></canvas><button id="bInkClear" title="けす">けす</button></span></div>
+    <div id="eq"><span id="eqA">13</span><span>−</span><span id="eqB">8</span><span>＝</span><span id="inkBox2"><canvas id="inkCv2" width="62" height="96"></canvas></span><span id="inkBox"><canvas id="inkCv" width="96" height="96"></canvas><button id="bInkClear" title="けす">けす</button></span></div>
     <div id="treeBox"><div id="treeFace">🌳</div><div id="cherries"></div><div id="treeCnt">🍒 0こ</div></div>
   </div>
   <div id="say"><div id="sayBig"></div></div>
-  <div id="stage"><canvas id="cv"></canvas></div>
+  <div id="stage"><canvas id="cv"></canvas>
+    <button id="modeBtn">🔢 すきなかず</button>
+    <div id="freePanel">
+      <div class="fpTitle">すきな かずで ひき算</div>
+      <div class="fpEq">
+        <button class="fpField sel" id="fA">？</button><span class="fpMinus">−</span><button class="fpField" id="fB">？</button>
+      </div>
+      <div id="fMsg">ひかれる かず（11〜99）を いれてね</div>
+      <div id="fKeys"></div>
+      <div class="fpRow">
+        <button class="fpBtn sub" id="fBack">🎲 ランダムに もどる</button>
+        <button class="fpBtn go" id="fGo">▶ はじめる</button>
+      </div>
+    </div>
+  </div>
   <div id="bar">
     <button class="barBtn" id="bReset">↩ もどす</button>
+    <button class="barBtn" id="bSame">🔁 おなじかず</button>
     <button class="barBtn" id="bNext">つぎの もんだい ▶</button>
   </div>
 </div>
@@ -119,8 +162,13 @@ function genProblem(){
     const lo = (a - 10) + 1, hi = 9;                  // くり下がり：b > a−10
     b = lo + Math.floor(Math.random() * (hi - lo + 1));
   } while(P && a === P.a && b === P.b);
-  return { a, b, rest: a - 10, r: 10 - b, ans: a - b };
+  return { a, b, bT: 0, bO: b, rest: a - 10, r: 10 - b, ans: a - b, custom: false };
 }
+function customProblem(a, b){
+  const bT = Math.floor(b / 10) * 10, bO = b % 10, a2 = a - bT;
+  return { a, b, bT, bO, rest: a2 - 10, r: 10 - bO, ans: a - b, custom: true };
+}
+let freeMode = false;
 function spec(v){ return blockSpec(v); }
 function layout(){
   if(!P) return;
@@ -134,7 +182,7 @@ function layout(){
   }
   // ならび全体（[引かれる数] − b）が 画面の まんなかに くるよう 寄せる
   const pieces = chars.filter(c => c.role === 'a' || c.role === 'ten' || c.role === 'rest' || c.role === 'r');
-  const bc = chars.find(c => c.role === 'b');
+  const bc = chars.filter(c => c.role === 'b' || c.role === 'bT').sort((p, q) => p.tx - q.tx)[0];
   if(pieces.length && bc && W){
     let l = 1e9, r = -1e9;
     for(const c of pieces){ const w = spec(c.v).cols * bs; l = Math.min(l, c.tx - w / 2); r = Math.max(r, c.tx + w / 2); }
@@ -156,7 +204,8 @@ function homeX(role){
   if(role === 'a') return W * 0.32;
   if(role === 'ten' || role === 'r'){ const p = pairHome(); return p ? p.left : W * 0.30; }
   if(role === 'rest'){ const p = pairHome(); return p ? p.right : W * 0.52; }
-  if(role === 'b') return W * 0.86;
+  if(role === 'bT') return W * 0.72;
+  if(role === 'b') return W * 0.88;
   return W * 0.42;
 }
 function mkChar(v, role, x){
@@ -165,20 +214,54 @@ function mkChar(v, role, x){
 }
 function say(t){ $('sayBig').textContent = t; }
 
-function startProblem(keep){
-  if(!keep) P = genProblem();
+function setupProblem(np){
+  P = np;
   chars = []; fx = []; takeAnim = null;
   clearTimeout(autoTimer);
   $('eqA').textContent = P.a; $('eqB').textContent = P.b;
   predAns = null;
-  inkClear();
+  inkClearAll();
+  $('eq').classList.toggle('two', P.ans >= 10);
+  inkResizeAll();
   $('bNext').classList.remove('on');
+  $('bSame').classList.remove('on');
   mkChar(P.a, 'a');
-  mkChar(P.b, 'b');
-  step = 'ask';
+  if(P.bT > 0) mkChar(P.bT, 'bT');
+  if(P.bO > 0) mkChar(P.bO, 'b');
+  if(P.bT > 0){ step = 'tens'; say(P.bT + ' を ' + P.a + ' に かさねてね'); }
+  else { step = 'ask'; say(P.a + ' を ゆび 2ほんで ひろげて わけてね'); }
   layout();
-  say(P.a + ' を ゆび 2ほんで ひろげて わけてね');
   renderTree(false);
+}
+function startProblem(keep){
+  if(!keep) P = genProblem();
+  setupProblem(P);
+}
+function doTens(){
+  if(step !== 'tens') return;
+  step = 'anim';
+  const bt = chars.find(c => c.role === 'bT'), a = chars.find(c => c.role === 'a');
+  if(bt && a){ bt.tx = a.x; bt.ty = a.y; }
+  setTimeout(() => {
+    chars = chars.filter(c => c.role !== 'bT');
+    const a2 = P.a - P.bT;
+    if(a){ burst(a.x, gy - bs * 2, '#f2b705'); }
+    if(P.bO === 0){           // 一の位が 0：十の位を 引いたら おわり
+      if(a){ a.role = 'ans'; }
+      finishProblem();
+      return;
+    }
+    if(a) a.v = a2;
+    if(a2 === 10){            // ちょうど 10：分ける 手順は 飛ばす
+      if(a) a.role = 'ten';
+      step = 'take';
+      say(P.bO + ' を 10 に かさねてね');
+    } else {
+      step = 'ask';
+      say(a2 + ' を ゆび 2ほんで ひろげて わけてね');
+    }
+    layout();
+  }, 520);
 }
 function doSplit(){
   if(step !== 'ask') return;
@@ -191,20 +274,6 @@ function doSplit(){
   step = 'take';
   say(P.b + ' を 10 に かさねてね');
 }
-// 手書きの こたえ（よそう）：いつでも 書ける。読めたら おぼえるだけ（すすみは 止めない）
-function judgeInk(){
-  if(step === 'done' || !inkStrokes.length) return;
-  const r = (typeof Ink !== 'undefined') ? Ink.recognize(inkStrokes) : null;
-  if(r){ predAns = Number(r.digit); lastInk = predAns; $('inkCv').classList.add('has'); $('bInkClear').classList.add('on'); return; }
-  const cvEl = $('inkCv'); cvEl.classList.remove('ng'); void cvEl.offsetWidth; cvEl.classList.add('ng');
-  inkClearStrokes();
-}
-// テスト用：書いた ことに する
-function predict(v){
-  predAns = v; lastInk = v;
-  $('inkCv').classList.add('has'); $('bInkClear').classList.add('on');
-  return true;
-}
 function doTake(){
   if(step !== 'take') return;
   step = 'anim';
@@ -214,6 +283,11 @@ function doTake(){
     const ten = chars.find(c => c.role === 'ten');
     if(ten){ ten.v = P.r; ten.role = 'r'; burst(ten.x, gy - bs * 2, '#f2b705'); }
     takeAnim = null;
+    if(!chars.find(c => c.role === 'rest')){   // のこりが 0（ちょうど 10 から 引いた）：それが こたえ
+      if(ten) ten.role = 'ans';
+      finishProblem();
+      return;
+    }
     step = 'merge';
     say('のこりは ' + P.r + '！ ' + P.rest + ' と くっつけてね');
   }, 820);
@@ -229,57 +303,105 @@ function doMerge(){
     chars = chars.filter(c => c !== r && c !== rest);
     const ans = mkChar(P.ans, 'ans', mx); ans.x = mx;
     burst(mx, gy - bs * 2, '#f2b705'); burst(mx, gy - bs * 3, '#e2543e');
+    finishProblem();
+  }, 380);
+}
+function finishProblem(){
     store.total++; store.tree++;
     const bloom = store.tree >= 10;
     if(bloom) store.tree = 0;
     saveStore(); renderTree(bloom);
-    if(predAns === null) drawAnsDigit();
+    if(predAns === null) fillAnsDigits();
     const predMsg = predAns === null ? '' : (predAns === P.ans ? '　よそうも あたり！🎯' : '　よそうは ' + predAns + ' だったね');
     say(bloom ? '🌸 まんかい！ 10もん できた！ ' + P.a + ' − ' + P.b + ' ＝ ' + P.ans + predMsg
               : 'できた！ ' + P.a + ' − ' + P.b + ' ＝ ' + P.ans + '　🍒 が 1つ なったよ' + predMsg);
     step = 'done';
     $('bNext').classList.add('on');
+    $('bSame').classList.add('on');
+    $('bNext').textContent = freeMode ? 'かずを かえる ▶' : 'つぎの もんだい ▶';
     clearTimeout(autoTimer);
-    autoTimer = setTimeout(() => { if(step === 'done') startProblem(false); }, 8000);
-  }, 380);
+    autoTimer = setTimeout(() => { if(step === 'done') nextAction(); }, 8000);
+}
+function nextAction(){
+  if(freeMode) showInput();
+  else startProblem(false);
 }
 
-// ── 手書き 入力（Ink.recognize に わたす 線を あつめる。ひっさんと おなじ 流儀）──
-const inkCv = $('inkCv'), ictx = inkCv.getContext('2d');
-function inkResize(){
-  const r = inkCv.getBoundingClientRect(); if(!r.width) return;
+// ── 手書き 入力（Ink.recognize に わたす 線を あつめる）──
+// こたえが 2桁の ときは 十の位・一の位の 2枠。いつでも 書けて、すすみは 止めない
+function mkInkBox(cvEl){ return { cv: cvEl, ctx: cvEl.getContext('2d'), strokes: [], pen: null, digit: null, timer: null }; }
+const inkTens = mkInkBox($('inkCv2'));
+const inkOnes = mkInkBox($('inkCv'));
+const inkShown = () => ($('eq').classList.contains('two') ? [inkTens, inkOnes] : [inkOnes]);
+function inkBoxResize(b){
+  const r = b.cv.getBoundingClientRect(); if(!r.width) return;
   const dpr = Math.min(3, window.devicePixelRatio || 1);
-  inkCv.width = Math.round(r.width * dpr); inkCv.height = Math.round(r.height * dpr);
-  ictx.setTransform(dpr, 0, 0, dpr, 0, 0); inkRedraw();
+  b.cv.width = Math.round(r.width * dpr); b.cv.height = Math.round(r.height * dpr);
+  b.ctx.setTransform(dpr, 0, 0, dpr, 0, 0); inkBoxRedraw(b);
 }
-function inkClearStrokes(){ inkStrokes = []; inkPen = null; clearTimeout(inkTimer); inkTimer = null; inkRedraw(); }
-function inkClear(){ inkClearStrokes(); predAns = null; lastInk = null; const el = $('inkCv'); if(el) el.classList.remove('has'); const b = $('bInkClear'); if(b) b.classList.remove('on'); inkRedraw(); }
-// 書かなかった ときは、こたえの 数字を ますに 見せる
-function drawAnsDigit(){
-  const r = inkCv.getBoundingClientRect(); if(!r.width) return;
-  ictx.save();
-  ictx.fillStyle = '#e2543e'; ictx.font = '900 ' + Math.round(r.height * 0.72) + 'px "Hiragino Maru Gothic ProN",sans-serif';
-  ictx.textAlign = 'center'; ictx.textBaseline = 'middle';
-  ictx.fillText(String(P.ans), r.width / 2, r.height / 2 + 2);
-  ictx.restore();
-}
-function inkRedraw(){
-  const r = inkCv.getBoundingClientRect();
-  ictx.clearRect(0, 0, r.width, r.height);
-  ictx.lineWidth = 7; ictx.lineCap = 'round'; ictx.lineJoin = 'round'; ictx.strokeStyle = '#333';
-  for(const st of inkStrokes){
-    ictx.beginPath();
-    st.forEach((p, i) => i ? ictx.lineTo(p.x, p.y) : ictx.moveTo(p.x, p.y));
-    ictx.stroke();
+function inkResizeAll(){ inkBoxResize(inkTens); inkBoxResize(inkOnes); }
+function inkBoxRedraw(b){
+  const r = b.cv.getBoundingClientRect();
+  b.ctx.clearRect(0, 0, r.width, r.height);
+  b.ctx.lineWidth = 6; b.ctx.lineCap = 'round'; b.ctx.lineJoin = 'round'; b.ctx.strokeStyle = '#333';
+  for(const st of b.strokes){
+    b.ctx.beginPath();
+    st.forEach((p, i) => i ? b.ctx.lineTo(p.x, p.y) : b.ctx.moveTo(p.x, p.y));
+    b.ctx.stroke();
   }
 }
-function inkPos(e){ const r = inkCv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-inkCv.addEventListener('pointerdown', e => { e.preventDefault(); if(step === 'done') return; if(predAns !== null || inkStrokes.length) inkClear(); clearTimeout(inkTimer); inkTimer = null; inkPen = [inkPos(e)]; inkStrokes.push(inkPen); inkRedraw(); });
-inkCv.addEventListener('pointermove', e => { if(!inkPen) return; inkPen.push(inkPos(e)); inkRedraw(); });
-const inkUp = () => { if(!inkPen) return; inkPen = null; clearTimeout(inkTimer); inkTimer = setTimeout(judgeInk, 750); };
-inkCv.addEventListener('pointerup', inkUp);
-inkCv.addEventListener('pointercancel', inkUp);
-$('bInkClear').onclick = () => { if(step !== 'done') inkClear(); };
+function inkBoxClear(b){ b.strokes = []; b.pen = null; b.digit = null; clearTimeout(b.timer); b.cv.classList.remove('has'); inkBoxRedraw(b); }
+function inkClearAll(){ inkBoxClear(inkTens); inkBoxClear(inkOnes); predAns = null; lastInk = null; $('bInkClear').classList.remove('on'); }
+function updPred(){
+  const bs = inkShown();
+  if(bs.every(b => b.digit !== null)){
+    predAns = bs.length === 2 ? inkTens.digit * 10 + inkOnes.digit : inkOnes.digit;
+    lastInk = predAns;
+  } else predAns = null;
+  $('bInkClear').classList.toggle('on', bs.some(b => b.digit !== null || b.strokes.length));
+}
+function judgeInkBox(b){
+  if(step === 'done' || !b.strokes.length) return;
+  const r = (typeof Ink !== 'undefined') ? Ink.recognize(b.strokes) : null;
+  if(r && r.digit !== null && r.digit !== undefined){ b.digit = Number(r.digit); b.cv.classList.add('has'); }
+  else { b.cv.classList.remove('ng'); void b.cv.offsetWidth; b.cv.classList.add('ng'); b.strokes = []; inkBoxRedraw(b); }
+  updPred();
+}
+// 書かなかった 枠には、こたえの 数字を 見せる
+function fillAnsDigits(){
+  if(!P) return;
+  const bs = inkShown();
+  for(const b of bs){
+    if(b.digit !== null) continue;
+    const r = b.cv.getBoundingClientRect(); if(!r.width) continue;
+    const d = bs.length === 2 ? (b === inkTens ? Math.floor(P.ans / 10) : P.ans % 10) : P.ans;
+    b.ctx.save();
+    b.ctx.fillStyle = '#e2543e'; b.ctx.font = '900 ' + Math.round(r.height * 0.62) + 'px "Hiragino Maru Gothic ProN",sans-serif';
+    b.ctx.textAlign = 'center'; b.ctx.textBaseline = 'middle';
+    b.ctx.fillText(String(d), r.width / 2, r.height / 2 + 2);
+    b.ctx.restore();
+  }
+}
+// テスト用：書いた ことに する
+function predict(v){
+  const bs = inkShown();
+  if(bs.length === 2){ inkTens.digit = Math.floor(v / 10); inkOnes.digit = v % 10; }
+  else inkOnes.digit = v;
+  for(const b of bs) b.cv.classList.add('has');
+  predAns = v; lastInk = v;
+  $('bInkClear').classList.add('on');
+  return true;
+}
+function inkWire(b){
+  const pos = e => { const r = b.cv.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; };
+  b.cv.addEventListener('pointerdown', e => { e.preventDefault(); if(step === 'done') return; if(b.digit !== null || b.strokes.length) inkBoxClear(b); clearTimeout(b.timer); b.pen = [pos(e)]; b.strokes.push(b.pen); inkBoxRedraw(b); updPred(); });
+  b.cv.addEventListener('pointermove', e => { if(!b.pen) return; b.pen.push(pos(e)); inkBoxRedraw(b); });
+  const up = () => { if(!b.pen) return; b.pen = null; clearTimeout(b.timer); b.timer = setTimeout(() => judgeInkBox(b), 750); };
+  b.cv.addEventListener('pointerup', up);
+  b.cv.addEventListener('pointercancel', up);
+}
+inkWire(inkTens); inkWire(inkOnes);
+$('bInkClear').onclick = () => { if(step !== 'done') inkClearAll(); };
 
 // ── おいわい ──
 function burst(x, y, col){
@@ -321,7 +443,7 @@ cv.addEventListener('pointerdown', e => {
   }
   ptrs.clear(); ptrs.set(e.pointerId, p);   // 古い ポインタは 捨てる（up を 取りこぼしても 次で 直る）
   const c = charAt(p);
-  const draggable = c && ((step === 'take' && c.role === 'b') || (step === 'merge' && (c.role === 'r' || c.role === 'rest')));
+  const draggable = c && ((step === 'take' && c.role === 'b') || (step === 'tens' && c.role === 'bT') || (step === 'merge' && (c.role === 'r' || c.role === 'rest')));
   if(draggable) drag = { c, id: e.pointerId, dx: p.x - c.x, dy: p.y - c.y };
 });
 cv.addEventListener('pointermove', e => {
@@ -346,6 +468,10 @@ function ptrUp(e){
     const ten = chars.find(q => q.role === 'ten');
     if(ten && rectsOverlap(c, ten, 4)){ doTake(); return; }
     c.tx = homeX('b');
+  } else if(step === 'tens' && c.role === 'bT'){
+    const a = chars.find(q => q.role === 'a');
+    if(a && rectsOverlap(c, a, 4)){ doTens(); return; }
+    c.tx = homeX('bT');
   } else if(step === 'merge'){
     const other = chars.find(q => (q.role === 'r' || q.role === 'rest') && q !== c);
     if(other && rectsOverlap(c, other, 4)){ doMerge(); return; }
@@ -354,8 +480,60 @@ function ptrUp(e){
 }
 cv.addEventListener('pointerup', ptrUp);
 cv.addEventListener('pointercancel', ptrUp);
-$('bReset').onclick = () => startProblem(true);
-$('bNext').onclick = () => startProblem(false);
+$('bReset').onclick = () => { if(step !== 'input') startProblem(true); };
+$('bNext').onclick = () => nextAction();
+$('bSame').onclick = () => { if(step === 'done') startProblem(true); };
+
+// ── すきなかず（自由入力）──
+let fSel = 'a', fVal = { a: '', b: '' };
+function fRender(msg, err){
+  $('fA').textContent = fVal.a || '？';
+  $('fB').textContent = fVal.b || '？';
+  $('fA').classList.toggle('sel', fSel === 'a');
+  $('fB').classList.toggle('sel', fSel === 'b');
+  if(msg !== undefined){ const m = $('fMsg'); m.textContent = msg; m.classList.toggle('err', !!err); }
+}
+(function buildKeys(){
+  const keys = ['1','2','3','4','5','6','7','8','9','0','⌫'];
+  $('fKeys').innerHTML = keys.map(k => '<button class="fKey" data-k="' + k + '">' + k + '</button>').join('');
+  $('fKeys').querySelectorAll('.fKey').forEach(btn => btn.onclick = () => {
+    const k = btn.dataset.k;
+    if(k === '⌫') fVal[fSel] = fVal[fSel].slice(0, -1);
+    else if(fVal[fSel].length < 2) fVal[fSel] += k;
+    if(fSel === 'a' && fVal.a.length === 2) fSel = 'b';
+    fRender(fSel === 'a' ? 'ひかれる かず（11〜99）を いれてね' : 'ひく かず（2〜99）を いれてね');
+  });
+})();
+$('fA').onclick = () => { fSel = 'a'; fRender('ひかれる かず（11〜99）を いれてね'); };
+$('fB').onclick = () => { fSel = 'b'; fRender('ひく かず（2〜99）を いれてね'); };
+function showInput(){
+  freeMode = true;
+  chars = []; fx = []; takeAnim = null; step = 'input';
+  clearTimeout(autoTimer);
+  $('bNext').classList.remove('on'); $('bSame').classList.remove('on');
+  $('modeBtn').textContent = '🎲 ランダム';
+  $('freePanel').classList.add('on');
+  say('すきな かずで ひき算 しよう');
+  fRender(fSel === 'a' ? 'ひかれる かず（11〜99）を いれてね' : 'ひく かず（2〜99）を いれてね');
+}
+function backToRandom(){
+  freeMode = false;
+  $('freePanel').classList.remove('on');
+  $('modeBtn').textContent = '🔢 すきなかず';
+  startProblem(false);
+}
+function startCustom(){
+  const a = parseInt(fVal.a, 10), b = parseInt(fVal.b, 10);
+  if(!(a >= 11 && a <= 99)){ fSel = 'a'; fRender('ひかれる かずは 11〜99 に してね', true); return false; }
+  if(!(b >= 2 && b <=  99)){ fSel = 'b'; fRender('ひく かずは 2〜99 に してね', true); return false; }
+  if(a <= b){ fRender('おおきい かずから ひいてね', true); return false; }
+  $('freePanel').classList.remove('on');
+  setupProblem(customProblem(a, b));
+  return true;
+}
+$('fGo').onclick = () => startCustom();
+$('fBack').onclick = () => backToRandom();
+$('modeBtn').onclick = () => { if(freeMode) backToRandom(); else showInput(); };
 
 // ── えがく ──
 // 引かれる数（わけた 2人）を 枠で かこむ。引く数との あいだに − を 出す
@@ -366,8 +544,12 @@ function frameRect(){
   for(const c of pieces){ const rc = charRect(c); l = Math.min(l, rc.l); r = Math.max(r, rc.r); t = Math.min(t, rc.t); }
   return { l: l - 12, r: r + 12, t: t - 16, b: gy + 10 };
 }
+function minusTarget(){
+  if(step === 'tens') return chars.find(c => c.role === 'bT');
+  return chars.find(c => c.role === 'b');
+}
 function minusShown(){
-  const f = frameRect(), b = chars.find(c => c.role === 'b');
+  const f = frameRect(), b = minusTarget();
   return !!(f && b && !takeAnim && step !== 'done' && step !== 'merge');
 }
 function drawFrame(){
@@ -384,7 +566,7 @@ function drawFrame(){
     ctx.beginPath(); ctx.roundRect(fr.l, fr.t, fr.r - fr.l, fr.b - fr.t, 16); ctx.fill(); ctx.stroke();
     ctx.restore();
     if(minusShown()){
-      const bc = chars.find(c => c.role === 'b'), br = charRect(bc);
+      const bc = minusTarget(), br = charRect(bc);
       ctx.save();
       ctx.font = '900 46px "Hiragino Maru Gothic ProN",sans-serif';
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -402,7 +584,7 @@ function drawFrame(){
     drawNumberblock(ctx, c.v, c.x - sp.cols * bs / 2, c.y - hop - sp.rows * bs, bs, { t, animate: true });
     // とる アニメ：10 の うえ b こぶんを ゴーストで 見せる
     if(takeAnim && c.role === 'ten'){
-      const hh = sp.rows * bs * (P.b / 10);
+      const hh = sp.rows * bs * (P.bO / 10);
       ctx.save();
       ctx.setLineDash([5, 4]); ctx.strokeStyle = 'rgba(200,30,30,0.9)'; ctx.lineWidth = 2;
       ctx.fillStyle = 'rgba(255,255,255,' + (0.45 + 0.3 * Math.sin(t * 0.03)) + ')';
@@ -428,9 +610,10 @@ function drawFrame(){
       ctx.restore();
     }
   }
-  if(step === 'take'){
-    // b から 10 へ アーチ状の 矢印（10 の あたまを 指す）＋ 10 を 光らせる
-    const bc = chars.find(c => c.role === 'b'), tc = chars.find(c => c.role === 'ten');
+  if(step === 'take' || step === 'tens'){
+    // 引く数から 相手へ アーチ状の 矢印（あたまを 指す）＋ 相手を 光らせる
+    const bc = step === 'tens' ? chars.find(c => c.role === 'bT') : chars.find(c => c.role === 'b'),
+          tc = step === 'tens' ? chars.find(c => c.role === 'a') : chars.find(c => c.role === 'ten');
     if(bc && tc && (!drag || drag.c !== bc)){
       const tr = charRect(tc);
       ctx.save();
@@ -463,17 +646,19 @@ function drawFrame(){
 
 startProblem(false);
 resize();
-inkResize();
+inkResizeAll();
 requestAnimationFrame(drawFrame);
 
 // テスト・デバッグ用
 window.sakura = {
-  state: () => ({ a: P.a, b: P.b, rest: P.rest, r: P.r, ans: P.ans, step, tree: store.tree, total: store.total, gy: Math.round(gy), stageH: Math.round(H),
+  state: () => ({ a: P.a, b: P.b, bT: P.bT, bO: P.bO, mode: freeMode ? 'free' : 'random', rest: P.rest, r: P.r, ans: P.ans, step, tree: store.tree, total: store.total, gy: Math.round(gy), stageH: Math.round(H),
                   eqAns: step === 'done' ? String(P.ans) : (predAns !== null ? String(predAns) : '？'), predAns, stageW: Math.round(W), arrow: step === 'take' && !!chars.find(c => c.role === 'b') && !!chars.find(c => c.role === 'ten'),
                   frame: !!frameRect(), minus: minusShown(), lastInk,
                   chars: chars.map(c => ({ v: c.v, role: c.role, x: Math.round(c.x), y: Math.round(c.y), w: Math.round(spec(c.v).cols * bs) })) }),
-  split: doSplit, predict, take: doTake, merge: doMerge,
+  split: doSplit, predict, take: doTake, merge: doMerge, tens: doTens,
   next: () => startProblem(false), reset: () => startProblem(true),
+  free(a, b){ fVal = { a: String(a), b: String(b) }; freeMode = true; $('modeBtn').textContent = '🎲 ランダム'; return startCustom(); },
+  input: showInput, backToRandom,
 };
 </script>
 </body>

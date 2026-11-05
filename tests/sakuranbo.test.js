@@ -153,5 +153,97 @@ module.exports = {
     t.eq(s2.predAns, s.ans);
     t.eq(s2.step, 'ask', '書いても すすみは 止まらない はずが 止まった');
     t.eq(s2.lastInk, s.ans);
+  },
+
+  'すきなかず：52−27 は 十の位→分ける→とる→合わせる で 25（手書き2枠）': async t => {
+    const { f } = await openSakura(t);
+    t.eq(await f.evaluate(() => sakura.free(52, 27)), true);
+    let s = await st(f);
+    t.eq(s.mode, 'free'); t.eq(s.step, 'tens');
+    t.eq(s.bT, 20); t.eq(s.bO, 7); t.eq(s.ans, 25); t.eq(s.rest, 22); t.eq(s.r, 3);
+    t.eq(s.chars.map(c => c.role), ['a', 'bT', 'b']);
+    const two = await f.evaluate(() => document.getElementById('eq').classList.contains('two'));
+    t.ok(two, 'こたえが 2桁なのに 手書きが 2枠に なっていない');
+    await f.evaluate(() => sakura.tens());
+    await f.waitForFunction(() => sakura.state().step === 'ask', null, { timeout: 4000 });
+    s = await st(f);
+    t.eq(s.chars.find(c => c.role === 'a').v, 32, '十の位を 引いたら 32 に ならない');
+    await f.evaluate(() => sakura.split());
+    s = await st(f);
+    t.eq(s.step, 'take');
+    t.eq(s.chars.map(c => c.role).sort().join(','), 'b,rest,ten');
+    await f.evaluate(v => sakura.predict(v), 25);
+    await f.evaluate(() => sakura.take());
+    await f.waitForFunction(() => sakura.state().step === 'merge', null, { timeout: 4000 });
+    await f.evaluate(() => sakura.merge());
+    await f.waitForFunction(() => sakura.state().step === 'done', null, { timeout: 4000 });
+    s = await st(f);
+    t.eq(s.eqAns, '25');
+    t.ok(s.chars.some(c => c.role === 'ans' && c.v === 25), 'こたえの キャラが いない');
+    // おなじかず：同じ 問題が はじめから
+    await f.evaluate(() => document.getElementById('bSame').click());
+    s = await st(f);
+    t.eq(s.step, 'tens'); t.eq(s.a, 52); t.eq(s.b, 27);
+  },
+
+  'すきなかず：20−19 は ちょうど 10 に なるので 分けずに とって おわり': async t => {
+    const { f } = await openSakura(t);
+    t.eq(await f.evaluate(() => sakura.free(20, 19)), true);
+    let s = await st(f);
+    t.eq(s.step, 'tens'); t.eq(s.rest, 0); t.eq(s.ans, 1);
+    await f.evaluate(() => sakura.tens());
+    await f.waitForFunction(() => sakura.state().step === 'take', null, { timeout: 4000 });
+    s = await st(f);
+    t.ok(s.chars.some(c => c.role === 'ten' && c.v === 10), 'ちょうど 10 の キャラが いない');
+    t.ok(!s.chars.some(c => c.role === 'rest'), 'のこり 0 なのに rest が いる');
+    await f.evaluate(() => sakura.take());
+    await f.waitForFunction(() => sakura.state().step === 'done', null, { timeout: 4000 });
+    s = await st(f);
+    t.eq(s.eqAns, '1');
+  },
+
+  'すきなかず：57−24（くり下がり なし）と 50−20（一の位 0）も 解ける': async t => {
+    const { f } = await openSakura(t);
+    t.eq(await f.evaluate(() => sakura.free(57, 24)), true);
+    await f.evaluate(() => sakura.tens());
+    await f.waitForFunction(() => sakura.state().step === 'ask', null, { timeout: 4000 });
+    let s = await st(f);
+    t.eq(s.chars.find(c => c.role === 'a').v, 37);
+    t.eq(s.rest, 27); t.eq(s.r, 6);
+    await f.evaluate(() => sakura.split());
+    await f.evaluate(() => sakura.take());
+    await f.waitForFunction(() => sakura.state().step === 'merge', null, { timeout: 4000 });
+    await f.evaluate(() => sakura.merge());
+    await f.waitForFunction(() => sakura.state().step === 'done', null, { timeout: 4000 });
+    t.eq((await st(f)).eqAns, '33');
+    t.eq(await f.evaluate(() => sakura.free(50, 20)), true);
+    await f.evaluate(() => sakura.tens());
+    await f.waitForFunction(() => sakura.state().step === 'done', null, { timeout: 4000 });
+    t.eq((await st(f)).eqAns, '30');
+  },
+
+  'すきなかず：おかしな 組み合わせは 始まらない／入力パネルからも 始められる': async t => {
+    const { f } = await openSakura(t);
+    await f.evaluate(() => sakura.input());
+    let s = await st(f);
+    t.eq(s.step, 'input'); t.eq(s.mode, 'free');
+    t.eq(await f.evaluate(() => sakura.free(24, 57)), false, 'a<b が 始まってしまう');
+    t.eq((await st(f)).step, 'input');
+    t.eq(await f.evaluate(() => sakura.free(9, 5)), false, 'a が 1桁でも 始まってしまう');
+    t.eq(await f.evaluate(() => sakura.free(30, 1)), false, 'b が 1 でも 始まってしまう');
+    // パネルの キーを 押して 42−15 を 入れる
+    await f.evaluate(() => {
+      const tap = txt => [...document.querySelectorAll('.fKey')].find(b => b.textContent === txt).click();
+      document.getElementById('fA').click(); tap('⌫'); tap('⌫');
+      document.getElementById('fB').click(); tap('⌫'); tap('⌫');
+      document.getElementById('fA').click();
+      tap('4'); tap('2'); tap('1'); tap('5');
+      document.getElementById('fGo').click();
+    });
+    s = await st(f);
+    t.eq(s.step, 'tens'); t.eq(s.a, 42); t.eq(s.b, 15); t.eq(s.ans, 27);
+    await f.evaluate(() => sakura.backToRandom());
+    s = await st(f);
+    t.eq(s.mode, 'random'); t.eq(s.step, 'ask');
   }
 };
