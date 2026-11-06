@@ -184,7 +184,7 @@
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v6.10</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v6.11</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="msgMenu">
@@ -209,7 +209,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v6.10";
+const APP_VERSION = "v6.11";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -378,6 +378,10 @@ function markTrimmed(ids) {
   if (trimmedIds.size > 3000) trimmedIds = new Set([...trimmedIds].slice(-2000));
   try { localStorage.setItem(lsTrimmedKey(), JSON.stringify([...trimmedIds])); } catch (e) {}
 }
+let fetchWm = 0;
+function lsWmKey() { return "famchat_wm_v1_" + roomKey; }
+function loadWm() { fetchWm = parseInt(localStorage.getItem(lsWmKey()) || "0", 10) || 0; }
+function saveWm() { try { localStorage.setItem(lsWmKey(), String(fetchWm)); } catch (e) {} }
 function loadHistory() {
   try { msgs = JSON.parse(localStorage.getItem(lsHistoryKey()) || "[]"); }
   catch (e) { msgs = []; }
@@ -635,30 +639,34 @@ async function queueServerSend(m) { markSeen(m.id);
   flushOutbox();
 }
 let fetching = false;
+async function processRow(row) {
+  if (row.kind === "control") {
+    if (seenRows.has(row.id)) return false;
+    const mc = await decryptRow(row); markSeen(row.id); if (!mc) return false;
+    return applyControl(mc);
+  }
+  if (row.kind === "chat" && (msgIds.has(row.id) || trimmedIds.has(row.id))) return false;
+  const m = await decryptRow(row); if (!m) { markSeen(row.id); return false; }
+  if (m.type === "name" || m.type === "delete" || m.type === "profile" || m.type === "read") { markSeen(row.id); return applyControl(m); }
+  if (!msgIds.has(row.id) && !trimmedIds.has(row.id)) addMsg(m);
+  return false;
+}
 async function fetchMissed() {
   if (!sb || fetching) return;
   fetching = true;
   try {
     const { data, error } = await sb.from(SERVER_TABLE)
       .select("id,iv,data,ts,kind").eq("room", roomServer)
+      .gt("ts", fetchWm)
       .order("ts", { ascending: true }).limit(1000);
     if (!error && Array.isArray(data)) {
       serverOk = true;
       let changed = false;
       for (const row of data) {
-       try {
-        if (row.kind === "control") {
-          if (seenRows.has(row.id)) continue;
-          const mc = await decryptRow(row); markSeen(row.id); if (!mc) continue;
-          if (applyControl(mc)) changed = true;
-          continue;
-        }
-        if (row.kind === "chat" && (msgIds.has(row.id) || trimmedIds.has(row.id))) continue;
-        const m = await decryptRow(row); if (!m) { markSeen(row.id); continue; }
-        if (m.type === "name" || m.type === "delete" || m.type === "profile" || m.type === "read") { markSeen(row.id); if (applyControl(m)) changed = true; }
-        else if (!msgIds.has(row.id) && !trimmedIds.has(row.id)) addMsg(m);
-       } catch (e) {}
+        try { if (await processRow(row)) changed = true; } catch (e) {}
+        if (row.ts > fetchWm) fetchWm = row.ts;
       }
+      saveWm();
       if (changed) renderAll();
     } else if (error) { serverOk = false; }
   } catch (e) { serverOk = false; }
@@ -667,11 +675,34 @@ async function fetchMissed() {
   flushOutbox();
   sendRead();
 }
+async function sweepMissing() {
+  if (!sb) return;
+  try {
+    const { data, error } = await sb.from(SERVER_TABLE)
+      .select("id,ts,kind").eq("room", roomServer)
+      .order("ts", { ascending: true }).limit(1000);
+    if (error || !Array.isArray(data)) return;
+    const missing = [];
+    for (const row of data) {
+      if (row.kind === "control") continue;
+      if (row.ts > fetchWm) continue;
+      if (msgIds.has(row.id) || trimmedIds.has(row.id)) continue;
+      missing.push(row.id);
+    }
+    for (let i = 0; i < missing.length; i += 50) {
+      const res = await sb.from(SERVER_TABLE).select("id,iv,data,ts,kind").in("id", missing.slice(i, i + 50));
+      if (res.error || !Array.isArray(res.data)) continue;
+      res.data.sort((a, b) => a.ts - b.ts);
+      for (const row of res.data) { try { await processRow(row); } catch (e) {} }
+    }
+  } catch (e) {}
+}
 function startTransport() {
   try { bc = new BroadcastChannel("famchat_" + roomKey); bc.onmessage = e => { if (!e.data) return; if (e.data.kind === "chat") addMsg(e.data.msg); else if (e.data.kind === "control") { if (applyControl(e.data.msg)) renderAll(); } }; } catch (e) {}
   if (!serverConfigured() || typeof supabase === "undefined") { updateStatus(); return; }
   sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   fetchMissed();
+  sweepMissing();
   try {
     sb.channel("famchat-live")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: SERVER_TABLE, filter: "room=eq." + roomServer },
@@ -959,7 +990,7 @@ async function startChat() {
   $("#chat").style.display = "flex";
   loadProfiles(); loadDeleted(); loadReads();
   sessionReadBase = reads[cfg.member] || 0;
-  loadSeen(); loadTrimmed(); loadHistory(); renderAll(); loadOutbox();
+  loadSeen(); loadTrimmed(); loadWm(); loadHistory(); renderAll(); loadOutbox();
   startLeaves();
   roomServer = await sha256Hex("famchat-room-v2:" + cfg.code);
   encKey = await deriveKey(cfg.code);
