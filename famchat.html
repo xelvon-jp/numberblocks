@@ -184,7 +184,7 @@
       <button id="cfgResetBtn" class="danger">設定をリセット</button>
       <button id="settingsCloseBtn">閉じる</button>
     </div>
-    <div class="ver">かぞくチャット <span id="verInfo">v6.11</span>（バージョンを長押しすると最新版に再読み込みします）</div>
+    <div class="ver">かぞくチャット <span id="verInfo">v6.12</span>（バージョンを長押しすると最新版に再読み込みします）</div>
   </div>
 </div>
 <div id="msgMenu">
@@ -209,7 +209,7 @@ const STAMPS = ["😊","😂","😍","👍","🙏","😴","😋","🤔","😲","
 const SUPABASE_URL = "https://bynbisgrozqacoimnyvs.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JXRs0eBVWGHPC_a4QTy_iw_JbNbRADu";
 const SERVER_TABLE = "famchat_messages";
-const APP_VERSION = "v6.11";
+const APP_VERSION = "v6.12";
 const LS_CFG = "famchat_cfg";
 const MAX_KEEP = 300;
 
@@ -621,15 +621,32 @@ function updateStatus() {
 }
 function loadOutbox() { try { outbox = JSON.parse(localStorage.getItem(lsOutboxKey()) || "[]"); } catch (e) { outbox = []; } if (!Array.isArray(outbox)) outbox = []; }
 function saveOutbox() { try { localStorage.setItem(lsOutboxKey(), JSON.stringify(outbox)); } catch (e) {} }
+let flushingOut = false;
 async function flushOutbox() {
-  if (!sb || !outbox.length) return;
-  const rows = outbox.slice();
-  const { error } = await sb.from(SERVER_TABLE).insert(rows);
-  if (!error) {
-    const sent = new Set(rows.map(r => r.id));
-    outbox = outbox.filter(r => !sent.has(r.id));
-    saveOutbox(); serverOk = true;
-  }
+  if (!sb || !outbox.length || flushingOut) return;
+  flushingOut = true;
+  try {
+    const rows = outbox.slice();
+    // A row whose earlier send actually landed (but whose response was lost) would
+    // fail the whole batch with a duplicate-key error and block every later send.
+    // Drop rows the server already has, then insert one by one.
+    const done = new Set();
+    try {
+      const { data: existing } = await sb.from(SERVER_TABLE).select("id").in("id", rows.map(r => r.id));
+      if (Array.isArray(existing)) for (const r of existing) done.add(r.id);
+    } catch (e) {}
+    for (const row of rows) {
+      if (done.has(row.id)) continue;
+      const { error } = await sb.from(SERVER_TABLE).insert(row);
+      if (!error || (error && (error.code === "23505" || /duplicate|unique/i.test(error.message || "")))) done.add(row.id);
+    }
+    if (done.size) {
+      outbox = outbox.filter(r => !done.has(r.id));
+      saveOutbox();
+      if (done.size === rows.length) serverOk = true;
+    }
+  } catch (e) {}
+  flushingOut = false;
   updateStatus();
 }
 async function queueServerSend(m) { markSeen(m.id);
