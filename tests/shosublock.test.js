@@ -50,4 +50,19 @@ module.exports = {
     const html = await p.evaluate(() => document.documentElement.outerHTML);
     t.ok(!/https?:\/\//.test(html.replace(/<!--[\s\S]*?-->/g, '')), '外部URLが ある');
   },
+
+  'しょうすう：板の上に ぼうを おとしても、はなした ときに かさならない（めんせきが みえる）': async t => {
+    const p = await openSb(t);
+    await tap(p, 0, 1); await tap(p, 1, 1);
+    await p.waitForTimeout(400);
+    const rects = () => p.evaluate(() => [...document.querySelectorAll('#stage > .piece')].map(e => { const r = e.getBoundingClientRect(); return { k: e.className, x: r.x, y: r.y, w: r.width, h: r.height }; }));
+    const [a, b] = await rects();
+    const plate = a.k.includes('piece-one') ? a : b, stick = a.k.includes('piece-one') ? b : a;
+    await p.mouse.move(stick.x + stick.w / 2, stick.y + stick.h / 2); await p.mouse.down();
+    await p.mouse.move(plate.x + plate.w / 2, plate.y + plate.h / 2, { steps: 8 }); await p.mouse.up();
+    await p.waitForTimeout(600);
+    const [c, d] = await rects();
+    const overlap = !(c.x + c.w <= d.x + 1 || d.x + d.w <= c.x + 1 || c.y + c.h <= d.y + 1 || d.y + d.h <= c.y + 1);
+    t.ok(!overlap, 'はなした あとも かさなっている');
+  },
 };
