@@ -33,6 +33,7 @@
     touch-action: manipulation;
   }
   .bigbtn:active { transform: translateY(2px); box-shadow: none; }
+  .bigbtn:disabled { opacity: .4; }
   #clearbtn { background: #ffd9d9; color: #a33; }
 
   /* challenge bar (centered, big ghost) */
@@ -46,6 +47,20 @@
   #ghost { display: grid; gap: 3px; opacity: .45; }
   #ghost .gcell { width: 20px; height: 20px; border-radius: 4px; background: #7fb8dd; }
   #donemsg { font-size: 38px; font-weight: bold; color: #e67e22; display: none; }
+
+  /* recipe review */
+  #review { display: none; align-items: center; gap: 12px; }
+  #recipe { display: flex; align-items: center; gap: 10px; }
+  #recipe .op { font-size: 34px; font-weight: bold; color: #1463a3; }
+  #recipe .result { font-size: 44px; font-weight: bold; color: #e67e22; margin-left: 2px; }
+  .mini { position: relative; }
+  .mini .cells { display: grid; gap: 2px; }
+  .mini .cell { border-radius: 5px; box-shadow: inset 0 -3px 0 rgba(0,0,0,.18), inset 0 2px 0 rgba(255,255,255,.35); }
+  .mini .num {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-weight: bold; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.35); pointer-events: none;
+  }
+  #nextbtn { background: #c8f2c8; color: #27632a; display: none; }
 
   /* play stage */
   #stage { position: relative; flex: 1; touch-action: none; overflow: hidden; }
@@ -73,9 +88,27 @@
     width: 68px; height: 68px; border: none; border-radius: 14px; cursor: pointer;
     font-size: 32px; font-weight: bold; color: #fff;
     text-shadow: 0 2px 0 rgba(0,0,0,.3); box-shadow: 0 3px 0 rgba(0,0,0,.2);
-    touch-action: manipulation;
+    touch-action: none;
   }
   .partbtn:active { transform: translateY(3px); box-shadow: none; }
+
+  /* split chooser (opens on long-press of a fused block) */
+  #splitpanel {
+    position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 40;
+    background: #ffffff; border: 3px solid #9fd3f5; border-radius: 16px;
+    padding: 10px 12px; display: none; box-shadow: 0 4px 14px rgba(0,0,0,.18);
+  }
+  #splittitle { font-size: 24px; font-weight: bold; color: #1463a3; text-align: center; margin-bottom: 8px; }
+  #splitbtns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-height: 168px; overflow-y: auto; }
+  .splitbtn {
+    font-size: 24px; font-weight: bold; border: none; border-radius: 12px;
+    padding: 12px 16px; min-height: 56px; cursor: pointer;
+    background: #eaf6ff; color: #1463a3; box-shadow: 0 2px 0 rgba(0,0,0,.12);
+    touch-action: manipulation;
+  }
+  .splitbtn:active { transform: translateY(2px); box-shadow: none; }
+  .splitbtn.orig { background: #ffe9b8; color: #8a5a00; }
+  .splitbtn.cancelbtn { background: #ffd9d9; color: #a33; }
 
   /* celebration stars */
   .star {
@@ -95,6 +128,7 @@
     #challengetext { font-size: 27px; }
     #challengesub { font-size: 18px; }
     .bigbtn { font-size: 19px; padding: 10px 12px; }
+    #undolong { display: none; }
   }
 </style>
 </head>
@@ -104,18 +138,28 @@
     <a class="bigbtn" id="backbtn" href="lab.html" style="text-decoration:none;display:inline-block;color:inherit">← ためし</a>
     <div id="title">かずブロック けんきゅうじょ</div>
     <div class="spacer"></div>
+    <button class="bigbtn" id="undobtn">↩️ <span id="undolong">ひとつ </span>もどす</button>
     <button class="bigbtn" id="mutebtn">🔊</button>
     <button class="bigbtn" id="clearbtn">ぜんぶ けす</button>
   </div>
   <div id="challengebar">
-    <div>
+    <div id="challengeinfo">
       <div id="challengetext">おだい</div>
       <div id="challengesub"></div>
     </div>
     <div id="ghost"></div>
     <div id="donemsg">できた！🎉</div>
+    <div id="review">
+      <div id="recipe"></div>
+      <button class="bigbtn" id="nextbtn">つぎの おだい</button>
+    </div>
   </div>
-  <div id="stage"></div>
+  <div id="stage">
+    <div id="splitpanel">
+      <div id="splittitle">どう わける？</div>
+      <div id="splitbtns"></div>
+    </div>
+  </div>
   <div id="partsbox">
     <div id="partslabel">ぶひんばこ</div>
   </div>
@@ -125,10 +169,18 @@
 "use strict";
 // ---------- basics ----------
 const stage = document.getElementById("stage");
+const challengeBar = document.getElementById("challengebar");
 const ghostEl = document.getElementById("ghost");
+const challengeInfo = document.getElementById("challengeinfo");
 const challengeText = document.getElementById("challengetext");
 const challengeSub = document.getElementById("challengesub");
 const doneMsg = document.getElementById("donemsg");
+const reviewEl = document.getElementById("review");
+const recipeEl = document.getElementById("recipe");
+const nextBtn = document.getElementById("nextbtn");
+const undoBtn = document.getElementById("undobtn");
+const splitPanel = document.getElementById("splitpanel");
+const splitBtns = document.getElementById("splitbtns");
 
 const COLORS = {
   1: "#e74c3c", 2: "#e67e22", 3: "#f2b705", 4: "#2ecc71", 5: "#1abc9c",
@@ -196,26 +248,28 @@ function leavesOf(b, out) {
 }
 
 const CELL = 48, GAP = 3;
-function blockSize(n) {
+function blockSize(n, cell, gap) {
+  cell = cell || CELL; gap = gap === undefined ? GAP : gap;
   const cols = colsFor(n), rows = Math.ceil(n / cols);
-  return { cols, rows, w: cols * CELL + (cols - 1) * GAP, h: rows * CELL + (rows - 1) * GAP };
+  return { cols, rows, w: cols * cell + (cols - 1) * gap, h: rows * cell + (rows - 1) * gap };
 }
 
-function renderBlock(b) {
+// build the visual (cells + number) for a block at any cell size
+function buildBlockEl(b, cell, gap) {
   const n = totalOf(b);
-  const size = blockSize(n);
+  const size = blockSize(n, cell, gap);
   const el = document.createElement("div");
-  el.className = "block";
-  el.style.left = b.x + "px"; el.style.top = b.y + "px";
   el.style.width = size.w + "px"; el.style.height = size.h + "px";
-  el.dataset.id = b.id;
   const cells = document.createElement("div");
   cells.className = "cells";
-  cells.style.gridTemplateColumns = "repeat(" + size.cols + ", " + CELL + "px)";
+  cells.style.display = "grid";
+  cells.style.gap = gap + "px";
+  cells.style.gridTemplateColumns = "repeat(" + size.cols + ", " + cell + "px)";
   for (const leaf of leavesOf(b)) {
     for (let i = 0; i < leaf; i++) {
       const c = document.createElement("div");
       c.className = "cell";
+      c.style.width = cell + "px"; c.style.height = cell + "px";
       c.style.background = colorOf(leaf);
       cells.appendChild(c);
     }
@@ -223,7 +277,16 @@ function renderBlock(b) {
   const num = document.createElement("div");
   num.className = "num";
   num.textContent = n;
+  num.style.fontSize = Math.round(cell * 1.16) + "px";
   el.appendChild(cells); el.appendChild(num);
+  return el;
+}
+
+function renderBlock(b) {
+  const el = buildBlockEl(b, CELL, GAP);
+  el.className = "block";
+  el.style.left = b.x + "px"; el.style.top = b.y + "px";
+  el.dataset.id = b.id;
   b.el = el;
   stage.appendChild(el);
   attachPointer(b);
@@ -242,6 +305,42 @@ function placeBlock(b, x, y) {
   b.y = Math.min(Math.max(0, y), maxY);
   if (b.el) { b.el.style.left = b.x + "px"; b.el.style.top = b.y + "px"; }
 }
+
+// ---------- undo (snapshots of the whole forest, max 20) ----------
+const history = [];
+function serializeBlock(b) {
+  if (b.leaf !== null) return { v: b.leaf, x: Math.round(b.x), y: Math.round(b.y) };
+  return { a: serializeBlock(b.left), b: serializeBlock(b.right), x: Math.round(b.x), y: Math.round(b.y) };
+}
+function deserializeBlock(s) {
+  let b;
+  if (s.v !== undefined) b = makeLeaf(s.v);
+  else b = makeFused(deserializeBlock(s.a), deserializeBlock(s.b));
+  b.x = s.x; b.y = s.y;
+  return b;
+}
+function snapshot() {
+  history.push(Array.from(blocks.values(), serializeBlock));
+  if (history.length > 20) history.shift();
+  syncUndoBtn();
+}
+function syncUndoBtn() { undoBtn.disabled = history.length === 0; }
+undoBtn.addEventListener("click", () => {
+  ensureAudio();
+  if (drag || history.length === 0) return;
+  closeSplitChooser();
+  const snap = history.pop();
+  for (const b of Array.from(blocks.values())) removeBlock(b);
+  for (const s of snap) {
+    const b = deserializeBlock(s);
+    blocks.set(b.id, b);
+    renderBlock(b);
+    placeBlock(b, b.x, b.y);
+  }
+  syncUndoBtn();
+  updateChallengeInfo();
+  sndSplit();
+});
 
 // find a spawn spot that does not overlap existing blocks:
 // random tries first, then a coarse grid scan, then a cascade fallback
@@ -313,15 +412,56 @@ function trySplit(d) {
     return;
   }
   d.splitDone = true;
-  const a = b.left, c = b.right;
-  const sizeA = blockSize(totalOf(a)), sizeC = blockSize(totalOf(c));
+  openSplitChooser(b);
+  // the drag is over (the finger may still be down, but its pointerup must
+  // not fuse anything); close it here like the old instant split did
+  if (drag === d) drag = null;
+}
+
+// ---------- split chooser: pick any two numbers, or the original pair ----------
+let splitTarget = null;
+function openSplitChooser(b) {
+  splitTarget = b;
+  splitBtns.innerHTML = "";
+  const n = totalOf(b);
+  const origA = Math.min(totalOf(b.left), totalOf(b.right));
+  for (let a = 1; a <= Math.floor(n / 2); a++) {
+    const btn = document.createElement("button");
+    btn.className = "splitbtn" + (a === origA ? " orig" : "");
+    btn.textContent = a + " と " + (n - a) + (a === origA ? "（もと）" : "");
+    const isOrig = a === origA;
+    btn.addEventListener("click", () => chooseSplit(a, isOrig));
+    splitBtns.appendChild(btn);
+  }
+  const cancel = document.createElement("button");
+  cancel.className = "splitbtn cancelbtn";
+  cancel.textContent = "やめる";
+  cancel.addEventListener("click", closeSplitChooser);
+  splitBtns.appendChild(cancel);
+  splitPanel.style.display = "block";
+  sndPop();
+}
+function closeSplitChooser() {
+  splitPanel.style.display = "none";
+  splitTarget = null;
+}
+function chooseSplit(a, isOrig) {
+  const b = splitTarget;
+  if (!b || !blocks.has(b.id)) { closeSplitChooser(); return; }
+  const n = totalOf(b);
+  snapshot();
+  let A, B;
+  if (isOrig) { A = b.left; B = b.right; }
+  else { A = makeLeaf(a); B = makeLeaf(n - a); }
+  const sizeA = blockSize(totalOf(A)), sizeB = blockSize(totalOf(B));
   const x = b.x, y = b.y;
   removeBlock(b);
-  blocks.set(a.id, a); blocks.set(c.id, c);
-  renderBlock(a); renderBlock(c);
-  placeBlock(a, x - sizeA.w / 2 - 6, y);
-  placeBlock(c, x + sizeC.w / 2 + 6, y);
-  a.el.classList.add("pop"); c.el.classList.add("pop");
+  blocks.set(A.id, A); blocks.set(B.id, B);
+  renderBlock(A); renderBlock(B);
+  placeBlock(A, x - sizeA.w / 2 - 6, y);
+  placeBlock(B, x + sizeB.w / 2 + 6, y);
+  A.el.classList.add("pop"); B.el.classList.add("pop");
+  closeSplitChooser();
   sndSplit();
   updateChallengeInfo();
 }
@@ -332,7 +472,7 @@ function rectsNear(b1, b2, pad) {
            b1.y + s1.h + pad < b2.y || b2.y + s2.h + pad < b1.y);
 }
 
-function tryFuse(b) {
+function tryFuse(b, skipSnapshot) {
   let best = null, bestDist = Infinity;
   for (const other of blocks.values()) {
     if (other === b) continue;
@@ -342,6 +482,8 @@ function tryFuse(b) {
     if (d < bestDist) { bestDist = d; best = other; }
   }
   if (!best) { updateChallengeInfo(); return; }
+  if (!skipSnapshot) snapshot();
+  closeSplitChooser();
   const merged = makeFused(b, best);
   const nx = Math.round((b.x + best.x) / 2), ny = Math.round((b.y + best.y) / 2);
   removeBlock(b); removeBlock(best);
@@ -354,15 +496,18 @@ function tryFuse(b) {
   checkChallenge();
 }
 
-// ---------- parts box ----------
+// ---------- parts box (tap to spawn, or drag out to a chosen spot) ----------
 const partsBox = document.getElementById("partsbox");
+let suppressClick = false;
 for (let n = 1; n <= 10; n++) {
   const btn = document.createElement("button");
   btn.className = "partbtn";
   btn.textContent = n;
   btn.style.background = colorOf(n);
   btn.addEventListener("click", () => {
+    if (suppressClick) { suppressClick = false; return; }
     ensureAudio();
+    snapshot();
     const b = makeLeaf(n);
     blocks.set(b.id, b);
     renderBlock(b);
@@ -374,30 +519,85 @@ for (let n = 1; n <= 10; n++) {
     updateChallengeInfo();
     checkChallenge();
   });
+  // drag-out: moving the finger 10px+ starts carrying a block that follows
+  // the finger and drops where released (may fuse, like a normal drop)
+  let partDrag = null;
+  btn.addEventListener("pointerdown", (ev) => {
+    ensureAudio();
+    partDrag = { value: n, pid: ev.pointerId, startX: ev.clientX, startY: ev.clientY, block: null };
+    btn.setPointerCapture(ev.pointerId);
+  });
+  btn.addEventListener("pointermove", (ev) => {
+    if (!partDrag || ev.pointerId !== partDrag.pid) return;
+    if (!partDrag.block) {
+      if (Math.abs(ev.clientX - partDrag.startX) < 10 && Math.abs(ev.clientY - partDrag.startY) < 10) return;
+      snapshot();
+      const b = makeLeaf(partDrag.value);
+      blocks.set(b.id, b);
+      renderBlock(b);
+      b.el.style.zIndex = 10;
+      partDrag.block = b;
+    }
+    const srect = stage.getBoundingClientRect();
+    const size = blockSize(partDrag.value);
+    placeBlock(partDrag.block, ev.clientX - srect.left - size.w / 2, ev.clientY - srect.top - size.h / 2);
+  });
+  const endPartDrag = (ev) => {
+    if (!partDrag || ev.pointerId !== partDrag.pid) return;
+    const b = partDrag.block;
+    partDrag = null;
+    if (!b) return; // a plain tap: the click handler spawns as before
+    suppressClick = true;
+    b.el.style.zIndex = "";
+    b.el.classList.add("pop");
+    sndPop();
+    updateChallengeInfo();
+    tryFuse(b, true); // this gesture already took its snapshot at drag start
+    checkChallenge();
+  };
+  btn.addEventListener("pointerup", endPartDrag);
+  btn.addEventListener("pointercancel", endPartDrag);
   partsBox.appendChild(btn);
 }
 
-// ---------- challenge ----------
+// ---------- challenge (grows gradually: cap 12 -> 30, +3 per 3 completions) ----------
 let target = null;
+let cap = 12;
+let streak = 0;
 function biggestTotal() {
   let m = 0;
   for (const b of blocks.values()) m = Math.max(m, totalOf(b));
   return m;
 }
 function updateChallengeInfo() {
-  if (celebrating || target === null) return;
+  if (celebrating) return;
   const big = biggestTotal();
+  if (target === null) { // free play: show only the biggest number so far
+    challengeSub.textContent = big > 0 ? "いま いちばん おおきいのは " + big : "";
+    return;
+  }
   if (big === 0) { challengeSub.textContent = ""; return; }
   let s = "いま いちばん おおきいのは " + big;
   if (big < target) s += " ・ あと " + (target - big);
   challengeSub.textContent = s;
 }
 function newChallenge() {
+  doneMsg.style.display = "none";
+  reviewEl.style.display = "none";
+  challengeInfo.style.display = "block";
+  if (cap >= 30) { // cap maxed out: free play, no target
+    target = null;
+    challengeText.textContent = "すきな かずを つくって！";
+    ghostEl.style.display = "none";
+    ghostEl.innerHTML = "";
+    updateChallengeInfo();
+    return;
+  }
   let t;
-  do { t = 5 + Math.floor(Math.random() * 16); } while (t === target); // 5..20
+  do { t = 5 + Math.floor(Math.random() * (cap - 4)); } while (t === target); // 5..cap
   target = t;
   challengeText.textContent = target + "を つくって！";
-  const size = blockSize(target);
+  const size = blockSize(target, 20, 3);
   ghostEl.style.gridTemplateColumns = "repeat(" + size.cols + ", 20px)";
   ghostEl.innerHTML = "";
   for (let i = 0; i < target; i++) {
@@ -405,25 +605,23 @@ function newChallenge() {
     c.className = "gcell";
     ghostEl.appendChild(c);
   }
-  doneMsg.style.display = "none";
-  challengeText.style.display = "";
-  challengeSub.style.display = "";
-  ghostEl.style.display = "";
+  ghostEl.style.display = "grid";
   updateChallengeInfo();
 }
 let celebrating = false;
 function checkChallenge() {
   if (celebrating || target === null) return;
   for (const b of blocks.values()) {
-    if (totalOf(b) === target) { celebrate(); return; }
+    if (totalOf(b) === target) { celebrate(b); return; }
   }
 }
-function celebrate() {
+function celebrate(winBlock) {
   celebrating = true;
+  streak++;
+  if (streak % 3 === 0 && cap < 30) cap += 3;
   sndDone();
-  doneMsg.style.display = "";
-  challengeText.style.display = "none";
-  challengeSub.style.display = "none";
+  doneMsg.style.display = "block";
+  challengeInfo.style.display = "none";
   ghostEl.style.display = "none";
   const marks = ["⭐", "🎈", "✨", "🌟", "🎉"];
   for (let i = 0; i < 14; i++) {
@@ -436,12 +634,68 @@ function celebrate() {
     stage.appendChild(s);
     setTimeout(() => s.remove(), 2400);
   }
-  setTimeout(() => { celebrating = false; newChallenge(); }, 3000);
+  setTimeout(() => showReview(winBlock), 1900);
 }
+
+// recipe cell size: about 28px, shrunk only when the parts cannot fit
+function recipeCell(parts) {
+  const avail = Math.max(200, challengeBar.clientWidth - 430);
+  let colsSum = 0, gapSum = 0;
+  for (const p of parts) {
+    const c = colsFor(totalOf(p));
+    colsSum += c; gapSum += (c - 1) * 2;
+  }
+  const cell = Math.floor((avail - gapSum) / Math.max(1, colsSum));
+  return Math.max(14, Math.min(28, cell));
+}
+
+// show how the winning block was built: "5 + 7 = 12" in block pictures,
+// no evaluative words; the next-challenge button appears a few seconds later
+function showReview(winBlock) {
+  doneMsg.style.display = "none";
+  recipeEl.innerHTML = "";
+  const parts = winBlock.leaf !== null ? [winBlock] : [winBlock.left, winBlock.right];
+  const cell = recipeCell(parts);
+  parts.forEach((p, i) => {
+    if (i > 0) {
+      const op = document.createElement("div");
+      op.className = "op"; op.textContent = "＋";
+      recipeEl.appendChild(op);
+    }
+    const mini = buildBlockEl(p, cell, 2);
+    mini.className = "mini";
+    recipeEl.appendChild(mini);
+  });
+  const eq = document.createElement("div");
+  eq.className = "op"; eq.textContent = "＝";
+  recipeEl.appendChild(eq);
+  const res = document.createElement("div");
+  res.className = "result"; res.textContent = totalOf(winBlock);
+  recipeEl.appendChild(res);
+  nextBtn.style.display = "none";
+  reviewEl.style.display = "flex";
+  setTimeout(() => { nextBtn.style.display = "inline-block"; }, 2500);
+}
+nextBtn.addEventListener("click", () => {
+  ensureAudio();
+  reviewEl.style.display = "none";
+  celebrating = false;
+  // start the next challenge from an empty stage; the clear is one
+  // undoable step, so the blocks can be brought back with "modosu"
+  if (blocks.size > 0) {
+    snapshot();
+    for (const b of Array.from(blocks.values())) removeBlock(b);
+  }
+  sndPop();
+  newChallenge();
+});
 
 // ---------- top bar buttons ----------
 document.getElementById("clearbtn").addEventListener("click", () => {
   ensureAudio();
+  if (blocks.size === 0) return;
+  closeSplitChooser();
+  snapshot();
   for (const b of Array.from(blocks.values())) removeBlock(b);
   sndSplit();
   updateChallengeInfo();
@@ -456,6 +710,7 @@ document.getElementById("mutebtn").addEventListener("click", (ev) => {
 document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
 document.addEventListener("gesturestart", (e) => e.preventDefault());
 
+syncUndoBtn();
 newChallenge();
 </script>
 <script>

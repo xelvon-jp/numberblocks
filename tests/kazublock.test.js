@@ -20,4 +20,20 @@ module.exports = {
     const html = await p.evaluate(() => document.documentElement.outerHTML);
     t.ok(!/https?:\/\//.test(html.replace(/<!--[\s\S]*?-->/g, '')), '外部URLが ある');
   },
+
+  'かずブロック：お題を つくると レシピが でて「つぎの おだい」が ひょうじされ、おすと ぜんぶ きえて つぎの おだい': async t => {
+    const p = await openKb(t);
+    const target = await p.evaluate(() => parseInt(document.getElementById('challengetext').textContent));
+    const a = Math.min(10, target - 1), b = target - a;
+    await p.evaluate(([a, b]) => { const bs = [...document.querySelectorAll('#partsbox button')]; bs.find(x => x.textContent.trim() === String(a)).click(); bs.find(x => x.textContent.trim() === String(b)).click(); }, [a, b]);
+    await p.waitForTimeout(300);
+    const c = await p.evaluate(() => [...document.querySelectorAll('.block')].map(e => { const r = e.getBoundingClientRect(); return [r.x + r.width / 2, r.y + r.height / 2]; }));
+    await p.mouse.move(c[1][0], c[1][1]); await p.mouse.down(); await p.mouse.move(c[0][0], c[0][1], { steps: 8 }); await p.mouse.up();
+    await p.waitForFunction(() => getComputedStyle(document.getElementById('nextbtn')).display !== 'none', null, { timeout: 6000 });
+    t.ok(await p.evaluate(() => document.getElementById('recipe').children.length > 0), 'レシピが でない');
+    const before = await p.evaluate(() => document.getElementById('challengetext').textContent);
+    await p.evaluate(() => document.getElementById('nextbtn').click());
+    await p.waitForTimeout(400);
+    t.eq(await p.evaluate(() => document.querySelectorAll('.block').length), 0, 'つぎの おだい で ぜんぶ きえない');
+  },
 };
