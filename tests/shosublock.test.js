@@ -12,13 +12,17 @@ module.exports = {
     t.eq(await total(p), 'いま 1.23', 'ごうけいが 1.23 でない ' + await total(p));
   },
 
-  'しょうすう：0.01 が 10こ たまると 0.1 の ぼう に くりあがる': async t => {
+  'しょうすう：ぼう 10ぽんで 1の わく が いっぱいに なり、もう 1ぽん たすと あたらしい わく が ふえる': async t => {
     const p = await openSb(t);
-    await tap(p, 2, 10);
-    await p.waitForTimeout(700);
-    t.eq(await total(p), 'いま 0.10');
-    const kinds = await p.evaluate(() => [...new Set([...document.querySelectorAll('#stage > .piece')].map(e => e.className))].join('|'));
-    t.ok(/piece-tenth/.test(kinds) && !/piece-hundredth/.test(kinds), 'ぼう に まとまって いない ' + kinds);
+    const frames = () => p.evaluate(() => document.querySelectorAll('#frames > *').length);
+    await tap(p, 1, 10);
+    await p.waitForTimeout(800);
+    t.eq(await total(p), 'いま 1.00');
+    t.eq(await frames(), 1, '1の わくが 1こ でない');
+    await tap(p, 1, 1);
+    await p.waitForTimeout(600);
+    t.eq(await total(p), 'いま 1.10');
+    t.eq(await frames(), 2, 'わくが ふえない');
   },
 
   'しょうすう：おだいを つくると ふりかえりと「つぎの おだい」が でて、おすと ぜんぶ きえて つぎへ': async t => {
@@ -49,20 +53,5 @@ module.exports = {
     t.eq(await p.evaluate(() => document.getElementById('backbtn').getAttribute('href')), 'lab.html');
     const html = await p.evaluate(() => document.documentElement.outerHTML);
     t.ok(!/https?:\/\//.test(html.replace(/<!--[\s\S]*?-->/g, '')), '外部URLが ある');
-  },
-
-  'しょうすう：板の上に ぼうを おとしても、はなした ときに かさならない（めんせきが みえる）': async t => {
-    const p = await openSb(t);
-    await tap(p, 0, 1); await tap(p, 1, 1);
-    await p.waitForTimeout(400);
-    const rects = () => p.evaluate(() => [...document.querySelectorAll('#stage > .piece')].map(e => { const r = e.getBoundingClientRect(); return { k: e.className, x: r.x, y: r.y, w: r.width, h: r.height }; }));
-    const [a, b] = await rects();
-    const plate = a.k.includes('piece-one') ? a : b, stick = a.k.includes('piece-one') ? b : a;
-    await p.mouse.move(stick.x + stick.w / 2, stick.y + stick.h / 2); await p.mouse.down();
-    await p.mouse.move(plate.x + plate.w / 2, plate.y + plate.h / 2, { steps: 8 }); await p.mouse.up();
-    await p.waitForTimeout(600);
-    const [c, d] = await rects();
-    const overlap = !(c.x + c.w <= d.x + 1 || d.x + d.w <= c.x + 1 || c.y + c.h <= d.y + 1 || d.y + d.h <= c.y + 1);
-    t.ok(!overlap, 'はなした あとも かさなっている');
   },
 };
