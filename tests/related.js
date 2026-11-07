@@ -20,7 +20,7 @@ const RULES = {
   'mizu.js': ['hanbun', 'lab'],
   'lab.html': ['lab'],
   'lab-sankaku.html': ['lab'], 'lab-zukei.html': ['lab'],
-  'lab-menseki.html': ['lab', 'katachi'], 'lab-kazublock.html': ['lab', 'kazublock'], 'kazublock.test.js': ['kazublock'], 'katachi.js': ['katachi'], 'kata.js': ['katachi', 'lab'],
+  'lab-menseki.html': ['lab', 'katachi'], 'lab-kazublock.html': ['lab', 'kazublock'], 'lab-shosublock.html': ['lab', 'shosublock'], 'shosublock.test.js': ['shosublock'], 'kazublock.test.js': ['kazublock'], 'katachi.js': ['katachi'], 'kata.js': ['katachi', 'lab'],
   'kenban.html': ['kenban'], 'oto.html': ['kenban'], 'tools/replay.js': ['kenban'], 'tools/rec.js': ['kenban'],
   'hissan.html': ['hissan', 'kake', 'speed'], 'ink.js': ['hissan', 'kake', 'speed'],
   'merge.js': ['sync'],
